@@ -1,0 +1,222 @@
+use crate::ast::*;
+use std::str::FromStr;
+use lalrpop_util::ParseError;
+
+grammar;
+
+pub Ident: String = {
+    <s:r"[a-zA-Z_][a-zA-Z0-9_]*"> => s.to_string()
+};
+
+pub Type: Type = {
+    "string" => Type::String,
+    "number" => Type::Number,
+};
+
+pub Number: f64 = {
+    <s:r"-?[0-9]+(\.[0-9]+)?"> =>? f64::from_str(s).map_err(|_| ParseError::User {
+        error: "invalid number",
+    }),
+};
+
+pub String: String = {
+    <s:r#"'.*'"#> => s[1..s.len()-1].to_string(),
+};
+
+pub Boolean: bool = {
+    "true" => true,
+    "false" => false,
+};
+
+pub Expression: Expression = {
+    #[precedence(level="0")]
+    <n:Number> => Expression::Number(n),
+    #[precedence(level="0")]
+    <s:String> => Expression::String(s),
+    #[precedence(level="0")]
+    <b:Boolean> => Expression::Boolean(b),
+    #[precedence(level="0")]
+    <id:Ident> => Expression::Ident(id),
+    #[precedence(level="1")]
+    <l:Expression> "[" <r:Expression> "]" => Expression::Index(Box::new(l), Box::new(r)),
+    #[precedence(level="1")]
+    <l:Expression> "." <id:Ident> => Expression::Dot(Box::new(l), id),
+    #[precedence(level="1")]
+    <l:Expression> "(" <args:ArgumentList> ")" => Expression::Call(Box::new(l), args),
+    #[precedence(level="1")]
+    "(" <e:Expression> ")" => e,
+    #[precedence(level="2")]
+    <l:Expression> "!" => Expression::Not(Box::new(l)),
+    #[precedence(level="2")]
+    <l:Expression> "~" => Expression::BitNot(Box::new(l)),
+    #[precedence(level="3")] #[assoc(side="left")]
+    <l:Expression> "**" <r:Expression> => Expression::Exponent(Box::new(l), Box::new(r)),
+    #[precedence(level="4")] #[assoc(side="left")]
+    <l:Expression> "*" <r:Expression> => Expression::Multiply(Box::new(l), Box::new(r)),
+    #[precedence(level="4")] #[assoc(side="left")]
+    <l:Expression> "/" <r:Expression> => Expression::Divide(Box::new(l), Box::new(r)),
+    #[precedence(level="4")] #[assoc(side="left")]
+    <l:Expression> "%" <r:Expression> => Expression::Modulo(Box::new(l), Box::new(r)),
+    #[precedence(level="5")] #[assoc(side="left")]
+    <l:Expression> "+" <r:Expression> => Expression::Add(Box::new(l), Box::new(r)),
+    #[precedence(level="5")] #[assoc(side="left")]
+    <l:Expression> "-" <r:Expression> => Expression::Subtract(Box::new(l), Box::new(r)),
+    #[precedence(level="6")] #[assoc(side="left")]
+    <l:Expression> "<<" <r:Expression> => Expression::ShiftLeft(Box::new(l), Box::new(r)),
+    #[precedence(level="6")] #[assoc(side="left")]
+    <l:Expression> ">>" <r:Expression> => Expression::ShiftRight(Box::new(l), Box::new(r)),
+    #[precedence(level="7")] #[assoc(side="left")]
+    <l:Expression> "&" <r:Expression> => Expression::BitAnd(Box::new(l), Box::new(r)),
+    #[precedence(level="8")] #[assoc(side="left")]
+    <l:Expression> "^" <r:Expression> => Expression::BitXor(Box::new(l), Box::new(r)),
+    #[precedence(level="9")] #[assoc(side="left")]
+    <l:Expression> "|" <r:Expression> => Expression::BitOr(Box::new(l), Box::new(r)),
+    #[precedence(level="10")] #[assoc(side="none")]
+    <l:Expression> "<" <r:Expression> => Expression::LessThan(Box::new(l), Box::new(r)),
+    #[precedence(level="10")] #[assoc(side="none")]
+    <l:Expression> ">" <r:Expression> => Expression::GreaterThan(Box::new(l), Box::new(r)),
+    #[precedence(level="10")] #[assoc(side="none")]
+    <l:Expression> "<=" <r:Expression> => Expression::LessThanOrEqual(Box::new(l), Box::new(r)),
+    #[precedence(level="10")] #[assoc(side="none")]
+    <l:Expression> ">=" <r:Expression> => Expression::GreaterThanOrEqual(Box::new(l), Box::new(r)),
+    #[precedence(level="11")] #[assoc(side="none")]
+    <l:Expression> "==" <r:Expression> => Expression::Equal(Box::new(l), Box::new(r)),
+    #[precedence(level="11")] #[assoc(side="none")]
+    <l:Expression> "!=" <r:Expression> => Expression::NotEqual(Box::new(l), Box::new(r)),
+    #[precedence(level="12")] #[assoc(side="left")]
+    <l:Expression> "&&" <r:Expression> => Expression::And(Box::new(l), Box::new(r)),
+    #[precedence(level="13")] #[assoc(side="left")]
+    <l:Expression> "||" <r:Expression> => Expression::Or(Box::new(l), Box::new(r)),
+    #[precedence(level="14")] #[assoc(side="left")]
+    <l:Expression> "-=" <r:Expression> => Expression::AssignSub(Box::new(l), Box::new(r)),
+    #[precedence(level="14")] #[assoc(side="left")]
+    <l:Expression> "+=" <r:Expression> => Expression::AssignAdd(Box::new(l), Box::new(r)),
+    #[precedence(level="14")] #[assoc(side="none")]
+    <l:Expression> "=" <r:Expression> => Expression::Assign(Box::new(l), Box::new(r)),
+};
+
+pub ArgumentList: Vec<Expression> = {
+    <e:Expression> <rest:("," Expression)*> => {
+        let mut args = vec![e];
+        for (_, e) in rest {
+            args.push(e);
+        }
+        args
+    },
+    => vec![],
+};
+
+pub CompoundStatement: Statement = {
+    <i:If> => Statement::If(i),
+}
+
+pub SmallStatement: Statement = {
+    "return" <e:Expression> => Statement::Return(e),
+    "throw" <e:Expression> => Statement::Throw(e),
+    <e:Expression> => Statement::Expression(e),
+};
+
+pub SimpleStatement: Statement = {
+    <s:SmallStatement> ";" => s,
+};
+
+pub Statement: Statement = {
+    SimpleStatement,
+    CompoundStatement,
+};
+
+pub StatementsOrSimpleStatement: Vec<Statement> = {
+    "{" <s:Statement*> "}" => s,
+    <s:SimpleStatement> => vec![s],
+};
+
+pub If: If = {
+    "if" "(" <e:Expression> ")" <s:StatementsOrSimpleStatement> <s2:("else" StatementsOrSimpleStatement)?> => If {
+        condition: e,
+        then_statements: s,
+        else_statements: s2.map(|s| s.1).unwrap_or(vec![]),
+    },
+};
+
+pub ParameterList: Vec<String> = {
+    <p:Ident> <rest:("," Ident)*> => {
+        let mut params = vec![p];
+        for (_, p) in rest {
+            params.push(p);
+        }
+        params
+    },
+    => vec![],
+};
+
+pub Function: Function = {
+    "function" <i: Ident> "(" <pl:ParameterList> ")" "{" <s:Statement*> "}" => Function {
+        name: i,
+        parameters: pl,
+        statements: s,
+    },
+};
+
+pub Field: Field = {
+    <name:Ident> ":" <type_:Type> "!" => Field{
+        name,
+        type_,
+        required: true,
+    },
+    <name:Ident> ":" <type_:Type> => Field{
+        name,
+        type_,
+        required: false,
+    },
+};
+
+pub IndexField: (String, Order) = {
+    "[" <name:Ident> "," <order:Order> "]" => (name, order),
+    <name:Ident> => (name, Order::Asc),
+};
+
+pub Order: Order = {
+    "asc" => Order::Asc,
+    "desc" => Order::Desc,
+};
+
+pub Index: Index = {
+    "@index" "(" <fields:IndexFields> ")"  => Index{
+        fields: fields,
+    },
+};
+
+pub IndexFields: Vec<(String, Order)> = {
+    <f:IndexField> <rest:("," IndexField)*> => {
+        let mut fields = vec![f];
+        for (_, f) in rest {
+            fields.push(f);
+        }
+        fields
+    },
+    => vec![],
+};
+
+pub CollectionItem: CollectionItem = {
+    <f:Field> ";" => CollectionItem::Field(f),
+    <i:Index> ";" => CollectionItem::Index(i),
+    <f:Function> => CollectionItem::Function(f),
+};
+
+pub Collection: Collection = {
+    "collection" <name:Ident> "{" <items:CollectionItem*> "}" => Collection {
+        name: name,
+        items: items,
+    },
+};
+
+pub RootNode: RootNode = {
+    <c:Collection> => RootNode::Collection(c),
+    <f:Function> => RootNode::Function(f),
+};
+
+pub Program: Program = {
+    <r:RootNode*> => Program{
+        nodes: r,
+    },
+};

@@ -1,0 +1,107 @@
+use serde::Serialize;
+
+#[derive(Debug, Serialize)]
+pub struct Program {
+    pub nodes: Vec<RootNode>,
+}
+
+#[derive(Debug, Serialize)]
+pub enum RootNode {
+    Collection(Collection),
+    Function(Function),
+}
+
+#[derive(Debug, Serialize)]
+pub struct Collection {
+    pub name: String,
+    pub items: Vec<CollectionItem>,
+}
+
+#[derive(Debug, Serialize)]
+pub enum CollectionItem {
+    Field(Field),
+    Function(Function),
+    Index(Index),
+}
+
+#[derive(Debug, Serialize)]
+pub struct Field {
+    pub name: String,
+    pub type_: Type,
+    pub required: bool,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Serialize)]
+pub enum Type {
+    String,
+    Number,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Function {
+    pub name: String,
+    pub parameters: Vec<String>,
+    pub statements: Vec<Statement>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Index {
+    pub fields: Vec<(String, Order)>,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+pub enum Order {
+    Asc,
+    Desc,
+}
+
+#[derive(Debug, Serialize)]
+pub enum Statement {
+    If(If),
+    Return(Expression),
+    Expression(Expression),
+    Throw(Expression),
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+pub enum Expression {
+    Number(f64),
+    String(String),
+    Ident(String),
+    Boolean(bool),
+    Assign(Box<Expression>, Box<Expression>),
+    AssignSub(Box<Expression>, Box<Expression>),
+    AssignAdd(Box<Expression>, Box<Expression>),
+    Or(Box<Expression>, Box<Expression>),
+    And(Box<Expression>, Box<Expression>),
+    Equal(Box<Expression>, Box<Expression>),
+    NotEqual(Box<Expression>, Box<Expression>),
+    LessThan(Box<Expression>, Box<Expression>),
+    LessThanOrEqual(Box<Expression>, Box<Expression>),
+    GreaterThan(Box<Expression>, Box<Expression>),
+    GreaterThanOrEqual(Box<Expression>, Box<Expression>),
+    BitOr(Box<Expression>, Box<Expression>),
+    BitXor(Box<Expression>, Box<Expression>),
+    BitAnd(Box<Expression>, Box<Expression>),
+    ShiftLeft(Box<Expression>, Box<Expression>),
+    ShiftRight(Box<Expression>, Box<Expression>),
+    Add(Box<Expression>, Box<Expression>),
+    Subtract(Box<Expression>, Box<Expression>),
+    Multiply(Box<Expression>, Box<Expression>),
+    Divide(Box<Expression>, Box<Expression>),
+    Modulo(Box<Expression>, Box<Expression>),
+    Exponent(Box<Expression>, Box<Expression>),
+    Not(Box<Expression>),
+    BitNot(Box<Expression>),
+    Negate(Box<Expression>),
+    Dot(Box<Expression>, String),
+    Index(Box<Expression>, Box<Expression>),
+    Call(Box<Expression>, Vec<Expression>),
+}
+
+#[derive(Debug, Serialize)]
+pub struct If {
+    pub condition: Expression,
+    pub then_statements: Vec<Statement>,
+    pub else_statements: Vec<Statement>,
+}
