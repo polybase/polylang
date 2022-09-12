@@ -2,7 +2,8 @@ package main
 
 import (
 	"encoding/json"
-	"spacetime/parser"
+
+	"github.com/spacetimehq/spacetime-parser/parser"
 )
 
 type Program struct {

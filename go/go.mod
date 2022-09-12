@@ -1,4 +1,4 @@
-module spacetime
+module github.com/spacetimehq/spacetime-parser
 
 go 1.19
 
