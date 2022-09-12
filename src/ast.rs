@@ -1,61 +1,61 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Program {
     pub nodes: Vec<RootNode>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum RootNode {
     Collection(Collection),
     Function(Function),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Collection {
     pub name: String,
     pub items: Vec<CollectionItem>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum CollectionItem {
     Field(Field),
     Function(Function),
     Index(Index),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Field {
     pub name: String,
     pub type_: Type,
     pub required: bool,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Type {
     String,
     Number,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Function {
     pub name: String,
     pub parameters: Vec<String>,
     pub statements: Vec<Statement>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Index {
     pub fields: Vec<(String, Order)>,
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum Order {
     Asc,
     Desc,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Statement {
     If(If),
     Return(Expression),
@@ -63,7 +63,7 @@ pub enum Statement {
     Throw(Expression),
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum Expression {
     Number(f64),
     String(String),
@@ -99,7 +99,7 @@ pub enum Expression {
     Call(Box<Expression>, Vec<Expression>),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct If {
     pub condition: Expression,
     pub then_statements: Vec<Statement>,

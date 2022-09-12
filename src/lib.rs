@@ -1,5 +1,6 @@
 mod ast;
 mod interpreter;
+mod validation;
 
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -62,6 +63,29 @@ fn interpret_out_json(
     serde_json::to_string(&obj).unwrap()
 }
 
+fn validate_set_out_json(ast_json: &str, data_json: &str) -> String {
+    let ast: ast::Collection = match serde_json::from_str(ast_json) {
+        Ok(ast) => ast,
+        Err(err) => {
+            return serde_json::to_string(&serde_json::json!({ "error": err.to_string() })).unwrap()
+        }
+    };
+
+    let data: HashMap<String, validation::Value> = match serde_json::from_str(data_json) {
+        Ok(data) => data,
+        Err(err) => {
+            return serde_json::to_string(&serde_json::json!({ "error": err.to_string() })).unwrap()
+        }
+    };
+
+    let result = validation::validate_set(ast, data);
+    if let Err(err) = result {
+        return serde_json::to_string(&serde_json::json!({ "error": err.to_string() })).unwrap();
+    }
+
+    "{}".to_string()
+}
+
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 extern "C" {
@@ -86,6 +110,12 @@ pub fn parse(input: &str) -> String {
 pub fn interpret(program: &str, collection_name: &str, func: &str, args: &str) -> String {
     let args = serde_json::from_str(args).unwrap();
     interpret_out_json(program, collection_name, func, args)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn validate_set(ast_json: &str, data_json: &str) -> String {
+    validate_set_out_json(ast_json, data_json)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -120,6 +150,20 @@ pub extern "C" fn interpret(
     let args = serde_json::from_str(args.to_str().unwrap()).unwrap();
 
     let output = interpret_out_json(program, collection_name, func, args);
+    let output = std::ffi::CString::new(output).unwrap();
+    output.into_raw()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[no_mangle]
+pub extern "C" fn validate_set(ast_json: *const i8, data_json: *const i8) -> *mut i8 {
+    let ast_json = unsafe { std::ffi::CStr::from_ptr(ast_json) };
+    let ast_json = ast_json.to_str().unwrap();
+
+    let data_json = unsafe { std::ffi::CStr::from_ptr(data_json) };
+    let data_json = data_json.to_str().unwrap();
+
+    let output = validate_set_out_json(ast_json, data_json);
     let output = std::ffi::CString::new(output).unwrap();
     output.into_raw()
 }
