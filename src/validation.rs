@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use crate::ast;
 
 #[derive(Debug, Deserialize)]
+#[serde(untagged)]
 pub(crate) enum Value {
     String(String),
     Number(f64),

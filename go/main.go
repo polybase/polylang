@@ -24,6 +24,6 @@ func main() {
 	result = parser.Interpret("collection Test { function get_age(a) { if (a == 41) { return 1; } else { return 2; } } }", "Test", "get_age", `{ "a": { "value": {"Number": 42} } }`)
 	println(result)
 
-	result = parser.ValidateSet(string(ast.Nodes[0].Collection), `{ "name": {"Number": 42.0} }`)
+	result = parser.ValidateSet(string(ast.Nodes[0].Collection), `{ "name": 42.0 }`)
 	println(result)
 }
