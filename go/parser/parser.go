@@ -5,18 +5,49 @@ package parser
 #include "./parser.h"
 */
 import "C"
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+)
 
-func Parse(input string) string {
+type Result[T any] struct {
+	Ok  T
+	Err *Error
+}
+
+type Error struct {
+	Message string `json:"message"`
+}
+
+func parseResult[T any](resultJSON string) (T, error) {
+	var result Result[T]
+	if err := json.Unmarshal([]byte(resultJSON), &result); err != nil {
+		return result.Ok, fmt.Errorf("failed to parse result: %w", err)
+	}
+
+	if result.Err != nil {
+		return result.Ok, errors.New(result.Err.Message)
+	}
+
+	return result.Ok, nil
+}
+
+func Parse(input string) (json.RawMessage, error) {
 	output := C.parse(C.CString(input))
-	return C.GoString(output)
+	return parseResult[json.RawMessage](C.GoString(output))
 }
 
-func Interpret(program, collection, funcName, args string) string {
+func Interpret(program, collection, funcName, args string) (json.RawMessage, error) {
 	output := C.interpret(C.CString(program), C.CString(collection), C.CString(funcName), C.CString(args))
-	return C.GoString(output)
+	return parseResult[json.RawMessage](C.GoString(output))
 }
 
-func ValidateSet(collectionAST, data string) string {
+func ValidateSet(collectionAST, data string) error {
 	output := C.validate_set(C.CString(collectionAST), C.CString(data))
-	return C.GoString(output)
+	if _, err := parseResult[json.RawMessage](C.GoString(output)); err != nil {
+		return err
+	}
+
+	return nil
 }

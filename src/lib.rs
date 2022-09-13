@@ -1,23 +1,83 @@
 mod ast;
+mod bindings;
 mod interpreter;
 mod validation;
 
+use serde::Serialize;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use lalrpop_util::lalrpop_mod;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
 
 lalrpop_mod!(pub spacetime);
 
+#[derive(Debug, Serialize)]
+struct Error {
+    message: String,
+}
+
+fn parse(input: &str) -> Result<ast::Program, Error> {
+    spacetime::ProgramParser::new()
+        .parse(input)
+        .map_err(|e| Error {
+            message: e.to_string(),
+        })
+}
+
 fn parse_out_json(input: &str) -> String {
-    let program = spacetime::ProgramParser::new().parse(input);
-    match program {
-        Ok(program) => serde_json::to_string(&program).unwrap(),
-        Err(err) => {
-            serde_json::to_string(&serde_json::json!({ "error": err.to_string() })).unwrap()
-        }
+    serde_json::to_string(&parse(input)).unwrap()
+}
+
+fn interpret(
+    program: &str,
+    collection_name: &str,
+    func: &str,
+    args: HashMap<String, Rc<RefCell<interpreter::Object>>>,
+) -> Result<
+    (
+        interpreter::Object,
+        HashMap<String, Rc<RefCell<interpreter::Object>>>,
+    ),
+    Error,
+> {
+    let program = spacetime::ProgramParser::new().parse(program);
+    if let Err(err) = program {
+        return Err(Error {
+            message: err.to_string(),
+        });
     }
+    let program = program.unwrap();
+
+    let mut interpreter = interpreter::Interpreter::new();
+
+    let collection = program
+        .nodes
+        .into_iter()
+        .find_map(|item| {
+            if let ast::RootNode::Collection(c) = item {
+                if c.name == collection_name {
+                    Some(c)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
+        .ok_or(Error {
+            message: "collection not found".to_string(),
+        })?;
+
+    interpreter.load(collection).map_err(|e| Error {
+        message: e.to_string(),
+    })?;
+
+    let (result, vars) = interpreter
+        .call(collection_name, func, args)
+        .map_err(|e| Error {
+            message: e.to_string(),
+        })?;
+
+    Ok((result, vars))
 }
 
 fn interpret_out_json(
@@ -26,146 +86,35 @@ fn interpret_out_json(
     func: &str,
     args: HashMap<String, Rc<RefCell<interpreter::Object>>>,
 ) -> String {
-    let program = spacetime::ProgramParser::new().parse(program);
-    if let Err(err) = program {
-        return serde_json::to_string(&serde_json::json!({ "error": err.to_string() })).unwrap();
-    }
-    let program = program.unwrap();
-
-    let mut interpreter = interpreter::Interpreter::new();
-
-    let mut collection: Option<ast::Collection> = None;
-    for item in program.nodes {
-        match item {
-            ast::RootNode::Collection(c) => {
-                if c.name == collection_name {
-                    collection = Some(c);
-                }
-            }
-            _ => {}
-        }
-    }
-    if let None = collection {
-        return serde_json::to_string(&serde_json::json!({ "error": "collection not found" }))
-            .unwrap();
-    }
-    let collection = collection.unwrap();
-
-    if let Err(err) = interpreter.load(collection) {
-        return serde_json::to_string(&serde_json::json!({ "error": err.to_string() })).unwrap();
-    }
-
-    let obj = interpreter.call(collection_name, func, args);
-    if let Err(err) = obj {
-        return serde_json::to_string(&serde_json::json!({ "error": err.to_string() })).unwrap();
-    }
-    let obj = obj.unwrap();
-    serde_json::to_string(&obj).unwrap()
+    serde_json::to_string(&interpret(program, collection_name, func, args)).unwrap()
 }
 
-fn validate_set_out_json(ast_json: &str, data_json: &str) -> String {
-    let ast: ast::Collection = match serde_json::from_str(ast_json) {
+fn validate_set(collection_ast_json: &str, data_json: &str) -> Result<(), Error> {
+    let collection_ast: ast::Collection = match serde_json::from_str(collection_ast_json) {
         Ok(ast) => ast,
         Err(err) => {
-            return serde_json::to_string(&serde_json::json!({ "error": err.to_string() })).unwrap()
+            return Err(Error {
+                message: err.to_string(),
+            })
         }
     };
 
     let data: HashMap<String, validation::Value> = match serde_json::from_str(data_json) {
         Ok(data) => data,
         Err(err) => {
-            return serde_json::to_string(&serde_json::json!({ "error": err.to_string() })).unwrap()
+            return Err(Error {
+                message: err.to_string(),
+            })
         }
     };
 
-    let result = validation::validate_set(ast, data);
-    if let Err(err) = result {
-        return serde_json::to_string(&serde_json::json!({ "error": err.to_string() })).unwrap();
-    }
-
-    "{}".to_string()
+    validation::validate_set(collection_ast, data).map_err(|e| Error {
+        message: e.to_string(),
+    })
 }
 
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = console)]
-    fn error(msg: String);
-}
-
-#[cfg(target_arch = "wasm32")]
-#[no_mangle]
-pub extern "C" fn init() {
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-pub fn parse(input: &str) -> String {
-    parse_out_json(input)
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-pub fn interpret(program: &str, collection_name: &str, func: &str, args: &str) -> String {
-    let args = serde_json::from_str(args).unwrap();
-    interpret_out_json(program, collection_name, func, args)
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-pub fn validate_set(ast_json: &str, data_json: &str) -> String {
-    validate_set_out_json(ast_json, data_json)
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[no_mangle]
-pub extern "C" fn parse(input: *const i8) -> *mut i8 {
-    let input = unsafe { std::ffi::CStr::from_ptr(input) };
-    let input = input.to_str().unwrap();
-
-    let output = parse_out_json(input);
-    let output = std::ffi::CString::new(output).unwrap();
-    output.into_raw()
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[no_mangle]
-pub extern "C" fn interpret(
-    program: *const i8,
-    collection_name: *const i8,
-    func: *const i8,
-    args: *const i8,
-) -> *mut i8 {
-    let program = unsafe { std::ffi::CStr::from_ptr(program) };
-    let program = program.to_str().unwrap();
-
-    let collection_name = unsafe { std::ffi::CStr::from_ptr(collection_name) };
-    let collection_name = collection_name.to_str().unwrap();
-
-    let func = unsafe { std::ffi::CStr::from_ptr(func) };
-    let func = func.to_str().unwrap();
-
-    let args = unsafe { std::ffi::CStr::from_ptr(args) };
-    let args = serde_json::from_str(args.to_str().unwrap()).unwrap();
-
-    let output = interpret_out_json(program, collection_name, func, args);
-    let output = std::ffi::CString::new(output).unwrap();
-    output.into_raw()
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[no_mangle]
-pub extern "C" fn validate_set(ast_json: *const i8, data_json: *const i8) -> *mut i8 {
-    let ast_json = unsafe { std::ffi::CStr::from_ptr(ast_json) };
-    let ast_json = ast_json.to_str().unwrap();
-
-    let data_json = unsafe { std::ffi::CStr::from_ptr(data_json) };
-    let data_json = data_json.to_str().unwrap();
-
-    let output = validate_set_out_json(ast_json, data_json);
-    let output = std::ffi::CString::new(output).unwrap();
-    output.into_raw()
+fn validate_set_out_json(collection_ast_json: &str, data_json: &str) -> String {
+    serde_json::to_string(&validate_set(collection_ast_json, data_json)).unwrap()
 }
 
 #[cfg(test)]
@@ -175,14 +124,9 @@ mod tests {
     #[test]
     fn test_parse() {
         let input = "collection Test {}";
-        let expected_output = r#"{"nodes":[{"Collection":{"name":"Test","items":[]}}]}"#;
+        let expected_output = r#"{"Ok":{"nodes":[{"Collection":{"name":"Test","items":[]}}]}}"#;
 
-        let input_cstr = std::ffi::CString::new(input).unwrap();
-
-        let output = parse(input_cstr.as_ptr());
-        let output = unsafe { std::ffi::CStr::from_ptr(output) };
-        let output = output.to_str().unwrap();
-
+        let output = parse_out_json(input);
         assert_eq!(output, expected_output);
     }
 
