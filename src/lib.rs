@@ -390,8 +390,8 @@ mod tests {
             &collection.items[4],
             ast::CollectionItem::Index(ast::Index {
                 fields,
-            }) if fields[0].0 == "field" && fields[0].1 == ast::Order::Asc
-                && fields[1].0 == "field2" && fields[1].1 == ast::Order::Asc
+            }) if fields[0].name == "field" && fields[0].order == ast::Order::Asc
+                && fields[1].name == "field2" && fields[1].order == ast::Order::Asc
         ));
 
         let function = match &collection.items[5] {

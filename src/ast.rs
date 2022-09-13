@@ -46,7 +46,13 @@ pub struct Function {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Index {
-    pub fields: Vec<(String, Order)>,
+    pub fields: Vec<IndexField>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IndexField {
+    pub name: String,
+    pub order: Order,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]

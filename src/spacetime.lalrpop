@@ -170,9 +170,15 @@ pub Field: Field = {
     },
 };
 
-pub IndexField: (String, Order) = {
-    "[" <name:Ident> "," <order:Order> "]" => (name, order),
-    <name:Ident> => (name, Order::Asc),
+pub IndexField: IndexField = {
+    "[" <name:Ident> "," <order:Order> "]" => IndexField{
+        name,
+        order,
+    },
+    <name:Ident> => IndexField{
+        name,
+        order: Order::Asc,
+    },
 };
 
 pub Order: Order = {
@@ -186,7 +192,7 @@ pub Index: Index = {
     },
 };
 
-pub IndexFields: Vec<(String, Order)> = {
+pub IndexFields: Vec<IndexField> = {
     <f:IndexField> <rest:("," IndexField)*> => {
         let mut fields = vec![f];
         for (_, f) in rest {

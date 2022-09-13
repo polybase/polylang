@@ -415,8 +415,14 @@ mod tests {
                     }),
                     ast::CollectionItem::Index(ast::Index {
                         fields: vec![
-                            ("field".to_owned(), ast::Order::Asc),
-                            ("field2".to_owned(), ast::Order::Desc),
+                            ast::IndexField {
+                                name: "field".to_owned(),
+                                order: ast::Order::Asc,
+                            },
+                            ast::IndexField {
+                                name: "field2".to_owned(),
+                                order: ast::Order::Asc,
+                            },
                         ],
                     }),
                     ast::CollectionItem::Function(ast::Function {
