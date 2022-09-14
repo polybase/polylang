@@ -1,3 +1,4 @@
+use std::os::raw::c_char;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -35,7 +36,7 @@ pub fn validate_set(ast_json: &str, data_json: &str) -> String {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn parse(input: *const i8) -> *mut i8 {
+pub extern "C" fn parse(input: *const c_char) -> *mut c_char {
     let input = unsafe { std::ffi::CStr::from_ptr(input) };
     let input = input.to_str().unwrap();
 
@@ -47,11 +48,11 @@ pub extern "C" fn parse(input: *const i8) -> *mut i8 {
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
 pub extern "C" fn interpret(
-    program: *const i8,
-    collection_name: *const i8,
-    func: *const i8,
-    args: *const i8,
-) -> *mut i8 {
+    program: *const c_char,
+    collection_name: *const c_char,
+    func: *const c_char,
+    args: *const c_char,
+) -> *mut c_char {
     let program = unsafe { std::ffi::CStr::from_ptr(program) };
     let program = program.to_str().unwrap();
 
@@ -71,7 +72,7 @@ pub extern "C" fn interpret(
 
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn validate_set(ast_json: *const i8, data_json: *const i8) -> *mut i8 {
+pub extern "C" fn validate_set(ast_json: *const c_char, data_json: *const c_char) -> *mut c_char {
     let ast_json = unsafe { std::ffi::CStr::from_ptr(ast_json) };
     let ast_json = ast_json.to_str().unwrap();
 

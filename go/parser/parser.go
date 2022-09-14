@@ -1,7 +1,8 @@
 package parser
 
 /*
-#cgo LDFLAGS: ${SRCDIR}/libspacetime_parser.a
+#cgo darwin LDFLAGS: ${SRCDIR}/libspacetime_parser.a
+#cgo linux LDFLAGS: -lspacetime_parser
 #include "./parser.h"
 */
 import "C"
