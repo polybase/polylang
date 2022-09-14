@@ -414,6 +414,7 @@ mod tests {
                         required: false,
                     }),
                     ast::CollectionItem::Index(ast::Index {
+                        unique: false,
                         fields: vec![
                             ast::IndexField {
                                 name: "field".to_owned(),

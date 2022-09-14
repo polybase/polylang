@@ -188,6 +188,11 @@ pub Order: Order = {
 
 pub Index: Index = {
     "@index" "(" <fields:IndexFields> ")"  => Index{
+        unique: false,
+        fields: fields,
+    },
+    "@unique" "(" <fields:IndexFields> ")"  => Index{
+        unique: true,
         fields: fields,
     },
 };

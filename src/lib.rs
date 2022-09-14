@@ -333,8 +333,9 @@ mod tests {
         assert!(matches!(
             &collection.items[4],
             ast::CollectionItem::Index(ast::Index {
+                unique,
                 fields,
-            }) if fields[0].name == "field" && fields[0].order == ast::Order::Asc
+            }) if !unique && fields[0].name == "field" && fields[0].order == ast::Order::Asc
                 && fields[1].name == "field2" && fields[1].order == ast::Order::Asc
         ));
 
