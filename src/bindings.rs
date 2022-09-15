@@ -10,7 +10,7 @@ extern "C" {
 }
 
 #[cfg(target_arch = "wasm32")]
-#[no_mangle]
+#[wasm_bindgen]
 pub extern "C" fn init() {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 }
