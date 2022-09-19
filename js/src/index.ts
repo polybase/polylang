@@ -1,6 +1,7 @@
-import * as parser from '../pkg/spacetime_parser.js'
-
-parser.init()
+const parser = import('../pkg/index.js').then(p => p.default).then(p => {
+  p.init()
+  return p
+})
 
 interface Result<T> {
   Err: {
@@ -28,10 +29,10 @@ function unwrap<T> (value: Result<T>): T {
   return value.Ok
 }
 
-export function parse (code: string): Program {
-  return unwrap(JSON.parse(parser.parse(code)))
+export async function parse (code: string): Promise<Program> {
+  return unwrap(JSON.parse((await parser).parse(code)))
 }
 
-export function validateSet (collection: Collection, data: { [k: string]: any }): void {
-  return unwrap(JSON.parse(parser.validate_set(JSON.stringify(collection), JSON.stringify(data))))
+export async function validateSet (collection: Collection, data: { [k: string]: any }): Promise<void> {
+  return unwrap(JSON.parse((await parser).validate_set(JSON.stringify(collection), JSON.stringify(data))))
 }
