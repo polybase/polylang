@@ -34,9 +34,10 @@ const (
 )
 
 type Function struct {
-	Name       string        `json:"name"`
-	Parameters []string      `json:"parameters"`
-	Statements []interface{} `json:"statements"`
+	Name           string        `json:"name"`
+	Parameters     []string      `json:"parameters"`
+	Statements     []interface{} `json:"statements"`
+	StatementsCode string        `json:"statements_code"`
 }
 
 type Index struct {
