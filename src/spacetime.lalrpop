@@ -150,10 +150,11 @@ pub ParameterList: Vec<String> = {
 };
 
 pub Function: Function = {
-    "function" <i: Ident> "(" <pl:ParameterList> ")" "{" <s:Statement*> "}" => Function {
+    "function" <i: Ident> "(" <pl:ParameterList> ")" "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
         parameters: pl,
         statements: s,
+        statements_code: input[l..r].to_string(),
     },
 };
 
