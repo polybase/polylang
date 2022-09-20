@@ -117,6 +117,19 @@ fn validate_set_out_json(collection_ast_json: &str, data_json: &str) -> String {
     serde_json::to_string(&validate_set(collection_ast_json, data_json)).unwrap()
 }
 
+fn make_eval_input(func_ast: &str, params: &str) -> Result<String, Error> {
+    let func_ast: ast::Function = serde_json::from_str(func_ast).map_err(|e| Error {
+        message: e.to_string(),
+    })?;
+
+    let params: HashMap<String, validation::Value> =
+        serde_json::from_str(params).map_err(|e| Error {
+            message: e.to_string(),
+        })?;
+
+    Ok(format!("(() => {{ {} }})()", func_ast.statements_code))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
