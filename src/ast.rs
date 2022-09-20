@@ -42,6 +42,7 @@ pub struct Function {
     pub name: String,
     pub parameters: Vec<String>,
     pub statements: Vec<Statement>,
+    pub statements_code: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -192,7 +192,7 @@ mod tests {
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Function(ast::Function { name, parameters, statements }) if name == "get_age" && parameters.len() == 0 && statements.len() == 1)
+            matches!(&collection.items[0], ast::CollectionItem::Function(ast::Function { name, parameters, statements, statements_code }) if name == "get_age" && parameters.len() == 0 && statements.len() == 1 && statements_code == "return 42;")
         );
 
         let function = match &collection.items[0] {

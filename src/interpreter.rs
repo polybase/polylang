@@ -302,6 +302,7 @@ mod tests {
                         ))],
                         else_statements: vec![],
                     })],
+                    statements_code: String::new(),
                 })],
             })
             .unwrap();
@@ -324,6 +325,7 @@ mod tests {
                     statements: vec![ast::Statement::Return(ast::Expression::Ident(
                         "age".to_string(),
                     ))],
+                    statements_code: String::new(),
                 })],
             })
             .unwrap();
@@ -357,6 +359,7 @@ mod tests {
                         Box::new(ast::Expression::Ident("error".to_string())),
                         vec![ast::Expression::String("Something went wrong".to_string())],
                     ))],
+                    statements_code: String::new(),
                 })],
             })
             .unwrap();
@@ -464,6 +467,7 @@ mod tests {
                                 Box::new(ast::Expression::Ident("amount".to_string())),
                             )),
                         ],
+                        statements_code: String::new(),
                     }),
                 ],
             })
