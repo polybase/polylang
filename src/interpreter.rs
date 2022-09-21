@@ -323,7 +323,7 @@ mod tests {
                     name: "get_age".to_string(),
                     parameters: vec![ast::Parameter {
                         name: "age".to_string(),
-                        type_: ast::ParameterType::Type(ast::Type::Number),
+                        type_: ast::ParameterType::Number,
                     }],
                     statements: vec![ast::Statement::Return(ast::Expression::Ident(
                         "age".to_string(),
@@ -445,7 +445,7 @@ mod tests {
                             },
                             ast::Parameter {
                                 name: "amount".to_string(),
-                                type_: ast::ParameterType::Type(ast::Type::Number),
+                                type_: ast::ParameterType::Number,
                             },
                         ],
                         statements: vec![

@@ -14,7 +14,8 @@ pub Type: Type = {
 };
 
 pub ParameterType: ParameterType = {
-    <t:Type> => ParameterType::Type(t),
+    "string" => ParameterType::String,
+    "number" => ParameterType::Number,
     "document" => ParameterType::Document,
 };
 

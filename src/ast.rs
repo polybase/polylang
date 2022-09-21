@@ -39,7 +39,8 @@ pub enum Type {
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ParameterType {
-    Type(Type),
+    String,
+    Number,
     Document,
 }
 

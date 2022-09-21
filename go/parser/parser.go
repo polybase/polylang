@@ -21,6 +21,10 @@ type Error struct {
 	Message string `json:"message"`
 }
 
+type EvalInput struct {
+	Code string `json:"code"`
+}
+
 func parseResult[T any](resultJSON string) (T, error) {
 	var result Result[T]
 	if err := json.Unmarshal([]byte(resultJSON), &result); err != nil {
@@ -51,4 +55,9 @@ func ValidateSet(collectionAST, data string) error {
 	}
 
 	return nil
+}
+
+func GenerateJSFunction(funcAST string) (EvalInput, error) {
+	output := C.generate_js_function(C.CString(funcAST))
+	return parseResult[EvalInput](C.GoString(output))
 }

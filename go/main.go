@@ -25,7 +25,7 @@ func main() {
 		panic(err)
 	}
 
-	interpretResult, err := parser.Interpret("collection Test { function get_age(a) { if (a == 41) { return 1; } else { return 2; } } }", "Test", "get_age", `{ "a": { "value": {"Number": 42} } }`)
+	interpretResult, err := parser.Interpret("collection Test { function get_age(a: number) { if (a == 41) { return 1; } else { return 2; } } }", "Test", "get_age", `{ "a": { "value": {"Number": 42} } }`)
 	if err != nil {
 		panic(err)
 	}
