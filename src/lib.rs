@@ -306,7 +306,7 @@ mod tests {
             
                 @index([field, asc], field2);
             
-                function transfer (a, b, amount) {
+                function transfer (a: document, b: document, amount: number) {
                     if (a.publicKey != auth.publicKey) throw error('invalid user');
                     
                     a.balance -= amount;

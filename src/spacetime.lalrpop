@@ -13,6 +13,11 @@ pub Type: Type = {
     "number" => Type::Number,
 };
 
+pub ParameterType: ParameterType = {
+    <t:Type> => ParameterType::Type(t),
+    "document" => ParameterType::Document,
+};
+
 pub Number: f64 = {
     <s:r"-?[0-9]+(\.[0-9]+)?"> =>? f64::from_str(s).map_err(|_| ParseError::User {
         error: "invalid number",
@@ -138,8 +143,8 @@ pub If: If = {
     },
 };
 
-pub ParameterList: Vec<String> = {
-    <p:Ident> <rest:("," Ident)*> => {
+pub ParameterList: Vec<Parameter> = {
+    <p:Parameter> <rest:("," Parameter)*> => {
         let mut params = vec![p];
         for (_, p) in rest {
             params.push(p);
@@ -147,6 +152,13 @@ pub ParameterList: Vec<String> = {
         params
     },
     => vec![],
+};
+
+pub Parameter: Parameter = {
+    <name:Ident> ":" <type_:ParameterType> => Parameter {
+        name,
+        type_,
+    },
 };
 
 pub Function: Function = {

@@ -321,7 +321,10 @@ mod tests {
                 name: "Test".to_string(),
                 items: vec![ast::CollectionItem::Function(ast::Function {
                     name: "get_age".to_string(),
-                    parameters: vec!["age".to_string()],
+                    parameters: vec![ast::Parameter {
+                        name: "age".to_string(),
+                        type_: ast::ParameterType::Type(ast::Type::Number),
+                    }],
                     statements: vec![ast::Statement::Return(ast::Expression::Ident(
                         "age".to_string(),
                     ))],
@@ -431,7 +434,20 @@ mod tests {
                     }),
                     ast::CollectionItem::Function(ast::Function {
                         name: "transfer".to_string(),
-                        parameters: vec!["a".to_string(), "b".to_string(), "amount".to_string()],
+                        parameters: vec![
+                            ast::Parameter {
+                                name: "a".to_string(),
+                                type_: ast::ParameterType::Document,
+                            },
+                            ast::Parameter {
+                                name: "b".to_string(),
+                                type_: ast::ParameterType::Document,
+                            },
+                            ast::Parameter {
+                                name: "amount".to_string(),
+                                type_: ast::ParameterType::Type(ast::Type::Number),
+                            },
+                        ],
                         statements: vec![
                             ast::Statement::If(ast::If {
                                 condition: ast::Expression::NotEqual(
