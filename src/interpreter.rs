@@ -437,11 +437,11 @@ mod tests {
                         parameters: vec![
                             ast::Parameter {
                                 name: "a".to_string(),
-                                type_: ast::ParameterType::Document,
+                                type_: ast::ParameterType::Record,
                             },
                             ast::Parameter {
                                 name: "b".to_string(),
-                                type_: ast::ParameterType::Document,
+                                type_: ast::ParameterType::Record,
                             },
                             ast::Parameter {
                                 name: "amount".to_string(),

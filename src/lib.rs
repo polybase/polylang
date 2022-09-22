@@ -335,7 +335,7 @@ mod tests {
             
                 @index([field, asc], field2);
             
-                function transfer (a: document, b: document, amount: number) {
+                function transfer (a: record, b: record, amount: number) {
                     if (a.publicKey != auth.publicKey) throw error('invalid user');
                     
                     a.balance -= amount;
@@ -430,7 +430,7 @@ mod tests {
     #[test]
     fn test_generate_js_function() {
         let func_code = "
-            function transfer (a: document, b: document, amount: number) {
+            function transfer (a: record, b: record, amount: number) {
                 if (a.publicKey != auth.publicKey) throw error('invalid user');
                 
                 a.balance -= amount;

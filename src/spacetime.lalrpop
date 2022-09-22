@@ -16,7 +16,7 @@ pub Type: Type = {
 pub ParameterType: ParameterType = {
     "string" => ParameterType::String,
     "number" => ParameterType::Number,
-    "document" => ParameterType::Document,
+    "record" => ParameterType::Record,
 };
 
 pub Number: f64 = {

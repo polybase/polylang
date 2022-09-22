@@ -43,9 +43,9 @@ type Function struct {
 type FunctionType string
 
 const (
-	FunctionTypeString   FunctionType = "String"
-	FunctionTypeNumber   FunctionType = "Number"
-	FunctionTypeDocument FunctionType = "Document"
+	FunctionTypeString FunctionType = "String"
+	FunctionTypeNumber FunctionType = "Number"
+	FunctionTypeRecord FunctionType = "Record"
 )
 
 type Parameter struct {

@@ -41,7 +41,7 @@ pub enum Type {
 pub enum ParameterType {
     String,
     Number,
-    Document,
+    Record,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
