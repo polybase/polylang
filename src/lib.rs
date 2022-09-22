@@ -143,7 +143,13 @@ fn generate_js_function(func_ast: &str) -> Result<JSFunc, Error> {
 
     Ok(JSFunc {
         code: format!(
-            "const f = ((args) => {{\n{}\n{}\n}})\n",
+            "
+function error(str) {{
+    return new Error(str);
+}}
+
+const f = (auth, args) => {{\n{}\n{}\n}};
+",
             arg_defs, func_ast.statements_code,
         ),
     })
@@ -439,13 +445,18 @@ mod tests {
         assert_eq!(
             eval_input,
             JSFunc {
-                code: "const f = ((args) => {
+                code: "
+function error(str) {
+    return new Error(str);
+}
+
+const f = (auth, args) => {
 const a = args[0], b = args[1], amount = args[2];
 if (a.publicKey != auth.publicKey) throw error('invalid user');
                 
                 a.balance -= amount;
                 b.balance += amount;
-})
+};
 "
                 .to_string(),
             },
