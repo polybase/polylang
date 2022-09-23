@@ -1,6 +1,6 @@
 {
   "name": "@spacetimexyz/parser",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "",
   "types": "./node/index.d.ts",
   "license": "MIT",
