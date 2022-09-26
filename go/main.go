@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/spacetimehq/spacetime-parser/parser"
+	"github.com/spacetimehq/spacetime-lang/parser"
 )
 
 type Program struct {
