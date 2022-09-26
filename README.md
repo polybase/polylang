@@ -14,7 +14,7 @@ EOF
 
 ```bash
 cargo build --release
-cp target/release/libspacetime_parser.a go/parser/
+cp target/release/libspacetime_lang.a go/lang/
 
 cd go
 go run .
