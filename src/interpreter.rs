@@ -321,7 +321,10 @@ mod tests {
                 name: "Test".to_string(),
                 items: vec![ast::CollectionItem::Function(ast::Function {
                     name: "get_age".to_string(),
-                    parameters: vec!["age".to_string()],
+                    parameters: vec![ast::Parameter {
+                        name: "age".to_string(),
+                        type_: ast::ParameterType::Number,
+                    }],
                     statements: vec![ast::Statement::Return(ast::Expression::Ident(
                         "age".to_string(),
                     ))],
@@ -384,7 +387,7 @@ mod tests {
                @index([field, asc], field2);
 
                function transfer (a, b, amount) {
-                   if (a.publicKey != auth.publicKey) throw error('invalid user');
+                   if (a.publicKey != $auth.publicKey) throw error('invalid user');
 
                    a.balance -= amount;
                    b.balance += amount;
@@ -431,7 +434,20 @@ mod tests {
                     }),
                     ast::CollectionItem::Function(ast::Function {
                         name: "transfer".to_string(),
-                        parameters: vec!["a".to_string(), "b".to_string(), "amount".to_string()],
+                        parameters: vec![
+                            ast::Parameter {
+                                name: "a".to_string(),
+                                type_: ast::ParameterType::Record,
+                            },
+                            ast::Parameter {
+                                name: "b".to_string(),
+                                type_: ast::ParameterType::Record,
+                            },
+                            ast::Parameter {
+                                name: "amount".to_string(),
+                                type_: ast::ParameterType::Number,
+                            },
+                        ],
                         statements: vec![
                             ast::Statement::If(ast::If {
                                 condition: ast::Expression::NotEqual(
@@ -440,7 +456,7 @@ mod tests {
                                         "publicKey".to_string(),
                                     )),
                                     Box::new(ast::Expression::Dot(
-                                        Box::new(ast::Expression::Ident("auth".to_string())),
+                                        Box::new(ast::Expression::Ident("$auth".to_string())),
                                         "publicKey".to_string(),
                                     )),
                                 ),

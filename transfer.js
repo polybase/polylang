@@ -11,7 +11,7 @@ collection Account {
     @index([field, asc], field2);
 
     function transfer (a, b, amount) {
-        if (a.publicKey != auth.publicKey) throw error('invalid user');
+        if (a.publicKey != $auth.publicKey) throw error('invalid user');
         
         a.balance -= amount;
         b.balance += amount;

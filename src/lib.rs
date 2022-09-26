@@ -117,6 +117,48 @@ fn validate_set_out_json(collection_ast_json: &str, data_json: &str) -> String {
     serde_json::to_string(&validate_set(collection_ast_json, data_json)).unwrap()
 }
 
+#[derive(Debug, Serialize, PartialEq)]
+struct JSFunc {
+    code: String,
+}
+
+fn generate_js_function(func_ast: &str) -> Result<JSFunc, Error> {
+    let func_ast: ast::Function = serde_json::from_str(func_ast).map_err(|e| Error {
+        message: e.to_string(),
+    })?;
+
+    let arg_defs = func_ast
+        .parameters
+        .into_iter()
+        .enumerate()
+        .map(|(i, p)| format!("{} = args[{}]", p.name, i))
+        .collect::<Vec<String>>()
+        .join(", ");
+
+    let arg_defs = if arg_defs.is_empty() {
+        arg_defs
+    } else {
+        format!("const {};", arg_defs)
+    };
+
+    Ok(JSFunc {
+        code: format!(
+            "
+function error(str) {{
+    return new Error(str);
+}}
+
+const f = ($auth, args) => {{\n{}\n{}\n}};
+",
+            arg_defs, func_ast.statements_code,
+        ),
+    })
+}
+
+fn generate_js_function_out_json(func_ast: &str) -> String {
+    serde_json::to_string(&generate_js_function(func_ast)).unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -293,8 +335,8 @@ mod tests {
             
                 @index([field, asc], field2);
             
-                function transfer (a, b, amount) {
-                    if (a.publicKey != auth.publicKey) throw error('invalid user');
+                function transfer (a: record, b: record, amount: number) {
+                    if (a.publicKey != $auth.publicKey) throw error('invalid user');
                     
                     a.balance -= amount;
                     b.balance += amount;
@@ -383,5 +425,41 @@ mod tests {
                 "balance".to_owned(),
             ) && **right == ast::Expression::Ident("amount".to_owned())
         ));
+    }
+
+    #[test]
+    fn test_generate_js_function() {
+        let func_code = "
+            function transfer (a: record, b: record, amount: number) {
+                if (a.publicKey != $auth.publicKey) throw error('invalid user');
+                
+                a.balance -= amount;
+                b.balance += amount;
+            }
+        ";
+
+        let func = spacetime::FunctionParser::new().parse(func_code).unwrap();
+        let func_ast = serde_json::to_string(&func).unwrap();
+
+        let eval_input = generate_js_function(&func_ast).unwrap();
+        assert_eq!(
+            eval_input,
+            JSFunc {
+                code: "
+function error(str) {
+    return new Error(str);
+}
+
+const f = ($auth, args) => {
+const a = args[0], b = args[1], amount = args[2];
+if (a.publicKey != $auth.publicKey) throw error('invalid user');
+                
+                a.balance -= amount;
+                b.balance += amount;
+};
+"
+                .to_string(),
+            },
+        );
     }
 }

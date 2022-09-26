@@ -35,9 +35,22 @@ const (
 
 type Function struct {
 	Name           string        `json:"name"`
-	Parameters     []string      `json:"parameters"`
+	Parameters     []Parameter   `json:"parameters"`
 	Statements     []interface{} `json:"statements"`
 	StatementsCode string        `json:"statements_code"`
+}
+
+type FunctionType string
+
+const (
+	FunctionTypeString FunctionType = "String"
+	FunctionTypeNumber FunctionType = "Number"
+	FunctionTypeRecord FunctionType = "Record"
+)
+
+type Parameter struct {
+	Name string       `json:"name"`
+	Type FunctionType `json:"type_"`
 }
 
 type Index struct {

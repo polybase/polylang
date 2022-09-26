@@ -34,6 +34,12 @@ pub fn validate_set(ast_json: &str, data_json: &str) -> String {
     crate::validate_set_out_json(ast_json, data_json)
 }
 
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn generate_js_function(func_ast_json: &str) -> String {
+    crate::generate_js_function_out_json(func_ast_json)
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
 pub extern "C" fn parse(input: *const c_char) -> *mut c_char {
@@ -80,6 +86,17 @@ pub extern "C" fn validate_set(ast_json: *const c_char, data_json: *const c_char
     let data_json = data_json.to_str().unwrap();
 
     let output = crate::validate_set_out_json(ast_json, data_json);
+    let output = std::ffi::CString::new(output).unwrap();
+    output.into_raw()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[no_mangle]
+pub extern "C" fn generate_js_function(func_ast_json: *const c_char) -> *mut c_char {
+    let func_ast_json = unsafe { std::ffi::CStr::from_ptr(func_ast_json) };
+    let func_ast_json = func_ast_json.to_str().unwrap();
+
+    let output = crate::generate_js_function_out_json(func_ast_json);
     let output = std::ffi::CString::new(output).unwrap();
     output.into_raw()
 }

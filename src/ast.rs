@@ -37,10 +37,23 @@ pub enum Type {
     Number,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ParameterType {
+    String,
+    Number,
+    Record,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Parameter {
+    pub name: String,
+    pub type_: ParameterType,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Function {
     pub name: String,
-    pub parameters: Vec<String>,
+    pub parameters: Vec<Parameter>,
     pub statements: Vec<Statement>,
     pub statements_code: String,
 }
