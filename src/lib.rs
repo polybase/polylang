@@ -148,7 +148,7 @@ function error(str) {{
     return new Error(str);
 }}
 
-const f = (auth, args) => {{\n{}\n{}\n}};
+const f = ($auth, args) => {{\n{}\n{}\n}};
 ",
             arg_defs, func_ast.statements_code,
         ),
@@ -336,7 +336,7 @@ mod tests {
                 @index([field, asc], field2);
             
                 function transfer (a: record, b: record, amount: number) {
-                    if (a.publicKey != auth.publicKey) throw error('invalid user');
+                    if (a.publicKey != $auth.publicKey) throw error('invalid user');
                     
                     a.balance -= amount;
                     b.balance += amount;
@@ -431,7 +431,7 @@ mod tests {
     fn test_generate_js_function() {
         let func_code = "
             function transfer (a: record, b: record, amount: number) {
-                if (a.publicKey != auth.publicKey) throw error('invalid user');
+                if (a.publicKey != $auth.publicKey) throw error('invalid user');
                 
                 a.balance -= amount;
                 b.balance += amount;
@@ -450,9 +450,9 @@ function error(str) {
     return new Error(str);
 }
 
-const f = (auth, args) => {
+const f = ($auth, args) => {
 const a = args[0], b = args[1], amount = args[2];
-if (a.publicKey != auth.publicKey) throw error('invalid user');
+if (a.publicKey != $auth.publicKey) throw error('invalid user');
                 
                 a.balance -= amount;
                 b.balance += amount;
