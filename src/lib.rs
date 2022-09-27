@@ -208,6 +208,39 @@ mod tests {
         assert!(
             matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: false }) if name == "name" && *type_ == ast::Type::String)
         );
+        assert!(
+            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: false }) if name == "age" && *type_ == ast::Type::Number)
+        );
+    }
+
+    #[test]
+    fn test_collection_with_asc_desc_fields() {
+        let program = spacetime::ProgramParser::new().parse(
+            "
+            collection Test {
+                asc: string;
+                desc: string;
+            }
+            ",
+        );
+
+        let program = program.unwrap();
+        assert_eq!(program.nodes.len(), 1);
+        assert!(
+            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, items }) if name == "Test" && items.len() == 2)
+        );
+
+        let collection = match &program.nodes[0] {
+            ast::RootNode::Collection(collection) => collection,
+            _ => panic!("Expected collection"),
+        };
+
+        assert!(
+            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: false }) if name == "asc" && *type_ == ast::Type::String)
+        );
+        assert!(
+            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: false }) if name == "desc" && *type_ == ast::Type::String)
+        );
     }
 
     #[test]
@@ -385,6 +418,7 @@ mod tests {
             ast::CollectionItem::Function(f) => f,
             _ => panic!("expected function"),
         };
+        dbg!(&function.statements);
 
         assert!(matches!(
             &function.statements[0],
@@ -398,7 +432,7 @@ mod tests {
                     "publicKey".to_owned(),
                 )),
                 Box::new(ast::Expression::Dot(
-                    Box::new(ast::Expression::Ident("auth".to_owned())),
+                    Box::new(ast::Expression::Ident("$auth".to_owned())),
                     "publicKey".to_owned(),
                 )),
             ) && then_statements.len() == 1 && else_statements.len() == 0
