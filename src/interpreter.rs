@@ -495,7 +495,7 @@ mod tests {
                 "transfer",
                 HashMap::from([
                     (
-                        "auth".to_owned(),
+                        "$auth".to_owned(),
                         Rc::new(RefCell::new(Object {
                             value: Value::Map(HashMap::from([(
                                 "publicKey".to_owned(),
