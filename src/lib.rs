@@ -15,12 +15,79 @@ struct Error {
     message: String,
 }
 
+fn parse_error_to_error<T, E>(input: &str, error: lalrpop_util::ParseError<usize, T, E>) -> Error
+where
+    T: std::fmt::Display + std::fmt::Debug,
+    E: std::fmt::Display + std::fmt::Debug,
+{
+    let get_line_start = |start_byte| input[..start_byte].rfind('\n').map(|i| i + 1).unwrap_or(0);
+    let get_line_end = |end_byte| {
+        input[end_byte..]
+            .find('\n')
+            .map(|i| i + end_byte)
+            .unwrap_or_else(|| input.len())
+    };
+
+    let make_err = |start_byte, end_byte, message: &str| {
+        let line_start = get_line_start(start_byte);
+        let line_end = get_line_end(end_byte);
+        let line = &input[line_start..line_end];
+        let line_number = input[..start_byte].matches('\n').count() + 1;
+        let column = start_byte - line_start;
+        let mut message = format!(
+            "Error found at line {}, column {}: {}\n",
+            line_number, column, message
+        );
+
+        // deindent the line
+        let line_len_before_trim = line.len();
+        let line = line.trim_start();
+        let column = column - (line_len_before_trim - line.len());
+
+        message.push_str(line);
+        message.push_str("\n");
+        message.push_str(&" ".repeat(column));
+        message.push_str(&"^".repeat(if start_byte == end_byte {
+            1
+        } else {
+            end_byte - start_byte
+        }));
+        Error { message }
+    };
+
+    match error {
+        lalrpop_util::ParseError::InvalidToken { location } => {
+            make_err(location, location, "Invalid token")
+        }
+        lalrpop_util::ParseError::UnrecognizedEOF {
+            location,
+            expected: _,
+        } => make_err(location, location, "Unexpected end of file"),
+        lalrpop_util::ParseError::UnrecognizedToken {
+            token: (start_byte, token, end_byte),
+            expected,
+        } => make_err(
+            start_byte,
+            end_byte,
+            &format!(
+                "Unrecognized token \"{}\". Expected one of: {}",
+                token,
+                expected.join(", "),
+            ),
+        ),
+        lalrpop_util::ParseError::ExtraToken {
+            token: (start_byte, token, end_byte),
+        } => make_err(start_byte, end_byte, &format!("Extra token \"{}\"", token)),
+        lalrpop_util::ParseError::User { error } => Error {
+            message: format!("{:?}", error),
+        },
+    }
+}
+
 fn parse(input: &str) -> Result<ast::Program, Error> {
     spacetime::ProgramParser::new()
         .parse(input)
-        .map_err(|e| Error {
-            message: e.to_string(),
-        })
+        .map_err(|e| parse_error_to_error(input, e))
 }
 
 fn parse_out_json(input: &str) -> String {
@@ -39,14 +106,7 @@ fn interpret(
     ),
     Error,
 > {
-    let program = spacetime::ProgramParser::new().parse(program);
-    if let Err(err) = program {
-        return Err(Error {
-            message: err.to_string(),
-        });
-    }
-    let program = program.unwrap();
-
+    let program = parse(program)?;
     let mut interpreter = interpreter::Interpreter::new();
 
     let collection = program
@@ -494,6 +554,76 @@ if (a.publicKey != $auth.publicKey) throw error('invalid user');
 "
                 .to_string(),
             },
+        );
+    }
+
+    #[test]
+    fn test_error_unrecognized_token() {
+        let code = "
+            collection test-cities {}
+        ";
+
+        let collection = parse(code);
+        assert!(collection.is_err());
+        eprintln!("{}", collection.as_ref().unwrap_err().message);
+        assert_eq!(
+            collection.unwrap_err().message,
+            r#"Error found at line 2, column 27: Unrecognized token "-". Expected one of: "{"
+collection test-cities {}
+               ^"#,
+        );
+    }
+
+    #[test]
+    fn test_error_invalid_token() {
+        let code = "
+            collection ą {}
+        ";
+
+        let collection = parse(code);
+        assert!(collection.is_err());
+        eprintln!("{}", collection.as_ref().unwrap_err().message);
+        assert_eq!(
+            collection.unwrap_err().message,
+            r#"Error found at line 2, column 23: Invalid token
+collection ą {}
+           ^"#,
+        );
+    }
+
+    #[test]
+    fn test_error_unexpected_eof() {
+        let code = "
+            function x() {
+        ";
+
+        let collection = parse(code);
+        assert!(collection.is_err());
+        eprintln!("{}", collection.as_ref().unwrap_err().message);
+        assert_eq!(
+            collection.unwrap_err().message,
+            r#"Error found at line 2, column 26: Unexpected end of file
+function x() {
+              ^"#,
+        );
+    }
+
+    #[test]
+    fn test_error_field_invalid_type() {
+        let code = "
+            collection test {
+                name: object;
+            }
+        ";
+
+        let collection = parse(code);
+        assert!(collection.is_err());
+        eprintln!("{}", collection.as_ref().unwrap_err().message);
+        assert_eq!(
+            collection.unwrap_err().message,
+            r#"Error found at line 3, column 22: Unrecognized token "object". Expected one of: "number", "string"
+name: object;
+      ^^^^^^"#,
         );
     }
 }
