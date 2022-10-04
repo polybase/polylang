@@ -28,7 +28,7 @@ pub Number: f64 = {
 };
 
 pub String: String = {
-    <s:r#"'.*'"#> => s[1..s.len()-1].to_string(),
+    <s:r#"'[^']*'"#> => s[1..s.len()-1].to_string(),
 };
 
 pub Boolean: bool = {
@@ -36,11 +36,14 @@ pub Boolean: bool = {
     "false" => false,
 };
 
+pub Primitive: Primitive = {
+    <n:Number> => Primitive::Number(n),
+    <s:String> => Primitive::String(s),
+};
+
 pub Expression: Expression = {
     #[precedence(level="0")]
-    <n:Number> => Expression::Number(n),
-    #[precedence(level="0")]
-    <s:String> => Expression::String(s),
+    <p:Primitive> => Expression::Primitive(p),
     #[precedence(level="0")]
     <b:Boolean> => Expression::Boolean(b),
     #[precedence(level="0")]
@@ -114,6 +117,17 @@ pub ArgumentList: Vec<Expression> = {
     => vec![],
 };
 
+pub PrimitiveArgumentList: Vec<Primitive> = {
+    <p:Primitive> <rest:("," Primitive)*> => {
+        let mut args = vec![p];
+        for (_, p) in rest {
+            args.push(p);
+        }
+        args
+    },
+    => vec![],
+};
+
 pub CompoundStatement: Statement = {
     <i:If> => Statement::If(i),
 }
@@ -174,15 +188,28 @@ pub Function: Function = {
 };
 
 pub Field: Field = {
-    <name:Ident> ":" <type_:Type> "!" => Field{
+    <name:Ident> ":" <type_:Type> "!" <decorators:FieldDecorator*> => Field{
         name,
         type_,
         required: true,
+        decorators,
     },
-    <name:Ident> ":" <type_:Type> => Field{
+    <name:Ident> ":" <type_:Type> <decorators:FieldDecorator*> => Field{
         name,
         type_,
         required: false,
+        decorators,
+    },
+};
+
+pub FieldDecorator: FieldDecorator = {
+    "@" <name:Ident> "(" <args:PrimitiveArgumentList> ")" => FieldDecorator {
+        name,
+        arguments: args,
+    },
+    "@" <name:Ident> => FieldDecorator {
+        name,
+        arguments: vec![],
     },
 };
 

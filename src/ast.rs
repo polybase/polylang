@@ -29,6 +29,13 @@ pub struct Field {
     pub name: String,
     pub type_: Type,
     pub required: bool,
+    pub decorators: Vec<FieldDecorator>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FieldDecorator {
+    pub name: String,
+    pub arguments: Vec<Primitive>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
@@ -86,8 +93,7 @@ pub enum Statement {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum Expression {
-    Number(f64),
-    String(String),
+    Primitive(Primitive),
     Ident(String),
     Boolean(bool),
     Assign(Box<Expression>, Box<Expression>),
@@ -125,4 +131,10 @@ pub struct If {
     pub condition: Expression,
     pub then_statements: Vec<Statement>,
     pub else_statements: Vec<Statement>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub enum Primitive {
+    Number(f64),
+    String(String),
 }

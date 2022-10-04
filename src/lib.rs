@@ -177,6 +177,74 @@ fn validate_set_out_json(collection_ast_json: &str, data_json: &str) -> String {
     serde_json::to_string(&validate_set(collection_ast_json, data_json)).unwrap()
 }
 
+fn validate_set_decorators(
+    program_ast_json: &str,
+    collection_name: &str,
+    data_json: &str,
+    previous_data_json: &str,
+    public_key: &str,
+) -> Result<(), Error> {
+    let program_ast: ast::Program = match serde_json::from_str(program_ast_json) {
+        Ok(ast) => ast,
+        Err(err) => {
+            return Err(Error {
+                message: err.to_string(),
+            })
+        }
+    };
+
+    let data: HashMap<&str, validation::Value> = match serde_json::from_str(data_json) {
+        Ok(data) => data,
+        Err(err) => {
+            return Err(Error {
+                message: err.to_string(),
+            })
+        }
+    };
+
+    let previous_data: HashMap<&str, validation::Value> =
+        match serde_json::from_str(previous_data_json) {
+            Ok(data) => data,
+            Err(err) => {
+                return Err(Error {
+                    message: err.to_string(),
+                })
+            }
+        };
+
+    validation::validate_set_decorators(
+        program_ast,
+        collection_name,
+        data,
+        previous_data,
+        if public_key == "" {
+            None
+        } else {
+            Some(public_key)
+        },
+    )
+    .map_err(|e| Error {
+        message: e.to_string(),
+    })
+}
+
+fn validate_set_decorators_out_json(
+    program_ast_json: &str,
+    collection_name: &str,
+    data_json: &str,
+    previous_data_json: &str,
+    public_key: &str,
+) -> String {
+    serde_json::to_string(&validate_set_decorators(
+        program_ast_json,
+        collection_name,
+        data_json,
+        previous_data_json,
+        public_key,
+    ))
+    .unwrap()
+}
+
 #[derive(Debug, Serialize, PartialEq)]
 struct JSFunc {
     code: String,
@@ -266,10 +334,10 @@ mod tests {
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: false }) if name == "name" && *type_ == ast::Type::String)
+            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: false, decorators }) if name == "name" && *type_ == ast::Type::String && decorators.is_empty())
         );
         assert!(
-            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: false }) if name == "age" && *type_ == ast::Type::Number)
+            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: false, decorators }) if name == "age" && *type_ == ast::Type::Number && decorators.is_empty())
         );
     }
 
@@ -296,10 +364,63 @@ mod tests {
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: false }) if name == "asc" && *type_ == ast::Type::String)
+            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: false, decorators }) if name == "asc" && *type_ == ast::Type::String && decorators.is_empty()),
         );
         assert!(
-            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: false }) if name == "desc" && *type_ == ast::Type::String)
+            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: false, decorators }) if name == "desc" && *type_ == ast::Type::String && decorators.is_empty()),
+        );
+    }
+
+    #[test]
+    fn test_fields_with_decorators() {
+        let program = spacetime::ProgramParser::new().parse(
+            "
+            collection Test {
+                name: string @min(5) @readonly;
+                age: number @min(18);
+            }
+            ",
+        );
+
+        let program = program.unwrap();
+        assert_eq!(program.nodes.len(), 1);
+
+        let collection = match &program.nodes[0] {
+            ast::RootNode::Collection(collection) => collection,
+            _ => panic!("Expected collection"),
+        };
+
+        let name_field = match &collection.items[0] {
+            ast::CollectionItem::Field(field) => field,
+            _ => panic!("Expected field"),
+        };
+
+        assert_eq!(name_field.name, "name");
+        assert_eq!(name_field.type_, ast::Type::String);
+        assert_eq!(name_field.required, false);
+        assert_eq!(name_field.decorators.len(), 2);
+        assert_eq!(name_field.decorators[0].name, "min");
+        assert_eq!(
+            name_field.decorators[0].arguments,
+            vec![ast::Primitive::Number(5.0)]
+        );
+
+        assert_eq!(name_field.decorators[1].name, "readonly");
+        assert_eq!(name_field.decorators[1].arguments, vec![]);
+
+        let age_field = match &collection.items[1] {
+            ast::CollectionItem::Field(field) => field,
+            _ => panic!("Expected field"),
+        };
+
+        assert_eq!(age_field.name, "age");
+        assert_eq!(age_field.type_, ast::Type::Number);
+        assert_eq!(age_field.required, false);
+        assert_eq!(age_field.decorators.len(), 1);
+        assert_eq!(age_field.decorators[0].name, "min");
+        assert_eq!(
+            age_field.decorators[0].arguments,
+            vec![ast::Primitive::Number(18.0)]
         );
     }
 
@@ -336,7 +457,7 @@ mod tests {
         };
 
         assert!(
-            matches!(function.statements[0], ast::Statement::Return(ast::Expression::Number(number)) if number == 42.0)
+            matches!(function.statements[0], ast::Statement::Return(ast::Expression::Primitive(ast::Primitive::Number(number))) if number == 42.0)
         );
     }
 
@@ -362,8 +483,8 @@ mod tests {
 
         assert!(matches!(
             comparison.unwrap(),
-            ast::Expression::GreaterThan(left, right) if *left == ast::Expression::Number(1.0)
-                && *right == ast::Expression::Number(2.0)
+            ast::Expression::GreaterThan(left, right) if *left == ast::Expression::Primitive(ast::Primitive::Number(1.0))
+                && *right == ast::Expression::Primitive(ast::Primitive::Number(2.0)),
         ));
     }
 
@@ -381,7 +502,7 @@ mod tests {
 
         let if_ = if_.unwrap();
         assert!(
-            matches!(if_.condition, ast::Expression::Equal(n, m) if *n == ast::Expression::Number(1.0) && *m == ast::Expression::Number(1.0))
+            matches!(if_.condition, ast::Expression::Equal(n, m) if *n == ast::Expression::Primitive(ast::Primitive::Number(1.0)) && *m == ast::Expression::Primitive(ast::Primitive::Number(1.0)))
         );
         assert_eq!(if_.then_statements.len(), 1);
         assert_eq!(if_.else_statements.len(), 1);
@@ -443,26 +564,26 @@ mod tests {
 
         assert!(matches!(
             &collection.items[0],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: false })
-            if name == "name" && *type_ == ast::Type::String
+            ast::CollectionItem::Field(ast::Field { name, type_, required: false, decorators })
+            if name == "name" && *type_ == ast::Type::String && decorators.is_empty()
         ));
 
         assert!(matches!(
             &collection.items[1],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: true })
-            if name == "age" && *type_ == ast::Type::Number
+            ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators })
+            if name == "age" && *type_ == ast::Type::Number && decorators.is_empty()
         ));
 
         assert!(matches!(
             &collection.items[2],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: false })
-            if name == "balance" && *type_ == ast::Type::Number
+            ast::CollectionItem::Field(ast::Field { name, type_, required: false, decorators })
+            if name == "balance" && *type_ == ast::Type::Number && decorators.is_empty()
         ));
 
         assert!(matches!(
             &collection.items[3],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: false })
-            if name == "publicKey" && *type_ == ast::Type::String
+            ast::CollectionItem::Field(ast::Field { name, type_, required: false, decorators })
+            if name == "publicKey" && *type_ == ast::Type::String && decorators.is_empty()
         ));
 
         assert!(matches!(

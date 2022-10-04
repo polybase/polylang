@@ -21,9 +21,10 @@ type CollectionItem struct {
 }
 
 type Field struct {
-	Name     string `json:"name"`
-	Type     Type   `json:"type_"`
-	Required bool   `json:"required"`
+	Name       string           `json:"name"`
+	Type       Type             `json:"type_"`
+	Required   bool             `json:"required"`
+	Decorators []FieldDecorator `json:"decorators"`
 }
 
 type Type string
@@ -32,6 +33,11 @@ const (
 	String Type = "String"
 	Number Type = "Number"
 )
+
+type FieldDecorator struct {
+	Name      string      `json:"name"`
+	Arguments []Primitive `json:"arguments"`
+}
 
 type Function struct {
 	Name           string        `json:"name"`
@@ -69,3 +75,8 @@ const (
 	Asc  Order = "Asc"
 	Desc Order = "Desc"
 )
+
+type Primitive struct {
+	Number *float64 `json:"Number,omitempty"`
+	String *string  `json:"String,omitempty"`
+}
