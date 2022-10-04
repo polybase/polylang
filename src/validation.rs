@@ -508,4 +508,117 @@ mod tests {
         })
         .unwrap();
     }
+
+    #[test]
+    fn test_min_number() {
+        min(&[ast::Primitive::Number(123.0)]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::Number(122.0)),
+            public_key: None,
+        })
+        .unwrap_err();
+
+        min(&[ast::Primitive::Number(123.0)]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::Number(123.0)),
+            public_key: None,
+        })
+        .unwrap();
+
+        min(&[ast::Primitive::Number(123.0)]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::Number(124.0)),
+            public_key: None,
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn test_min_string() {
+        min(&[ast::Primitive::Number(1.0)]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::String("".to_string())),
+            public_key: None,
+        })
+        .unwrap_err();
+
+        min(&[ast::Primitive::Number(1.0)]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::String("a".to_string())),
+            public_key: None,
+        })
+        .unwrap();
+
+        min(&[ast::Primitive::Number(1.0)]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::String("aa".to_string())),
+            public_key: None,
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn test_max() {
+        max(&[ast::Primitive::Number(123.0)]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::Number(122.0)),
+            public_key: None,
+        })
+        .unwrap();
+
+        max(&[ast::Primitive::Number(123.0)]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::Number(123.0)),
+            public_key: None,
+        })
+        .unwrap();
+
+        max(&[ast::Primitive::Number(123.0)]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::Number(124.0)),
+            public_key: None,
+        })
+        .unwrap_err();
+    }
+
+    #[test]
+    fn test_max_string() {
+        max(&[ast::Primitive::Number(1.0)]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::String("".to_string())),
+            public_key: None,
+        })
+        .unwrap();
+
+        max(&[ast::Primitive::Number(1.0)]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::String("a".to_string())),
+            public_key: None,
+        })
+        .unwrap();
+
+        max(&[ast::Primitive::Number(1.0)]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::String("aa".to_string())),
+            public_key: None,
+        })
+        .unwrap_err();
+    }
+
+    #[test]
+    fn test_creator() {
+        creator(&[]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::String("0x0".to_string())),
+            public_key: Some("0x0"),
+        })
+        .unwrap();
+
+        creator(&[]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::String("0x1".to_string())),
+            public_key: Some("0x0"),
+        })
+        .unwrap_err();
+    }
 }
