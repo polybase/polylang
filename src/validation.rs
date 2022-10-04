@@ -1,3 +1,4 @@
+use regex::Regex;
 use serde::Deserialize;
 use std::{cmp::Ordering, collections::HashMap};
 
@@ -116,6 +117,7 @@ pub(crate) fn validate_set_decorators(
                 "max" => max(decorator.arguments.as_slice())?,
                 "readonly" => readonly(decorator.arguments.as_slice())?,
                 "creator" => creator(decorator.arguments.as_slice())?,
+                "regex" => regex(decorator.arguments.as_slice())?,
                 n => return Err(format!("Unknown decorator: {}", n).into()),
             };
 
@@ -232,6 +234,30 @@ fn creator(args: &[ast::Primitive]) -> Result<ValidationFn, Box<dyn std::error::
             }
             _ => Err("Creator must be a string".into()),
         }
+    }))
+}
+
+fn regex(args: &[ast::Primitive]) -> Result<ValidationFn, Box<dyn std::error::Error>> {
+    if args.len() != 1 {
+        return Err("regex requires 1 argument".into());
+    }
+
+    let regex = match args[0] {
+        ast::Primitive::Regex(ref regex) => regex,
+        _ => return Err("Invalid type for regex decorator".into()),
+    };
+
+    let regex = Regex::new(regex)?;
+
+    Ok(Box::new(move |vargs| match vargs.new {
+        Some(Value::String(s)) => {
+            if regex.is_match(s) {
+                Ok(())
+            } else {
+                Err(format!("String does not match regex: {}", regex).into())
+            }
+        }
+        _ => Err("Regex can only be applied to strings".into()),
     }))
 }
 
@@ -440,6 +466,44 @@ mod tests {
         readonly(&[]).unwrap()(ValidationArgs {
             previous: Some(&Value::Number(123.0)),
             new: Some(&Value::Number(123.0)),
+            public_key: None,
+        })
+        .unwrap();
+
+        readonly(&[]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::Number(123.0)),
+            public_key: None,
+        })
+        .unwrap();
+
+        readonly(&[]).unwrap()(ValidationArgs {
+            previous: Some(&Value::Number(123.0)),
+            new: None,
+            public_key: None,
+        })
+        .unwrap_err();
+
+        readonly(&[]).unwrap()(ValidationArgs {
+            previous: Some(&Value::Number(123.0)),
+            new: Some(&Value::Number(456.0)),
+            public_key: None,
+        })
+        .unwrap_err();
+    }
+
+    #[test]
+    fn test_regex() {
+        regex(&[ast::Primitive::Regex("^123$".to_string())]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::String("456".to_string())),
+            public_key: None,
+        })
+        .unwrap_err();
+
+        regex(&[ast::Primitive::Regex("^123$".to_string())]).unwrap()(ValidationArgs {
+            previous: None,
+            new: Some(&Value::String("123".to_string())),
             public_key: None,
         })
         .unwrap();
