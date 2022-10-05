@@ -109,12 +109,16 @@ impl Interpreter {
         }
 
         match expression {
-            ast::Expression::Number(number) => Ok(Rc::new(RefCell::new(Object {
-                value: Value::Number(*number),
-            }))),
-            ast::Expression::String(string) => Ok(Rc::new(RefCell::new(Object {
-                value: Value::String(string.clone()),
-            }))),
+            ast::Expression::Primitive(ast::Primitive::Number(number)) => {
+                Ok(Rc::new(RefCell::new(Object {
+                    value: Value::Number(*number),
+                })))
+            }
+            ast::Expression::Primitive(ast::Primitive::String(string)) => {
+                Ok(Rc::new(RefCell::new(Object {
+                    value: Value::String(string.clone()),
+                })))
+            }
             ast::Expression::Boolean(boolean) => Ok(Rc::new(RefCell::new(Object {
                 value: Value::Boolean(*boolean),
             }))),
@@ -294,11 +298,11 @@ mod tests {
                     parameters: vec![],
                     statements: vec![ast::Statement::If(ast::If {
                         condition: ast::Expression::Equal(
-                            Box::new(ast::Expression::Number(1.0)),
-                            Box::new(ast::Expression::Number(1.0)),
+                            Box::new(ast::Expression::Primitive(ast::Primitive::Number(1.0))),
+                            Box::new(ast::Expression::Primitive(ast::Primitive::Number(1.0))),
                         ),
-                        then_statements: vec![ast::Statement::Return(ast::Expression::Number(
-                            42.0,
+                        then_statements: vec![ast::Statement::Return(ast::Expression::Primitive(
+                            ast::Primitive::Number(42.0),
                         ))],
                         else_statements: vec![],
                     })],
@@ -360,7 +364,9 @@ mod tests {
                     parameters: vec![],
                     statements: vec![ast::Statement::Throw(ast::Expression::Call(
                         Box::new(ast::Expression::Ident("error".to_string())),
-                        vec![ast::Expression::String("Something went wrong".to_string())],
+                        vec![ast::Expression::Primitive(ast::Primitive::String(
+                            "Something went wrong".to_string(),
+                        ))],
                     ))],
                     statements_code: String::new(),
                 })],
@@ -403,21 +409,25 @@ mod tests {
                         name: "name".to_string(),
                         type_: ast::Type::String,
                         required: false,
+                        decorators: Vec::new(),
                     }),
                     ast::CollectionItem::Field(ast::Field {
                         name: "age".to_string(),
                         type_: ast::Type::Number,
                         required: true,
+                        decorators: Vec::new(),
                     }),
                     ast::CollectionItem::Field(ast::Field {
                         name: "balance".to_string(),
                         type_: ast::Type::Number,
                         required: false,
+                        decorators: Vec::new(),
                     }),
                     ast::CollectionItem::Field(ast::Field {
                         name: "publicKey".to_string(),
                         type_: ast::Type::String,
                         required: false,
+                        decorators: Vec::new(),
                     }),
                     ast::CollectionItem::Index(ast::Index {
                         unique: false,
@@ -463,7 +473,9 @@ mod tests {
                                 then_statements: vec![ast::Statement::Throw(
                                     ast::Expression::Call(
                                         Box::new(ast::Expression::Ident("error".to_string())),
-                                        vec![ast::Expression::String("invalid user".to_string())],
+                                        vec![ast::Expression::Primitive(ast::Primitive::String(
+                                            "invalid user".to_string(),
+                                        ))],
                                     ),
                                 )],
                                 else_statements: vec![],
