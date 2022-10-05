@@ -1,6 +1,6 @@
 {
   "name": "@spacetimexyz/lang",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "",
   "types": "./node/index.d.ts",
   "license": "MIT",
