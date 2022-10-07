@@ -2,17 +2,17 @@
   "name": "@spacetimexyz/lang",
   "version": "0.1.5",
   "description": "",
-  "types": "./node/index.d.ts",
+  "main": "./web/index.js",
+  "types": "./web/index.d.ts",
   "license": "MIT",
   "files": [
     "pkg/*",
-    "node/*",
     "web/*"
   ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "clean": "rimraf node/* && rimraf web/*",
-    "build": "yarn clean && TARGET=node webpack build && TARGET=web webpack build",
+    "build": "yarn clean && TARGET=web webpack build",
     "prepare": "yarn build",
     "release": "npx np",
     "fix": "yarn eslint \"./src/**/*.{ts,tsx}\" webpack.config.js --fix"
