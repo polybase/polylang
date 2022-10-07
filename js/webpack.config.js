@@ -3,8 +3,8 @@ const fs = require('fs')
 const nodeExternals = require('webpack-node-externals')
 const WasmPackPlugin = require('@wasm-tool/wasm-pack-plugin')
 
-const config = (target) => ({
-  target,
+module.exports = {
+  target: 'web',
   entry: './src/index.ts',
   experiments: {
     topLevelAwait: true,
@@ -20,7 +20,7 @@ const config = (target) => ({
         loader: 'ts-loader',
         options: {
           compilerOptions: {
-            outDir: path.resolve(__dirname, target),
+            outDir: path.resolve(__dirname, 'dist'),
           },
         },
       },
@@ -79,10 +79,8 @@ const config = (target) => ({
     },
   ],
   output: {
-    path: path.resolve(__dirname, target),
+    path: path.resolve(__dirname, 'dist'),
     filename: 'index.js',
     libraryTarget: 'commonjs2',
   },
-})
-
-module.exports = config(process.env.TARGET)
+}
