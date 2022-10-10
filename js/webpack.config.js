@@ -44,8 +44,7 @@ module.exports = {
             const base64 = "${Buffer.from(wasm).toString('base64')}"
 
             function toUint8Array (s) {
-              if (typeof atob === 'function') return new Uint8Array(atob(s).split('').map(c => c.charCodeAt(0)))
-              return (require('buffer').Buffer).from(s, 'base64')
+              return new Uint8Array(atob(s).split('').map(c => c.charCodeAt(0)))
             }
 
             const wasm = toUint8Array(base64)

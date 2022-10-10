@@ -1,6 +1,6 @@
 {
   "name": "@spacetimexyz/lang",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -36,5 +36,8 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/spacetimehq/spacetime-lang.git"
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
 }
