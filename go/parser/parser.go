@@ -1,9 +1,9 @@
 package parser
 
 /*
-#cgo darwin LDFLAGS: ${SRCDIR}/libspacetime_lang.a
-#cgo linux LDFLAGS: -lspacetime_lang
-#include "./spacetime_lang.h"
+#cgo darwin LDFLAGS: ${SRCDIR}/libpolylang_lang.a
+#cgo linux LDFLAGS: -lpolylang
+#include "./polylang.h"
 */
 import "C"
 import (

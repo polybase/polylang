@@ -1,4 +1,4 @@
-module github.com/spacetimehq/spacetime-lang
+module github.com/polybase/polylang
 
 go 1.19
 

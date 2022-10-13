@@ -1,5 +1,5 @@
 {
-  "name": "@spacetimexyz/lang",
+  "name": "@polybase/polylang",
   "version": "0.2.1",
   "description": "",
   "main": "./dist/index.js",
@@ -35,7 +35,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/spacetimehq/spacetime-lang.git"
+    "url": "git+https://github.com/polybase/polylang.git"
   },
   "engines": {
     "node": ">=16.0.0"

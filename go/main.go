@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/spacetimehq/spacetime-lang/parser"
+	"github.com/polybase/polylang/parser"
 )
 
 type Program struct {
