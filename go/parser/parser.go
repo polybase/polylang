@@ -1,7 +1,7 @@
 package parser
 
 /*
-#cgo darwin LDFLAGS: ${SRCDIR}/libpolylang_lang.a
+#cgo darwin LDFLAGS: ${SRCDIR}/libpolylang.a
 #cgo linux LDFLAGS: -lpolylang
 #include "./polylang.h"
 */
