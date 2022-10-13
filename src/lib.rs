@@ -8,7 +8,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use lalrpop_util::lalrpop_mod;
 
-lalrpop_mod!(pub spacetime);
+lalrpop_mod!(pub polylang);
 
 #[derive(Debug, Serialize)]
 struct Error {
@@ -85,7 +85,7 @@ where
 }
 
 fn parse(input: &str) -> Result<ast::Program, Error> {
-    spacetime::ProgramParser::new()
+    polylang::ProgramParser::new()
         .parse(input)
         .map_err(|e| parse_error_to_error(input, e))
 }
@@ -302,7 +302,7 @@ mod tests {
 
     #[test]
     fn test_collection() {
-        let program = spacetime::ProgramParser::new().parse("collection Test {}");
+        let program = polylang::ProgramParser::new().parse("collection Test {}");
 
         let program = program.unwrap();
         assert_eq!(program.nodes.len(), 1);
@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn test_collection_with_fields() {
-        let program = spacetime::ProgramParser::new().parse(
+        let program = polylang::ProgramParser::new().parse(
             "
             collection Test {
                 name: string;
@@ -343,7 +343,7 @@ mod tests {
 
     #[test]
     fn test_collection_with_asc_desc_fields() {
-        let program = spacetime::ProgramParser::new().parse(
+        let program = polylang::ProgramParser::new().parse(
             "
             collection Test {
                 asc: string;
@@ -373,7 +373,7 @@ mod tests {
 
     #[test]
     fn test_fields_with_decorators() {
-        let program = spacetime::ProgramParser::new().parse(
+        let program = polylang::ProgramParser::new().parse(
             "
             collection Test {
                 name: string @min(5) @readonly;
@@ -426,7 +426,7 @@ mod tests {
 
     #[test]
     fn test_collection_with_functions() {
-        let program = spacetime::ProgramParser::new().parse(
+        let program = polylang::ProgramParser::new().parse(
             "
             collection Test {
                 function get_age() {
@@ -463,7 +463,7 @@ mod tests {
 
     #[test]
     fn test_number() {
-        let number = spacetime::NumberParser::new().parse("42");
+        let number = polylang::NumberParser::new().parse("42");
 
         assert!(number.is_ok());
         assert_eq!(number.unwrap(), 42.0);
@@ -471,7 +471,7 @@ mod tests {
 
     #[test]
     fn test_string() {
-        let string = spacetime::StringParser::new().parse("'hello world'");
+        let string = polylang::StringParser::new().parse("'hello world'");
 
         assert!(string.is_ok());
         assert_eq!(string.unwrap(), "hello world");
@@ -479,7 +479,7 @@ mod tests {
 
     #[test]
     fn test_comparison() {
-        let comparison = spacetime::ExpressionParser::new().parse("1 > 2");
+        let comparison = polylang::ExpressionParser::new().parse("1 > 2");
 
         assert!(matches!(
             comparison.unwrap(),
@@ -490,7 +490,7 @@ mod tests {
 
     #[test]
     fn test_if() {
-        let if_ = spacetime::IfParser::new().parse(
+        let if_ = polylang::IfParser::new().parse(
             "
             if (1 == 1) {
                 return 42;
@@ -510,7 +510,7 @@ mod tests {
 
     #[test]
     fn test_call() {
-        let call = spacetime::ExpressionParser::new().parse("get_age(a, b, c)");
+        let call = polylang::ExpressionParser::new().parse("get_age(a, b, c)");
 
         assert!(matches!(
             call.unwrap(),
@@ -520,7 +520,7 @@ mod tests {
 
     #[test]
     fn test_dot() {
-        let dot = spacetime::ExpressionParser::new().parse("a.b").unwrap();
+        let dot = polylang::ExpressionParser::new().parse("a.b").unwrap();
 
         assert!(matches!(
             dot,
@@ -530,7 +530,7 @@ mod tests {
 
     #[test]
     fn test_assign_sub() {
-        let dot = spacetime::ExpressionParser::new().parse("a -= b").unwrap();
+        let dot = polylang::ExpressionParser::new().parse("a -= b").unwrap();
 
         assert!(matches!(
             dot,
@@ -558,7 +558,7 @@ mod tests {
             }
         ";
 
-        let collection = spacetime::CollectionParser::new().parse(code).unwrap();
+        let collection = polylang::CollectionParser::new().parse(code).unwrap();
         assert_eq!(collection.name, "Account");
         assert_eq!(collection.items.len(), 6);
 
@@ -653,7 +653,7 @@ mod tests {
             }
         ";
 
-        let func = spacetime::FunctionParser::new().parse(func_code).unwrap();
+        let func = polylang::FunctionParser::new().parse(func_code).unwrap();
         let func_ast = serde_json::to_string(&func).unwrap();
 
         let eval_input = generate_js_function(&func_ast).unwrap();
