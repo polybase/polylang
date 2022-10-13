@@ -14,7 +14,7 @@ EOF
 
 ```bash
 cargo build --release
-cp target/release/libpolylang.a go/lang/
+cp target/release/libpolylang.a go/parser/
 
 cd go
 go run .
