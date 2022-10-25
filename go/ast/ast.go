@@ -5,16 +5,16 @@ type Program struct {
 }
 
 type RootNode struct {
-	Collection *Collection
-	Function   *Function
+	Contract *Contract
+	Function *Function
 }
 
-type Collection struct {
-	Name  string           `json:"name"`
-	Items []CollectionItem `json:"items"`
+type Contract struct {
+	Name  string         `json:"name"`
+	Items []ContractItem `json:"items"`
 }
 
-type CollectionItem struct {
+type ContractItem struct {
 	Field    *Field    `json:"Field,omitempty"`
 	Function *Function `json:"Function,omitempty"`
 	Index    *Index    `json:"Index,omitempty"`

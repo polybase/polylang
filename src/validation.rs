@@ -14,14 +14,14 @@ pub(crate) enum Value {
 }
 
 pub(crate) fn validate_set(
-    collection: ast::Collection,
+    contract: ast::Contract,
     data: HashMap<String, Value>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let fields = collection
+    let fields = contract
         .items
         .iter()
         .filter_map(|item| {
-            if let ast::CollectionItem::Field(field) = item {
+            if let ast::ContractItem::Field(field) = item {
                 Some(field)
             } else {
                 None
@@ -62,48 +62,48 @@ pub(crate) fn validate_set(
 
 pub(crate) fn validate_set_decorators(
     program: ast::Program,
-    collection_name: &str,
+    contract_name: &str,
     data: HashMap<&str, Value>,
     previous_data: HashMap<&str, Value>,
     public_key: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let collection = program
+    let contract = program
         .nodes
         .iter()
         .filter_map(|node| {
-            if let ast::RootNode::Collection(collection) = node {
-                Some(collection)
+            if let ast::RootNode::Contract(contract) = node {
+                Some(contract)
             } else {
                 None
             }
         })
-        .find(|collection| collection.name == collection_name)
-        .ok_or(format!("Collection not found: {}", collection_name))?;
+        .find(|contract| contract.name == contract_name)
+        .ok_or(format!("Contract not found: {}", contract_name))?;
 
-    let functions = collection.items.iter().filter_map(|item| {
-        if let ast::CollectionItem::Function(function) = item {
+    let functions = contract.items.iter().filter_map(|item| {
+        if let ast::ContractItem::Function(function) = item {
             Some(&function.name)
         } else {
             None
         }
     });
 
-    let collection_functions = collection.items.iter().filter_map(|item| {
-        if let ast::CollectionItem::Function(function) = item {
+    let contract_functions = contract.items.iter().filter_map(|item| {
+        if let ast::ContractItem::Function(function) = item {
             Some(&function.name)
         } else {
             None
         }
     });
 
-    for function in functions.chain(collection_functions) {
+    for function in functions.chain(contract_functions) {
         if RESERVED_FUNCTIONS.contains(&function.as_str()) {
             return Err(format!("Function name is reserved: {}", function).into());
         }
     }
 
-    let fields = collection.items.iter().filter_map(|item| {
-        if let ast::CollectionItem::Field(field) = item {
+    let fields = contract.items.iter().filter_map(|item| {
+        if let ast::ContractItem::Field(field) = item {
             Some(field)
         } else {
             None
@@ -267,16 +267,16 @@ mod tests {
 
     #[test]
     fn test_validate_set() {
-        let collection = ast::Collection {
+        let contract = ast::Contract {
             name: "users".to_string(),
             items: vec![
-                ast::CollectionItem::Field(ast::Field {
+                ast::ContractItem::Field(ast::Field {
                     name: "name".to_string(),
                     type_: ast::Type::String,
                     required: true,
                     decorators: Vec::new(),
                 }),
-                ast::CollectionItem::Field(ast::Field {
+                ast::ContractItem::Field(ast::Field {
                     name: "age".to_string(),
                     type_: ast::Type::Number,
                     required: false,
@@ -290,21 +290,21 @@ mod tests {
             ("age".to_string(), Value::Number(30.0)),
         ]);
 
-        assert!(validate_set(collection, data).is_ok());
+        assert!(validate_set(contract, data).is_ok());
     }
 
     #[test]
     fn test_validate_set_missing_required_field() {
-        let collection = ast::Collection {
+        let contract = ast::Contract {
             name: "users".to_string(),
             items: vec![
-                ast::CollectionItem::Field(ast::Field {
+                ast::ContractItem::Field(ast::Field {
                     name: "name".to_string(),
                     type_: ast::Type::String,
                     required: true,
                     decorators: Vec::new(),
                 }),
-                ast::CollectionItem::Field(ast::Field {
+                ast::ContractItem::Field(ast::Field {
                     name: "age".to_string(),
                     type_: ast::Type::Number,
                     required: false,
@@ -315,21 +315,21 @@ mod tests {
 
         let data = HashMap::from([("age".to_string(), Value::Number(30.0))]);
 
-        assert!(validate_set(collection, data).is_err());
+        assert!(validate_set(contract, data).is_err());
     }
 
     #[test]
     fn test_validate_set_invalid_type() {
-        let collection = ast::Collection {
+        let contract = ast::Contract {
             name: "users".to_string(),
             items: vec![
-                ast::CollectionItem::Field(ast::Field {
+                ast::ContractItem::Field(ast::Field {
                     name: "name".to_string(),
                     type_: ast::Type::String,
                     required: true,
                     decorators: Vec::new(),
                 }),
-                ast::CollectionItem::Field(ast::Field {
+                ast::ContractItem::Field(ast::Field {
                     name: "age".to_string(),
                     type_: ast::Type::Number,
                     required: false,
@@ -343,21 +343,21 @@ mod tests {
             ("age".to_string(), Value::String("30".to_string())),
         ]);
 
-        assert!(validate_set(collection, data).is_err());
+        assert!(validate_set(contract, data).is_err());
     }
 
     #[test]
     fn test_validate_set_extra_field() {
-        let collection = ast::Collection {
+        let contract = ast::Contract {
             name: "users".to_string(),
             items: vec![
-                ast::CollectionItem::Field(ast::Field {
+                ast::ContractItem::Field(ast::Field {
                     name: "name".to_string(),
                     type_: ast::Type::String,
                     required: true,
                     decorators: Vec::new(),
                 }),
-                ast::CollectionItem::Field(ast::Field {
+                ast::ContractItem::Field(ast::Field {
                     name: "age".to_string(),
                     type_: ast::Type::Number,
                     required: false,
@@ -372,21 +372,21 @@ mod tests {
             ("extra".to_string(), Value::String("extra".to_string())),
         ]);
 
-        assert!(validate_set(collection, data).is_err());
+        assert!(validate_set(contract, data).is_err());
     }
 
     #[test]
     fn test_validate_set_decorators() {
-        let collection = || ast::Collection {
+        let contract = || ast::Contract {
             name: "users".to_string(),
             items: vec![
-                ast::CollectionItem::Field(ast::Field {
+                ast::ContractItem::Field(ast::Field {
                     name: "name".to_string(),
                     type_: ast::Type::String,
                     required: true,
                     decorators: Vec::new(),
                 }),
-                ast::CollectionItem::Field(ast::Field {
+                ast::ContractItem::Field(ast::Field {
                     name: "age".to_string(),
                     type_: ast::Type::Number,
                     required: false,
@@ -395,7 +395,7 @@ mod tests {
                         arguments: vec![ast::Primitive::Number(18.0)],
                     }],
                 }),
-                ast::CollectionItem::Field(ast::Field {
+                ast::ContractItem::Field(ast::Field {
                     name: "$pk".to_string(),
                     type_: ast::Type::String,
                     required: true,
@@ -409,7 +409,7 @@ mod tests {
 
         validate_set_decorators(
             ast::Program {
-                nodes: vec![ast::RootNode::Collection(collection())],
+                nodes: vec![ast::RootNode::Contract(contract())],
             },
             "users",
             HashMap::from([
@@ -424,7 +424,7 @@ mod tests {
 
         let err = validate_set_decorators(
             ast::Program {
-                nodes: vec![ast::RootNode::Collection(collection())],
+                nodes: vec![ast::RootNode::Contract(contract())],
             },
             "users",
             HashMap::from([
@@ -445,7 +445,7 @@ mod tests {
         // $pk doesn't match pk from auth
         let err = validate_set_decorators(
             ast::Program {
-                nodes: vec![ast::RootNode::Collection(collection())],
+                nodes: vec![ast::RootNode::Contract(contract())],
             },
             "users",
             HashMap::from([

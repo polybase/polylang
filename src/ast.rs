@@ -7,18 +7,18 @@ pub struct Program {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum RootNode {
-    Collection(Collection),
+    Contract(Contract),
     Function(Function),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Collection {
+pub struct Contract {
     pub name: String,
-    pub items: Vec<CollectionItem>,
+    pub items: Vec<ContractItem>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum CollectionItem {
+pub enum ContractItem {
     Field(Field),
     Function(Function),
     Index(Index),

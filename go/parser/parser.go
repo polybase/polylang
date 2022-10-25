@@ -49,13 +49,13 @@ func Parse(input string) (json.RawMessage, error) {
 	return parseResult[json.RawMessage](C.GoString(output))
 }
 
-func Interpret(program, collection, funcName, args string) (json.RawMessage, error) {
-	output := C.interpret(C.CString(program), C.CString(collection), C.CString(funcName), C.CString(args))
+func Interpret(program, contract, funcName, args string) (json.RawMessage, error) {
+	output := C.interpret(C.CString(program), C.CString(contract), C.CString(funcName), C.CString(args))
 	return parseResult[json.RawMessage](C.GoString(output))
 }
 
-func ValidateSet(collectionAST, data string) error {
-	output := C.validate_set(C.CString(collectionAST), C.CString(data))
+func ValidateSet(contractAST, data string) error {
+	output := C.validate_set(C.CString(contractAST), C.CString(data))
 	if _, err := parseResult[json.RawMessage](C.GoString(output)); err != nil {
 		return err
 	}
@@ -63,8 +63,8 @@ func ValidateSet(collectionAST, data string) error {
 	return nil
 }
 
-func ValidateSetDecorators(programAST, collectionName, data, previousData, publicKey string) error {
-	output := C.validate_set_decorators(C.CString(programAST), C.CString(collectionName), C.CString(data), C.CString(previousData), C.CString(publicKey))
+func ValidateSetDecorators(programAST, contractName, data, previousData, publicKey string) error {
+	output := C.validate_set_decorators(C.CString(programAST), C.CString(contractName), C.CString(data), C.CString(previousData), C.CString(publicKey))
 	if _, err := parseResult[json.RawMessage](C.GoString(output)); err != nil {
 		return err
 	}

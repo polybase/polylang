@@ -4,7 +4,7 @@ use crate::ast;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-pub struct Collection {
+pub struct Contract {
     name: String,
     fields: HashMap<String, ast::Type>,
     functions: HashMap<String, ast::Function>,
@@ -26,7 +26,7 @@ enum Value {
 }
 
 pub struct Interpreter {
-    collections: HashMap<String, Collection>,
+    contracts: HashMap<String, Contract>,
     variables: HashMap<String, Rc<RefCell<Object>>>,
     finished: bool,
     result: Rc<RefCell<Object>>,
@@ -35,33 +35,33 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn new() -> Self {
         Self {
-            collections: HashMap::new(),
+            contracts: HashMap::new(),
             variables: HashMap::new(),
             finished: false,
             result: Rc::new(RefCell::new(Object { value: Value::None })),
         }
     }
 
-    pub fn load(&mut self, collection: ast::Collection) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn load(&mut self, contract: ast::Contract) -> Result<(), Box<dyn std::error::Error>> {
         let mut fields = HashMap::new();
         let mut functions = HashMap::new();
 
-        for item in collection.items {
+        for item in contract.items {
             match item {
-                ast::CollectionItem::Field(field) => {
+                ast::ContractItem::Field(field) => {
                     fields.insert(field.name, field.type_);
                 }
-                ast::CollectionItem::Function(function) => {
+                ast::ContractItem::Function(function) => {
                     functions.insert(function.name.clone(), function);
                 }
-                ast::CollectionItem::Index(_) => {}
+                ast::ContractItem::Index(_) => {}
             }
         }
 
-        self.collections.insert(
-            collection.name.clone(),
-            Collection {
-                name: collection.name,
+        self.contracts.insert(
+            contract.name.clone(),
+            Contract {
+                name: contract.name,
                 fields,
                 functions,
             },
@@ -72,17 +72,17 @@ impl Interpreter {
 
     pub fn call(
         mut self,
-        collection_name: &str,
+        contract_name: &str,
         function_name: &str,
         variables: HashMap<String, Rc<RefCell<Object>>>,
     ) -> Result<(Object, HashMap<String, Rc<RefCell<Object>>>), Box<dyn std::error::Error>> {
-        let collection = self.collections.remove(collection_name);
-        if let None = collection {
-            return Err(format!("Collection {} not found", collection_name).into());
+        let contract = self.contracts.remove(contract_name);
+        if let None = contract {
+            return Err(format!("Contract {} not found", contract_name).into());
         }
-        let mut collection = collection.unwrap();
+        let mut contract = contract.unwrap();
 
-        let function = collection.functions.remove(function_name);
+        let function = contract.functions.remove(function_name);
         if let None = function {
             return Err(format!("Function {} not found", function_name).into());
         }
@@ -291,9 +291,9 @@ mod tests {
     fn test_call_function() {
         let mut interpreter = Interpreter::new();
         interpreter
-            .load(ast::Collection {
+            .load(ast::Contract {
                 name: "Test".to_string(),
-                items: vec![ast::CollectionItem::Function(ast::Function {
+                items: vec![ast::ContractItem::Function(ast::Function {
                     name: "get_age".to_string(),
                     parameters: vec![],
                     statements: vec![ast::Statement::If(ast::If {
@@ -321,9 +321,9 @@ mod tests {
     fn test_call_function_with_parameters() {
         let mut interpreter = Interpreter::new();
         interpreter
-            .load(ast::Collection {
+            .load(ast::Contract {
                 name: "Test".to_string(),
-                items: vec![ast::CollectionItem::Function(ast::Function {
+                items: vec![ast::ContractItem::Function(ast::Function {
                     name: "get_age".to_string(),
                     parameters: vec![ast::Parameter {
                         name: "age".to_string(),
@@ -357,9 +357,9 @@ mod tests {
     fn test_throw() {
         let mut interpreter = Interpreter::new();
         interpreter
-            .load(ast::Collection {
+            .load(ast::Contract {
                 name: "Test".to_string(),
-                items: vec![ast::CollectionItem::Function(ast::Function {
+                items: vec![ast::ContractItem::Function(ast::Function {
                     name: "get_age".to_string(),
                     parameters: vec![],
                     statements: vec![ast::Statement::Throw(ast::Expression::Call(
@@ -384,7 +384,7 @@ mod tests {
     #[test]
     fn test_transfer() {
         /*
-            collection Account {
+            contract Account {
                name: string;
                age: number!;
                balance: number;
@@ -402,34 +402,34 @@ mod tests {
         */
         let mut interpreter = Interpreter::new();
         interpreter
-            .load(ast::Collection {
+            .load(ast::Contract {
                 name: "Account".to_string(),
                 items: vec![
-                    ast::CollectionItem::Field(ast::Field {
+                    ast::ContractItem::Field(ast::Field {
                         name: "name".to_string(),
                         type_: ast::Type::String,
                         required: false,
                         decorators: Vec::new(),
                     }),
-                    ast::CollectionItem::Field(ast::Field {
+                    ast::ContractItem::Field(ast::Field {
                         name: "age".to_string(),
                         type_: ast::Type::Number,
                         required: true,
                         decorators: Vec::new(),
                     }),
-                    ast::CollectionItem::Field(ast::Field {
+                    ast::ContractItem::Field(ast::Field {
                         name: "balance".to_string(),
                         type_: ast::Type::Number,
                         required: false,
                         decorators: Vec::new(),
                     }),
-                    ast::CollectionItem::Field(ast::Field {
+                    ast::ContractItem::Field(ast::Field {
                         name: "publicKey".to_string(),
                         type_: ast::Type::String,
                         required: false,
                         decorators: Vec::new(),
                     }),
-                    ast::CollectionItem::Index(ast::Index {
+                    ast::ContractItem::Index(ast::Index {
                         unique: false,
                         fields: vec![
                             ast::IndexField {
@@ -442,7 +442,7 @@ mod tests {
                             },
                         ],
                     }),
-                    ast::CollectionItem::Function(ast::Function {
+                    ast::ContractItem::Function(ast::Function {
                         name: "transfer".to_string(),
                         parameters: vec![
                             ast::Parameter {

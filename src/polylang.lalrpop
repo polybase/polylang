@@ -256,21 +256,25 @@ pub IndexFields: Vec<IndexField> = {
     => vec![],
 };
 
-pub CollectionItem: CollectionItem = {
-    <f:Field> ";" => CollectionItem::Field(f),
-    <i:Index> ";" => CollectionItem::Index(i),
-    <f:Function> => CollectionItem::Function(f),
+pub ContractItem: ContractItem = {
+    <f:Field> ";" => ContractItem::Field(f),
+    <i:Index> ";" => ContractItem::Index(i),
+    <f:Function> => ContractItem::Function(f),
 };
 
-pub Collection: Collection = {
-    "collection" <name:Ident> "{" <items:CollectionItem*> "}" => Collection {
+pub Contract: Contract = {
+    "contract" <name:Ident> "{" <items:ContractItem*> "}" => Contract {
+        name: name,
+        items: items,
+    },
+    "collection" <name:Ident> "{" <items:ContractItem*> "}" => Contract {
         name: name,
         items: items,
     },
 };
 
 pub RootNode: RootNode = {
-    <c:Collection> => RootNode::Collection(c),
+    <c:Contract> => RootNode::Contract(c),
     <f:Function> => RootNode::Function(f),
 };
 
