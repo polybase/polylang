@@ -448,10 +448,10 @@ mod tests {
             
                 @index([field, asc], field2);
             
-                function transfer (a: record, b: record, amount: number) {
-                    if (a.publicKey != $auth.publicKey) throw error('invalid user');
+                transfer (b: record, amount: number) {
+                    if (this.publicKey != $auth.publicKey) throw error('invalid user');
                     
-                    a.balance -= amount;
+                    this.balance -= amount;
                     b.balance += amount;
                 }
             }
@@ -508,7 +508,7 @@ mod tests {
                 else_statements,
             }) if *condition == ast::Expression::NotEqual(
                 Box::new(ast::Expression::Dot(
-                    Box::new(ast::Expression::Ident("a".to_owned())),
+                    Box::new(ast::Expression::Ident("this".to_owned())),
                     "publicKey".to_owned(),
                 )),
                 Box::new(ast::Expression::Dot(
@@ -524,7 +524,7 @@ mod tests {
                 left,
                 right,
             )) if **left == ast::Expression::Dot(
-                Box::new(ast::Expression::Ident("a".to_owned())),
+                Box::new(ast::Expression::Ident("this".to_owned())),
                 "balance".to_owned(),
             ) && **right == ast::Expression::Ident("amount".to_owned())
         ));

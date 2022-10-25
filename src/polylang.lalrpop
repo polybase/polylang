@@ -189,8 +189,23 @@ pub Parameter: Parameter = {
     },
 };
 
+pub RootFunction: Function = {
+    "function" <i: Ident> "(" <pl:ParameterList> ")" "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+        name: i,
+        parameters: pl,
+        statements: s,
+        statements_code: input[l..r].to_string(),
+    }
+};
+
 pub Function: Function = {
     "function" <i: Ident> "(" <pl:ParameterList> ")" "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+        name: i,
+        parameters: pl,
+        statements: s,
+        statements_code: input[l..r].to_string(),
+    },
+    <i: Ident> "(" <pl:ParameterList> ")" "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
         parameters: pl,
         statements: s,
@@ -268,7 +283,7 @@ pub Contract: Contract = {
 
 pub RootNode: RootNode = {
     <c:Contract> => RootNode::Contract(c),
-    <f:Function> => RootNode::Function(f),
+    <f:RootFunction> => RootNode::Function(f),
 };
 
 pub Program: Program = {
