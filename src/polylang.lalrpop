@@ -193,16 +193,16 @@ pub Function: Function = {
 };
 
 pub Field: Field = {
-    <name:Ident> ":" <type_:Type> "!" <decorators:FieldDecorator*> => Field{
+    <name:Ident> "?" ":" <type_:Type> <decorators:FieldDecorator*> => Field{
         name,
         type_,
-        required: true,
+        required: false,
         decorators,
     },
     <name:Ident> ":" <type_:Type> <decorators:FieldDecorator*> => Field{
         name,
         type_,
-        required: false,
+        required: true,
         decorators,
     },
 };

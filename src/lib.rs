@@ -346,10 +346,10 @@ mod tests {
         };
 
         assert!(
-            matches!(&contract.items[0], ast::ContractItem::Field(ast::Field { name, type_, required: false, decorators }) if name == "name" && *type_ == ast::Type::String && decorators.is_empty())
+            matches!(&contract.items[0], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "name" && *type_ == ast::Type::String && decorators.is_empty())
         );
         assert!(
-            matches!(&contract.items[1], ast::ContractItem::Field(ast::Field { name, type_, required: false, decorators }) if name == "age" && *type_ == ast::Type::Number && decorators.is_empty())
+            matches!(&contract.items[1], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "age" && *type_ == ast::Type::Number && decorators.is_empty())
         );
     }
 
@@ -376,10 +376,10 @@ mod tests {
         };
 
         assert!(
-            matches!(&contract.items[0], ast::ContractItem::Field(ast::Field { name, type_, required: false, decorators }) if name == "asc" && *type_ == ast::Type::String && decorators.is_empty()),
+            matches!(&contract.items[0], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "asc" && *type_ == ast::Type::String && decorators.is_empty()),
         );
         assert!(
-            matches!(&contract.items[1], ast::ContractItem::Field(ast::Field { name, type_, required: false, decorators }) if name == "desc" && *type_ == ast::Type::String && decorators.is_empty()),
+            matches!(&contract.items[1], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "desc" && *type_ == ast::Type::String && decorators.is_empty()),
         );
     }
 
@@ -409,7 +409,7 @@ mod tests {
 
         assert_eq!(name_field.name, "name");
         assert_eq!(name_field.type_, ast::Type::String);
-        assert_eq!(name_field.required, false);
+        assert_eq!(name_field.required, true);
         assert_eq!(name_field.decorators.len(), 2);
         assert_eq!(name_field.decorators[0].name, "min");
         assert_eq!(
@@ -427,7 +427,7 @@ mod tests {
 
         assert_eq!(age_field.name, "age");
         assert_eq!(age_field.type_, ast::Type::Number);
-        assert_eq!(age_field.required, false);
+        assert_eq!(age_field.required, true);
         assert_eq!(age_field.decorators.len(), 1);
         assert_eq!(age_field.decorators[0].name, "min");
         assert_eq!(
@@ -555,7 +555,7 @@ mod tests {
         let code = "
             contract Account {
                 name: string;
-                age: number!;
+                age?: number;
                 balance: number;
                 publicKey: string;
             
@@ -576,25 +576,25 @@ mod tests {
 
         assert!(matches!(
             &contract.items[0],
-            ast::ContractItem::Field(ast::Field { name, type_, required: false, decorators })
+            ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators })
             if name == "name" && *type_ == ast::Type::String && decorators.is_empty()
         ));
 
         assert!(matches!(
             &contract.items[1],
-            ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators })
+            ast::ContractItem::Field(ast::Field { name, type_, required: false, decorators })
             if name == "age" && *type_ == ast::Type::Number && decorators.is_empty()
         ));
 
         assert!(matches!(
             &contract.items[2],
-            ast::ContractItem::Field(ast::Field { name, type_, required: false, decorators })
+            ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators })
             if name == "balance" && *type_ == ast::Type::Number && decorators.is_empty()
         ));
 
         assert!(matches!(
             &contract.items[3],
-            ast::ContractItem::Field(ast::Field { name, type_, required: false, decorators })
+            ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators })
             if name == "publicKey" && *type_ == ast::Type::String && decorators.is_empty()
         ));
 
