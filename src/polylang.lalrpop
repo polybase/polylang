@@ -180,6 +180,12 @@ pub Parameter: Parameter = {
     <name:Ident> ":" <type_:ParameterType> => Parameter {
         name,
         type_,
+        required: true,
+    },
+    <name:Ident> "?" ":" <type_:ParameterType> => Parameter {
+        name,
+        type_,
+        required: false,
     },
 };
 

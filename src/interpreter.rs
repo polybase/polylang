@@ -328,6 +328,7 @@ mod tests {
                     parameters: vec![ast::Parameter {
                         name: "age".to_string(),
                         type_: ast::ParameterType::Number,
+                        required: true,
                     }],
                     statements: vec![ast::Statement::Return(ast::Expression::Ident(
                         "age".to_string(),
@@ -448,14 +449,17 @@ mod tests {
                             ast::Parameter {
                                 name: "a".to_string(),
                                 type_: ast::ParameterType::Record,
+                                required: true,
                             },
                             ast::Parameter {
                                 name: "b".to_string(),
                                 type_: ast::ParameterType::Record,
+                                required: true,
                             },
                             ast::Parameter {
                                 name: "amount".to_string(),
                                 type_: ast::ParameterType::Number,
+                                required: true,
                             },
                         ],
                         statements: vec![

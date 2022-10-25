@@ -441,7 +441,7 @@ mod tests {
         let program = polylang::ProgramParser::new().parse(
             "
             contract Test {
-                function get_age() {
+                function get_age(a: number, b?: string) {
                     return 42;
                 }
             }
@@ -460,7 +460,7 @@ mod tests {
         };
 
         assert!(
-            matches!(&contract.items[0], ast::ContractItem::Function(ast::Function { name, parameters, statements, statements_code }) if name == "get_age" && parameters.len() == 0 && statements.len() == 1 && statements_code == "return 42;")
+            matches!(&contract.items[0], ast::ContractItem::Function(ast::Function { name, parameters, statements, statements_code }) if name == "get_age" && parameters.len() == 2 && statements.len() == 1 && statements_code == "return 42;")
         );
 
         let function = match &contract.items[0] {
@@ -470,6 +470,12 @@ mod tests {
 
         assert!(
             matches!(function.statements[0], ast::Statement::Return(ast::Expression::Primitive(ast::Primitive::Number(number))) if number == 42.0)
+        );
+        assert!(
+            matches!(&function.parameters[0], ast::Parameter{ name, type_, required } if *required == true && name == "a" && *type_ == ast::ParameterType::Number)
+        );
+        assert!(
+            matches!(&function.parameters[1], ast::Parameter{ name, type_, required } if *required == false && name == "b" && *type_ == ast::ParameterType::String)
         );
     }
 

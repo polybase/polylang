@@ -55,6 +55,7 @@ pub enum ParameterType {
 pub struct Parameter {
     pub name: String,
     pub type_: ParameterType,
+    pub required: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

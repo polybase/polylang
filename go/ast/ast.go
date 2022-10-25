@@ -55,8 +55,9 @@ const (
 )
 
 type Parameter struct {
-	Name string       `json:"name"`
-	Type FunctionType `json:"type_"`
+	Name     string       `json:"name"`
+	Type     FunctionType `json:"type_"`
+	Required bool         `json:"required"`
 }
 
 type Index struct {
