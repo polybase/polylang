@@ -101,37 +101,3 @@ pub extern "C" fn generate_js_function(func_ast_json: *const c_char) -> *mut c_c
     output.into_raw()
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-#[no_mangle]
-pub extern "C" fn validate_set_decorators(
-    program_ast_json: *const c_char,
-    contract_name: *const c_char,
-    data_json: *const c_char,
-    previous_data_json: *const c_char,
-    public_key: *const c_char,
-) -> *mut c_char {
-    let program_ast_json = unsafe { std::ffi::CStr::from_ptr(program_ast_json) };
-    let program_ast_json = program_ast_json.to_str().unwrap();
-
-    let contract_name = unsafe { std::ffi::CStr::from_ptr(contract_name) };
-    let contract_name = contract_name.to_str().unwrap();
-
-    let data_json = unsafe { std::ffi::CStr::from_ptr(data_json) };
-    let data_json = data_json.to_str().unwrap();
-
-    let previous_data_json = unsafe { std::ffi::CStr::from_ptr(previous_data_json) };
-    let previous_data_json = previous_data_json.to_str().unwrap();
-
-    let public_key = unsafe { std::ffi::CStr::from_ptr(public_key) };
-    let public_key = public_key.to_str().unwrap();
-
-    let output = crate::validate_set_decorators_out_json(
-        program_ast_json,
-        contract_name,
-        data_json,
-        previous_data_json,
-        public_key,
-    );
-    let output = std::ffi::CString::new(output).unwrap();
-    output.into_raw()
-}

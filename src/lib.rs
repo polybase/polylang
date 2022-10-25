@@ -177,73 +177,6 @@ fn validate_set_out_json(contract_ast_json: &str, data_json: &str) -> String {
     serde_json::to_string(&validate_set(contract_ast_json, data_json)).unwrap()
 }
 
-fn validate_set_decorators(
-    program_ast_json: &str,
-    contract_name: &str,
-    data_json: &str,
-    previous_data_json: &str,
-    public_key: &str,
-) -> Result<(), Error> {
-    let program_ast: ast::Program = match serde_json::from_str(program_ast_json) {
-        Ok(ast) => ast,
-        Err(err) => {
-            return Err(Error {
-                message: err.to_string(),
-            })
-        }
-    };
-
-    let data: HashMap<&str, validation::Value> = match serde_json::from_str(data_json) {
-        Ok(data) => data,
-        Err(err) => {
-            return Err(Error {
-                message: err.to_string(),
-            })
-        }
-    };
-
-    let previous_data: HashMap<&str, validation::Value> =
-        match serde_json::from_str(previous_data_json) {
-            Ok(data) => data,
-            Err(err) => {
-                return Err(Error {
-                    message: err.to_string(),
-                })
-            }
-        };
-
-    validation::validate_set_decorators(
-        program_ast,
-        contract_name,
-        data,
-        previous_data,
-        if public_key == "" {
-            None
-        } else {
-            Some(public_key)
-        },
-    )
-    .map_err(|e| Error {
-        message: e.to_string(),
-    })
-}
-
-fn validate_set_decorators_out_json(
-    program_ast_json: &str,
-    contract_name: &str,
-    data_json: &str,
-    previous_data_json: &str,
-    public_key: &str,
-) -> String {
-    serde_json::to_string(&validate_set_decorators(
-        program_ast_json,
-        contract_name,
-        data_json,
-        previous_data_json,
-        public_key,
-    ))
-    .unwrap()
-}
 
 #[derive(Debug, Serialize, PartialEq)]
 struct JSFunc {
@@ -346,10 +279,10 @@ mod tests {
         };
 
         assert!(
-            matches!(&contract.items[0], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "name" && *type_ == ast::Type::String && decorators.is_empty())
+            matches!(&contract.items[0], ast::ContractItem::Field(ast::Field { name, type_, required: true }) if name == "name" && *type_ == ast::Type::String)
         );
         assert!(
-            matches!(&contract.items[1], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "age" && *type_ == ast::Type::Number && decorators.is_empty())
+            matches!(&contract.items[1], ast::ContractItem::Field(ast::Field { name, type_, required: true }) if name == "age" && *type_ == ast::Type::Number)
         );
     }
 
@@ -376,65 +309,13 @@ mod tests {
         };
 
         assert!(
-            matches!(&contract.items[0], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "asc" && *type_ == ast::Type::String && decorators.is_empty()),
+            matches!(&contract.items[0], ast::ContractItem::Field(ast::Field { name, type_, required: true }) if name == "asc" && *type_ == ast::Type::String),
         );
         assert!(
-            matches!(&contract.items[1], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "desc" && *type_ == ast::Type::String && decorators.is_empty()),
+            matches!(&contract.items[1], ast::ContractItem::Field(ast::Field { name, type_, required: true }) if name == "desc" && *type_ == ast::Type::String),
         );
     }
 
-    #[test]
-    fn test_fields_with_decorators() {
-        let program = polylang::ProgramParser::new().parse(
-            "
-            contract Test {
-                name: string @min(5) @readonly;
-                age: number @min(18);
-            }
-            ",
-        );
-
-        let program = program.unwrap();
-        assert_eq!(program.nodes.len(), 1);
-
-        let contract = match &program.nodes[0] {
-            ast::RootNode::Contract(contract) => contract,
-            _ => panic!("Expected contract"),
-        };
-
-        let name_field = match &contract.items[0] {
-            ast::ContractItem::Field(field) => field,
-            _ => panic!("Expected field"),
-        };
-
-        assert_eq!(name_field.name, "name");
-        assert_eq!(name_field.type_, ast::Type::String);
-        assert_eq!(name_field.required, true);
-        assert_eq!(name_field.decorators.len(), 2);
-        assert_eq!(name_field.decorators[0].name, "min");
-        assert_eq!(
-            name_field.decorators[0].arguments,
-            vec![ast::Primitive::Number(5.0)]
-        );
-
-        assert_eq!(name_field.decorators[1].name, "readonly");
-        assert_eq!(name_field.decorators[1].arguments, vec![]);
-
-        let age_field = match &contract.items[1] {
-            ast::ContractItem::Field(field) => field,
-            _ => panic!("Expected field"),
-        };
-
-        assert_eq!(age_field.name, "age");
-        assert_eq!(age_field.type_, ast::Type::Number);
-        assert_eq!(age_field.required, true);
-        assert_eq!(age_field.decorators.len(), 1);
-        assert_eq!(age_field.decorators[0].name, "min");
-        assert_eq!(
-            age_field.decorators[0].arguments,
-            vec![ast::Primitive::Number(18.0)]
-        );
-    }
 
     #[test]
     fn test_contract_with_functions() {
@@ -582,26 +463,26 @@ mod tests {
 
         assert!(matches!(
             &contract.items[0],
-            ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators })
-            if name == "name" && *type_ == ast::Type::String && decorators.is_empty()
+            ast::ContractItem::Field(ast::Field { name, type_, required: true })
+            if name == "name" && *type_ == ast::Type::String
         ));
 
         assert!(matches!(
             &contract.items[1],
-            ast::ContractItem::Field(ast::Field { name, type_, required: false, decorators })
-            if name == "age" && *type_ == ast::Type::Number && decorators.is_empty()
+            ast::ContractItem::Field(ast::Field { name, type_, required: false })
+            if name == "age" && *type_ == ast::Type::Number
         ));
 
         assert!(matches!(
             &contract.items[2],
-            ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators })
-            if name == "balance" && *type_ == ast::Type::Number && decorators.is_empty()
+            ast::ContractItem::Field(ast::Field { name, type_, required: true })
+            if name == "balance" && *type_ == ast::Type::Number
         ));
 
         assert!(matches!(
             &contract.items[3],
-            ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators })
-            if name == "publicKey" && *type_ == ast::Type::String && decorators.is_empty()
+            ast::ContractItem::Field(ast::Field { name, type_, required: true })
+            if name == "publicKey" && *type_ == ast::Type::String
         ));
 
         assert!(matches!(

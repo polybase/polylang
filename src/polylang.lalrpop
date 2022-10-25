@@ -199,28 +199,15 @@ pub Function: Function = {
 };
 
 pub Field: Field = {
-    <name:Ident> "?" ":" <type_:Type> <decorators:FieldDecorator*> => Field{
+    <name:Ident> "?" ":" <type_:Type> => Field{
         name,
         type_,
         required: false,
-        decorators,
     },
-    <name:Ident> ":" <type_:Type> <decorators:FieldDecorator*> => Field{
+    <name:Ident> ":" <type_:Type> => Field{
         name,
         type_,
         required: true,
-        decorators,
-    },
-};
-
-pub FieldDecorator: FieldDecorator = {
-    "@" <name:Ident> "(" <args:PrimitiveArgumentList> ")" => FieldDecorator {
-        name,
-        arguments: args,
-    },
-    "@" <name:Ident> => FieldDecorator {
-        name,
-        arguments: vec![],
     },
 };
 

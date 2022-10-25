@@ -410,25 +410,21 @@ mod tests {
                         name: "name".to_string(),
                         type_: ast::Type::String,
                         required: false,
-                        decorators: Vec::new(),
                     }),
                     ast::ContractItem::Field(ast::Field {
                         name: "age".to_string(),
                         type_: ast::Type::Number,
                         required: true,
-                        decorators: Vec::new(),
                     }),
                     ast::ContractItem::Field(ast::Field {
                         name: "balance".to_string(),
                         type_: ast::Type::Number,
                         required: false,
-                        decorators: Vec::new(),
                     }),
                     ast::ContractItem::Field(ast::Field {
                         name: "publicKey".to_string(),
                         type_: ast::Type::String,
                         required: false,
-                        decorators: Vec::new(),
                     }),
                     ast::ContractItem::Index(ast::Index {
                         unique: false,

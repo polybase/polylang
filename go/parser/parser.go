@@ -63,15 +63,6 @@ func ValidateSet(contractAST, data string) error {
 	return nil
 }
 
-func ValidateSetDecorators(programAST, contractName, data, previousData, publicKey string) error {
-	output := C.validate_set_decorators(C.CString(programAST), C.CString(contractName), C.CString(data), C.CString(previousData), C.CString(publicKey))
-	if _, err := parseResult[json.RawMessage](C.GoString(output)); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func GenerateJSFunction(funcAST string) (EvalInput, error) {
 	output := C.generate_js_function(C.CString(funcAST))
 	return parseResult[EvalInput](C.GoString(output))

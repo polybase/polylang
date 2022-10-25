@@ -29,7 +29,6 @@ pub struct Field {
     pub name: String,
     pub type_: Type,
     pub required: bool,
-    pub decorators: Vec<FieldDecorator>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

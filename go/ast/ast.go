@@ -21,10 +21,9 @@ type ContractItem struct {
 }
 
 type Field struct {
-	Name       string           `json:"name"`
-	Type       Type             `json:"type_"`
-	Required   bool             `json:"required"`
-	Decorators []FieldDecorator `json:"decorators"`
+	Name     string `json:"name"`
+	Type     Type   `json:"type_"`
+	Required bool   `json:"required"`
 }
 
 type Type string
