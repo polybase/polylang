@@ -1,5 +1,6 @@
 mod ast;
 mod bindings;
+mod compiler;
 mod interpreter;
 mod validation;
 
@@ -254,7 +255,6 @@ mod tests {
             matches!(&program.nodes[0], ast::RootNode::Contract(ast::Contract { name, items }) if name == "Test" && items.len() == 0)
         );
     }
-
 
     #[test]
     fn test_contract_with_fields() {
