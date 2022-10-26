@@ -63,7 +63,7 @@ func ValidateSet(contractAST, data string) error {
 	return nil
 }
 
-func GenerateJSFunction(funcAST string) (EvalInput, error) {
-	output := C.generate_js_function(C.CString(funcAST))
+func GenerateJSContract(contractAST string) (EvalInput, error) {
+	output := C.generate_js_contract(C.CString(contractAST))
 	return parseResult[EvalInput](C.GoString(output))
 }
