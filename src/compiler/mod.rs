@@ -1,10 +1,13 @@
 mod encoder;
+mod uint32;
+mod uint64;
 
 use crate::ast::{self, Expression, Statement};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum PrimitiveType {
-    U32,
+    UInt32,
+    UInt64,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -15,13 +18,14 @@ enum Type {
 impl Type {
     fn miden_width(&self) -> u32 {
         match self {
-            Type::PrimitiveType(PrimitiveType::U32) => 1,
+            Type::PrimitiveType(PrimitiveType::UInt32) => uint32::WIDTH,
+            Type::PrimitiveType(PrimitiveType::UInt64) => uint64::WIDTH,
         }
     }
 }
 
 #[derive(Debug, Clone)]
-struct Symbol {
+pub(crate) struct Symbol {
     type_: Type,
     memory_addr: u32,
 }
@@ -55,6 +59,7 @@ impl Scope {
     }
 }
 
+#[derive(Copy, Clone)]
 enum ValueSource {
     Immediate(u32),
     Memory(u32),
@@ -80,7 +85,7 @@ struct Memory {
 impl Memory {
     fn new() -> Self {
         Memory {
-            static_alloc_ptr: 0,
+            static_alloc_ptr: 1,
         }
     }
 
@@ -125,7 +130,7 @@ impl Memory {
     }
 }
 
-struct Compiler<'ast, 'b> {
+pub(crate) struct Compiler<'ast, 'b> {
     instructions: &'b mut Vec<encoder::Instruction<'ast>>,
     memory: &'b mut Memory,
 }
@@ -141,49 +146,13 @@ impl<'ast, 'b> Compiler<'ast, 'b> {
 
 fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope) -> Symbol {
     match expr {
-        Expression::Ident(id) => {
-            let symbol = scope.find_symbol(id).unwrap();
-            symbol.clone()
-        }
-        Expression::Primitive(ast::Primitive::Number(n)) => {
-            let symbol = compiler
-                .memory
-                .allocate_symbol(Type::PrimitiveType(PrimitiveType::U32));
-            compiler.memory.write(
-                &mut compiler.instructions,
-                symbol.memory_addr,
-                &[ValueSource::Immediate(*n as u32)],
-            );
-            symbol
-        }
+        Expression::Ident(id) => scope.find_symbol(id).unwrap().clone(),
+        Expression::Primitive(ast::Primitive::Number(n)) => uint32::new(compiler, *n as u32),
         Expression::Add(a, b) => {
             let a = compile_expression(a, compiler, scope);
-            compiler.memory.read(
-                &mut compiler.instructions,
-                a.memory_addr,
-                a.type_.miden_width(),
-            );
-
             let b = compile_expression(b, compiler, scope);
-            compiler.memory.read(
-                &mut compiler.instructions,
-                b.memory_addr,
-                b.type_.miden_width(),
-            );
 
-            let result = compiler
-                .memory
-                .allocate_symbol(Type::PrimitiveType(PrimitiveType::U32));
-            compiler
-                .instructions
-                .push(encoder::Instruction::U32CheckedAdd);
-            compiler.memory.write(
-                &mut compiler.instructions,
-                result.memory_addr,
-                &[ValueSource::Stack],
-            );
-
-            result
+            compile_add(compiler, &a, &b)
         }
         e => unimplemented!("{:?}", e),
     }
@@ -203,14 +172,10 @@ fn compile_statement(
                 symbol.memory_addr,
                 symbol.type_.miden_width(),
             );
-            let mut values = vec![];
-            for _ in 0..symbol.type_.miden_width() {
-                values.push(ValueSource::Stack);
-            }
             compiler.memory.write(
                 &mut compiler.instructions,
                 return_result.memory_addr,
-                &values,
+                &vec![ValueSource::Stack; symbol.type_.miden_width() as usize],
             );
             compiler.instructions.push(encoder::Instruction::Abstract(
                 encoder::AbstractInstruction::Return,
@@ -227,7 +192,7 @@ fn compile_statement(
             let condition_symbol = compile_expression(condition, &mut condition_compiler, scope);
             assert_eq!(
                 condition_symbol.type_,
-                Type::PrimitiveType(PrimitiveType::U32)
+                Type::PrimitiveType(PrimitiveType::UInt32)
             );
             condition_compiler.memory.read(
                 &mut condition_compiler.instructions,
@@ -273,7 +238,7 @@ fn compile_function_call(
 
     let mut return_result = function_compiler
         .memory
-        .allocate_symbol(Type::PrimitiveType(PrimitiveType::U32));
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
 
     for statement in &function.statements {
         compile_statement(
@@ -289,6 +254,41 @@ fn compile_function_call(
     ));
 
     return_result
+}
+
+fn cast(compiler: &mut Compiler, from: &Symbol, to: &Symbol) {
+    match (from.type_, to.type_) {
+        (
+            Type::PrimitiveType(PrimitiveType::UInt32),
+            Type::PrimitiveType(PrimitiveType::UInt64),
+        ) => uint64::cast_from_uint32(compiler, from, to),
+        x => unimplemented!("{:?}", x),
+    }
+}
+
+fn compile_add(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    match (a.type_, b.type_) {
+        (
+            Type::PrimitiveType(PrimitiveType::UInt32),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => uint32::add(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt64),
+        ) => uint64::add(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => {
+            let b_u64 = compiler
+                .memory
+                .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt64));
+            cast(compiler, b, &b_u64);
+
+            uint64::add(compiler, a, &b_u64)
+        }
+        e => unimplemented!("{:?}", e),
+    }
 }
 
 #[cfg(test)]
@@ -317,22 +317,76 @@ mod test {
             &mut vec![encoder::Instruction::Abstract(
                 encoder::AbstractInstruction::InlinedFunction(vec![
                     encoder::Instruction::Push(1),
-                    encoder::Instruction::MemStore(Some(1)),
-                    encoder::Instruction::Drop,
-                    encoder::Instruction::MemLoad(Some(1)),
-                    encoder::Instruction::Push(2),
                     encoder::Instruction::MemStore(Some(2)),
                     encoder::Instruction::Drop,
-                    encoder::Instruction::MemLoad(Some(2)),
-                    encoder::Instruction::U32CheckedAdd,
+                    encoder::Instruction::Push(2),
                     encoder::Instruction::MemStore(Some(3)),
                     encoder::Instruction::Drop,
+                    encoder::Instruction::MemLoad(Some(2)),
                     encoder::Instruction::MemLoad(Some(3)),
-                    encoder::Instruction::MemStore(Some(0)),
+                    encoder::Instruction::U32CheckedAdd,
+                    encoder::Instruction::MemStore(Some(4)),
+                    encoder::Instruction::Drop,
+                    encoder::Instruction::MemLoad(Some(4)),
+                    encoder::Instruction::MemStore(Some(1)),
                     encoder::Instruction::Drop,
                     encoder::Instruction::Abstract(encoder::AbstractInstruction::Return),
                 ])
             )]
+        );
+    }
+
+    #[test]
+    fn test_compile_add_u64_u32() {
+        let mut instructions = Vec::new();
+        let mut memory = Memory::new();
+        let mut compiler = Compiler::new(&mut instructions, &mut memory);
+
+        let a = compiler
+            .memory
+            .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt64));
+        let b = compiler
+            .memory
+            .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+        compiler.memory.write(
+            &mut compiler.instructions,
+            a.memory_addr,
+            &[ValueSource::Immediate(1)],
+        );
+        compiler.memory.write(
+            &mut compiler.instructions,
+            b.memory_addr,
+            &[ValueSource::Immediate(2)],
+        );
+
+        let result = compile_add(&mut compiler, &a, &b);
+
+        assert_eq!(
+            compiler.instructions,
+            &mut vec![
+                encoder::Instruction::Push(1),
+                encoder::Instruction::MemStore(Some(1)),
+                encoder::Instruction::Drop,
+                encoder::Instruction::Push(2),
+                encoder::Instruction::MemStore(Some(3)),
+                encoder::Instruction::Drop,
+                encoder::Instruction::MemLoad(Some(3)),
+                encoder::Instruction::Push(0),
+                encoder::Instruction::MemStore(Some(4)),
+                encoder::Instruction::Drop,
+                encoder::Instruction::MemStore(Some(5)),
+                encoder::Instruction::Drop,
+                encoder::Instruction::MemLoad(Some(2)),
+                encoder::Instruction::MemLoad(Some(1)),
+                encoder::Instruction::MemLoad(Some(5)),
+                encoder::Instruction::MemLoad(Some(4)),
+                encoder::Instruction::Exec("u64::checked_add"),
+                encoder::Instruction::MemStore(Some(6)),
+                encoder::Instruction::Drop,
+                encoder::Instruction::MemStore(Some(7)),
+                encoder::Instruction::Drop,
+            ]
         );
     }
 }
