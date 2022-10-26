@@ -33,11 +33,15 @@ pub(crate) struct Symbol {
 #[derive(Debug)]
 struct Scope {
     symbols: Vec<(String, Symbol)>,
+    functions: Vec<(String, ast::Function)>,
 }
 
 impl Scope {
     fn new() -> Self {
-        Scope { symbols: vec![] }
+        Scope {
+            symbols: vec![],
+            functions: vec![],
+        }
     }
 
     fn with(&mut self, body: impl FnOnce(&mut Self)) {
@@ -56,6 +60,18 @@ impl Scope {
             .rev()
             .find(|(n, _)| n == name)
             .map(|(_, s)| s)
+    }
+
+    fn add_function(&mut self, name: String, function: ast::Function) {
+        self.functions.push((name, function));
+    }
+
+    fn find_function(&self, name: &str) -> Option<&ast::Function> {
+        self.functions
+            .iter()
+            .rev()
+            .find(|(n, _)| n == name)
+            .map(|(_, f)| f)
     }
 }
 
@@ -289,6 +305,72 @@ fn compile_add(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
         }
         e => unimplemented!("{:?}", e),
     }
+}
+
+fn prepare_scope(program: ast::Program) -> Scope {
+    let mut scope = Scope::new();
+
+    for node in program.nodes {
+        match node {
+            ast::RootNode::Contract(_) => todo!(),
+            ast::RootNode::Function(function) => {
+                scope.functions.push((function.name.clone(), function))
+            }
+        }
+    }
+
+    scope
+}
+
+pub fn compile(
+    program: ast::Program,
+    contract_name: Option<&str>,
+    function_name: &str,
+    args: &[u32],
+) -> String {
+    let scope = prepare_scope(program);
+    let function = scope.find_function(function_name).unwrap();
+
+    let mut instructions = vec![];
+    let mut memory = Memory::new();
+
+    {
+        let mut compiler = Compiler::new(&mut instructions, &mut memory);
+
+        let arg_symbols = args
+            .iter()
+            .map(|arg| uint32::new(&mut compiler, *arg))
+            .collect::<Vec<_>>();
+
+        let result = compile_function_call(function, &mut compiler, &arg_symbols);
+        compiler.memory.read(
+            &mut compiler.instructions,
+            result.memory_addr,
+            result.type_.miden_width(),
+        );
+    }
+
+    let instructions = encoder::unabstract(
+        instructions,
+        &mut |size| memory.allocate(size),
+        &mut None,
+        &mut None,
+        false,
+    );
+
+    let mut miden_code = String::new();
+    miden_code.push_str("use.std::math::u64\n");
+    miden_code.push_str("begin\n");
+    for instruction in instructions {
+        miden_code.push_str("  ");
+        instruction
+            .encode(unsafe { miden_code.as_mut_vec() })
+            .unwrap();
+        miden_code.push_str("\n");
+    }
+    miden_code.push_str("end\n");
+
+    miden_code
 }
 
 #[cfg(test)]

@@ -8,6 +8,10 @@ edition = "2021"
 [lib]
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[[bin]]
+name = "compile"
+path = "src/bin/compile/main.rs"
+
 [dependencies]
 lalrpop-util = { version = "0.19.7", features = ["lexer"] }
 regex = { version = "1", default-features = false }

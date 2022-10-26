@@ -1,6 +1,6 @@
 mod ast;
 mod bindings;
-mod compiler;
+pub mod compiler;
 mod interpreter;
 mod validation;
 
@@ -12,7 +12,7 @@ use lalrpop_util::lalrpop_mod;
 lalrpop_mod!(pub polylang);
 
 #[derive(Debug, Serialize)]
-struct Error {
+pub struct Error {
     message: String,
 }
 
@@ -85,7 +85,7 @@ where
     }
 }
 
-fn parse(input: &str) -> Result<ast::Program, Error> {
+pub fn parse(input: &str) -> Result<ast::Program, Error> {
     polylang::ProgramParser::new()
         .parse(input)
         .map_err(|e| parse_error_to_error(input, e))
@@ -177,7 +177,6 @@ fn validate_set(contract_ast_json: &str, data_json: &str) -> Result<(), Error> {
 fn validate_set_out_json(contract_ast_json: &str, data_json: &str) -> String {
     serde_json::to_string(&validate_set(contract_ast_json, data_json)).unwrap()
 }
-
 
 #[derive(Debug, Serialize, PartialEq)]
 struct JSFunc {
@@ -315,7 +314,6 @@ mod tests {
             matches!(&contract.items[1], ast::ContractItem::Field(ast::Field { name, type_, required: true }) if name == "desc" && *type_ == ast::Type::String),
         );
     }
-
 
     #[test]
     fn test_contract_with_functions() {
