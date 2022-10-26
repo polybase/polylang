@@ -235,145 +235,150 @@ pub(crate) fn unabstract<'a>(
     result
 }
 
-#[test]
-fn test_unabstract_break() {
-    let instructions = vec![Instruction::While {
-        condition: vec![Instruction::Push(1)],
-        body: vec![
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_unabstract_break() {
+        let instructions = vec![Instruction::While {
+            condition: vec![Instruction::Push(1)],
+            body: vec![
+                Instruction::If {
+                    condition: vec![Instruction::Push(1)],
+                    then: vec![
+                        Instruction::Abstract(AbstractInstruction::Break),
+                        Instruction::Push(3),
+                    ],
+                    else_: vec![],
+                },
+                Instruction::If {
+                    condition: vec![Instruction::Push(1)],
+                    then: vec![Instruction::Push(1)],
+                    else_: vec![],
+                },
+                Instruction::Push(2),
+            ],
+        }];
+
+        let expected = vec![Instruction::While {
+            condition: vec![Instruction::If {
+                condition: vec![Instruction::MemLoad(Some(1))],
+                then: vec![Instruction::Push(0)],
+                else_: vec![Instruction::Push(1)],
+            }],
+            body: vec![
+                Instruction::If {
+                    condition: vec![Instruction::Push(1)],
+                    then: vec![
+                        Instruction::Push(1),
+                        Instruction::MemStore(Some(1)),
+                        Instruction::Drop,
+                        Instruction::If {
+                            condition: vec![Instruction::MemLoad(Some(1))],
+                            then: vec![],
+                            else_: vec![Instruction::Push(3)],
+                        },
+                    ],
+                    else_: vec![],
+                },
+                Instruction::If {
+                    condition: vec![Instruction::MemLoad(Some(1))],
+                    then: vec![],
+                    else_: vec![
+                        Instruction::If {
+                            condition: vec![Instruction::Push(1)],
+                            then: vec![Instruction::Push(1)],
+                            else_: vec![],
+                        },
+                        Instruction::Push(2),
+                    ],
+                },
+            ],
+        }];
+
+        let unabstracted = unabstract(instructions, &mut |_| 1, &mut None, &mut None, false);
+        assert_eq!(unabstracted, expected);
+    }
+
+    #[test]
+    fn test_unabstract_return() {
+        let instructions = vec![
+            Instruction::Push(1),
             Instruction::If {
                 condition: vec![Instruction::Push(1)],
-                then: vec![
-                    Instruction::Abstract(AbstractInstruction::Break),
-                    Instruction::Push(3),
-                ],
-                else_: vec![],
-            },
-            Instruction::If {
-                condition: vec![Instruction::Push(1)],
-                then: vec![Instruction::Push(1)],
+                then: vec![Instruction::Abstract(AbstractInstruction::Return)],
                 else_: vec![],
             },
             Instruction::Push(2),
-        ],
-    }];
+            Instruction::Push(3),
+        ];
 
-    let expected = vec![Instruction::While {
-        condition: vec![Instruction::If {
-            condition: vec![Instruction::MemLoad(Some(1))],
-            then: vec![Instruction::Push(0)],
-            else_: vec![Instruction::Push(1)],
-        }],
-        body: vec![
+        let expected = vec![
+            Instruction::Push(1),
             Instruction::If {
                 condition: vec![Instruction::Push(1)],
                 then: vec![
                     Instruction::Push(1),
                     Instruction::MemStore(Some(1)),
                     Instruction::Drop,
-                    Instruction::If {
-                        condition: vec![Instruction::MemLoad(Some(1))],
-                        then: vec![],
-                        else_: vec![Instruction::Push(3)],
-                    },
                 ],
                 else_: vec![],
             },
             Instruction::If {
                 condition: vec![Instruction::MemLoad(Some(1))],
                 then: vec![],
+                else_: vec![Instruction::Push(2), Instruction::Push(3)],
+            },
+        ];
+
+        let unabstracted = unabstract(instructions, &mut |_| 1, &mut None, &mut None, false);
+        assert_eq!(unabstracted, expected);
+    }
+
+    #[test]
+    fn test_unabstract_return_2() {
+        let instructions = vec![
+            Instruction::Push(199),
+            Instruction::Abstract(AbstractInstruction::Return),
+            Instruction::Push(200),
+            Instruction::Abstract(AbstractInstruction::Return),
+            Instruction::Push(201),
+        ];
+
+        let expected = vec![
+            Instruction::Push(199),
+            Instruction::Push(1),
+            Instruction::MemStore(Some(1)),
+            Instruction::Drop,
+            Instruction::If {
+                condition: vec![Instruction::MemLoad(Some(1))],
+                then: vec![],
                 else_: vec![
-                    Instruction::If {
-                        condition: vec![Instruction::Push(1)],
-                        then: vec![Instruction::Push(1)],
-                        else_: vec![],
-                    },
-                    Instruction::Push(2),
+                    Instruction::Push(200),
+                    Instruction::Push(1),
+                    Instruction::MemStore(Some(1)),
+                    Instruction::Drop,
                 ],
             },
-        ],
-    }];
+            Instruction::If {
+                condition: vec![Instruction::MemLoad(Some(1))],
+                then: vec![],
+                else_: vec![Instruction::Push(201)],
+            },
+        ];
 
-    let unabstracted = unabstract(instructions, &mut |_| 1, &mut None, &mut None, false);
-    assert_eq!(unabstracted, expected);
-}
-
-#[test]
-fn test_unabstract_return() {
-    let instructions = vec![
-        Instruction::Push(1),
-        Instruction::If {
-            condition: vec![Instruction::Push(1)],
-            then: vec![Instruction::Abstract(AbstractInstruction::Return)],
-            else_: vec![],
-        },
-        Instruction::Push(2),
-        Instruction::Push(3),
-    ];
-
-    let expected = vec![
-        Instruction::Push(1),
-        Instruction::If {
-            condition: vec![Instruction::Push(1)],
-            then: vec![
-                Instruction::Push(1),
-                Instruction::MemStore(Some(1)),
-                Instruction::Drop,
-            ],
-            else_: vec![],
-        },
-        Instruction::If {
-            condition: vec![Instruction::MemLoad(Some(1))],
-            then: vec![],
-            else_: vec![Instruction::Push(2), Instruction::Push(3)],
-        },
-    ];
-
-    let unabstracted = unabstract(instructions, &mut |_| 1, &mut None, &mut None, false);
-    assert_eq!(unabstracted, expected);
-}
-
-#[test]
-fn test_unabstract_return_2() {
-    let instructions = vec![
-        Instruction::Push(199),
-        Instruction::Abstract(AbstractInstruction::Return),
-        Instruction::Push(200),
-        Instruction::Abstract(AbstractInstruction::Return),
-        Instruction::Push(201),
-    ];
-
-    let expected = vec![
-        Instruction::Push(199),
-        Instruction::Push(1),
-        Instruction::MemStore(Some(1)),
-        Instruction::Drop,
-        Instruction::If {
-            condition: vec![Instruction::MemLoad(Some(1))],
-            then: vec![],
-            else_: vec![
-                Instruction::Push(200),
-                Instruction::Push(1),
-                Instruction::MemStore(Some(1)),
-                Instruction::Drop,
-            ],
-        },
-        Instruction::If {
-            condition: vec![Instruction::MemLoad(Some(1))],
-            then: vec![],
-            else_: vec![Instruction::Push(201)],
-        },
-    ];
-
-    let mut ptr = 1;
-    let unabstracted = unabstract(
-        instructions,
-        &mut |_| {
-            ptr += 1;
-            ptr - 1
-        },
-        &mut None,
-        &mut None,
-        false,
-    );
-    assert_eq!(unabstracted, expected);
+        let mut ptr = 1;
+        let unabstracted = unabstract(
+            instructions,
+            &mut |_| {
+                ptr += 1;
+                ptr - 1
+            },
+            &mut None,
+            &mut None,
+            false,
+        );
+        assert_eq!(unabstracted, expected);
+    }
 }
