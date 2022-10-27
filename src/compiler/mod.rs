@@ -2,6 +2,8 @@ mod encoder;
 mod uint32;
 mod uint64;
 
+use std::ops::Deref;
+
 use crate::ast::{self, Expression, Statement};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -30,13 +32,13 @@ pub(crate) struct Symbol {
     memory_addr: u32,
 }
 
-#[derive(Debug)]
-struct Scope {
+#[derive(Debug, Clone)]
+struct Scope<'ast> {
     symbols: Vec<(String, Symbol)>,
-    functions: Vec<(String, ast::Function)>,
+    functions: Vec<(String, &'ast ast::Function)>,
 }
 
-impl Scope {
+impl<'ast> Scope<'ast> {
     fn new() -> Self {
         Scope {
             symbols: vec![],
@@ -45,9 +47,11 @@ impl Scope {
     }
 
     fn with(&mut self, body: impl FnOnce(&mut Self)) {
-        let start_len = self.symbols.len();
+        let symbols_start_len = self.symbols.len();
+        let functions_start_len = self.functions.len();
         body(self);
-        self.symbols.truncate(start_len);
+        self.symbols.truncate(symbols_start_len);
+        self.functions.truncate(functions_start_len);
     }
 
     fn add_symbol(&mut self, name: String, symbol: Symbol) {
@@ -62,16 +66,16 @@ impl Scope {
             .map(|(_, s)| s)
     }
 
-    fn add_function(&mut self, name: String, function: ast::Function) {
+    fn add_function(&mut self, name: String, function: &'ast ast::Function) {
         self.functions.push((name, function));
     }
 
-    fn find_function(&self, name: &str) -> Option<&ast::Function> {
+    fn find_function(&self, name: &str) -> Option<&'ast ast::Function> {
         self.functions
             .iter()
             .rev()
             .find(|(n, _)| n == name)
-            .map(|(_, f)| f)
+            .map(|(_, f)| *f)
     }
 }
 
@@ -170,6 +174,19 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             compile_add(compiler, &a, &b)
         }
+        Expression::Call(func, args) => {
+            let func_name = match func.deref() {
+                Expression::Ident(id) => id,
+                _ => panic!("expected function name"),
+            };
+            let func = scope.find_function(func_name).unwrap();
+            let mut args_symbols = vec![];
+            for arg in args {
+                args_symbols.push(compile_expression(arg, compiler, scope));
+            }
+
+            compile_function_call(func, compiler, &mut scope.clone(), &args_symbols)
+        }
         e => unimplemented!("{:?}", e),
     }
 }
@@ -242,14 +259,15 @@ fn compile_statement(
 fn compile_function_call(
     function: &ast::Function,
     compiler: &mut Compiler,
+    scope: &mut Scope,
     args: &[Symbol],
 ) -> Symbol {
     let mut function_instructions = vec![];
     let mut function_compiler = Compiler::new(&mut function_instructions, compiler.memory);
 
-    let mut function_scope = Scope::new();
+    let old_symbols = std::mem::replace(&mut scope.symbols, vec![]);
     for (arg, param) in args.iter().zip(function.parameters.iter()) {
-        function_scope.add_symbol(param.name.clone(), arg.clone());
+        scope.add_symbol(param.name.clone(), arg.clone());
     }
 
     let mut return_result = function_compiler
@@ -257,17 +275,14 @@ fn compile_function_call(
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
 
     for statement in &function.statements {
-        compile_statement(
-            statement,
-            &mut function_compiler,
-            &mut function_scope,
-            &mut return_result,
-        );
+        compile_statement(statement, &mut function_compiler, scope, &mut return_result);
     }
 
     compiler.instructions.push(encoder::Instruction::Abstract(
         encoder::AbstractInstruction::InlinedFunction(function_instructions),
     ));
+
+    scope.symbols = old_symbols;
 
     return_result
 }
@@ -307,10 +322,10 @@ fn compile_add(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     }
 }
 
-fn prepare_scope(program: ast::Program) -> Scope {
+fn prepare_scope(program: &ast::Program) -> Scope {
     let mut scope = Scope::new();
 
-    for node in program.nodes {
+    for node in &program.nodes {
         match node {
             ast::RootNode::Contract(_) => todo!(),
             ast::RootNode::Function(function) => {
@@ -328,7 +343,7 @@ pub fn compile(
     function_name: &str,
     args: &[u32],
 ) -> String {
-    let scope = prepare_scope(program);
+    let mut scope = prepare_scope(&program);
     let function = scope.find_function(function_name).unwrap();
 
     let mut instructions = vec![];
@@ -342,7 +357,7 @@ pub fn compile(
             .map(|arg| uint32::new(&mut compiler, *arg))
             .collect::<Vec<_>>();
 
-        let result = compile_function_call(function, &mut compiler, &arg_symbols);
+        let result = compile_function_call(function, &mut compiler, &mut scope, &arg_symbols);
         compiler.memory.read(
             &mut compiler.instructions,
             result.memory_addr,
@@ -392,7 +407,7 @@ mod test {
         let mut instructions = Vec::new();
         let mut memory = Memory::new();
         let mut compiler = Compiler::new(&mut instructions, &mut memory);
-        compile_function_call(&main, &mut compiler, &[]);
+        compile_function_call(&main, &mut compiler, &mut Scope::new(), &[]);
 
         assert_eq!(
             compiler.instructions,
