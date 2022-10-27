@@ -38,10 +38,10 @@ export async function validateSet (contract: Contract, data: { [k: string]: any 
   return unwrap(JSON.parse((await parser).validate_set(JSON.stringify(contract), JSON.stringify(data))))
 }
 
-export interface JSFunction {
+export interface JSContract {
   code: string
 }
 
-export async function generateJSFunction (func: Function): Promise<JSFunction> {
-  return unwrap(JSON.parse((await parser).generate_js_function(JSON.stringify(func))))
+export async function generateJSContract (contract: Contract): Promise<JSContract> {
+  return unwrap(JSON.parse((await parser).generate_js_contract(JSON.stringify(contract))))
 }
