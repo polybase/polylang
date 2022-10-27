@@ -1,22 +1,18 @@
-mod ast;
 mod bindings;
 mod interpreter;
-mod validation;
 mod js;
+mod validation;
 
 use serde::Serialize;
+use spacetime_parser::{ast, polylang, ParseError};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
-
-use lalrpop_util::lalrpop_mod;
-
-lalrpop_mod!(pub polylang);
 
 #[derive(Debug, Serialize)]
 struct Error {
     message: String,
 }
 
-fn parse_error_to_error<T, E>(input: &str, error: lalrpop_util::ParseError<usize, T, E>) -> Error
+fn parse_error_to_error<T, E>(input: &str, error: ParseError<usize, T, E>) -> Error
 where
     T: std::fmt::Display + std::fmt::Debug,
     E: std::fmt::Display + std::fmt::Debug,
@@ -57,14 +53,12 @@ where
     };
 
     match error {
-        lalrpop_util::ParseError::InvalidToken { location } => {
-            make_err(location, location, "Invalid token")
-        }
-        lalrpop_util::ParseError::UnrecognizedEOF {
+        ParseError::InvalidToken { location } => make_err(location, location, "Invalid token"),
+        ParseError::UnrecognizedEOF {
             location,
             expected: _,
         } => make_err(location, location, "Unexpected end of file"),
-        lalrpop_util::ParseError::UnrecognizedToken {
+        ParseError::UnrecognizedToken {
             token: (start_byte, token, end_byte),
             expected,
         } => make_err(
@@ -76,10 +70,10 @@ where
                 expected.join(", "),
             ),
         ),
-        lalrpop_util::ParseError::ExtraToken {
+        ParseError::ExtraToken {
             token: (start_byte, token, end_byte),
         } => make_err(start_byte, end_byte, &format!("Extra token \"{}\"", token)),
-        lalrpop_util::ParseError::User { error } => Error {
+        ParseError::User { error } => Error {
             message: format!("{:?}", error),
         },
     }
@@ -225,7 +219,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn test_contract_with_fields() {
         let program = polylang::ProgramParser::new().parse(
@@ -285,7 +278,6 @@ mod tests {
             matches!(&contract.items[1], ast::ContractItem::Field(ast::Field { name, type_, required: true }) if name == "desc" && *type_ == ast::Type::String),
         );
     }
-
 
     #[test]
     fn test_contract_with_functions() {
@@ -511,41 +503,41 @@ mod tests {
         ));
     }
 
-//     #[test]
-//     fn test_generate_js_function() {
-//         let func_code = "
-//             function transfer (a: record, b: record, amount: number) {
-//                 if (a.publicKey != $auth.publicKey) throw error('invalid user');
-                
-//                 a.balance -= amount;
-//                 b.balance += amount;
-//             }
-//         ";
+    //     #[test]
+    //     fn test_generate_js_function() {
+    //         let func_code = "
+    //             function transfer (a: record, b: record, amount: number) {
+    //                 if (a.publicKey != $auth.publicKey) throw error('invalid user');
 
-//         let func = polylang::FunctionParser::new().parse(func_code).unwrap();
-//         let func_ast = serde_json::to_string(&func).unwrap();
+    //                 a.balance -= amount;
+    //                 b.balance += amount;
+    //             }
+    //         ";
 
-//         let eval_input = generate_js_function(&func_ast).unwrap();
-//         assert_eq!(
-//             eval_input,
-//             JSFunc {
-//                 code: "
-// function error(str) {
-//     return new Error(str);
-// }
+    //         let func = polylang::FunctionParser::new().parse(func_code).unwrap();
+    //         let func_ast = serde_json::to_string(&func).unwrap();
 
-// const f = ($auth, args) => {
-// const a = args[0], b = args[1], amount = args[2];
-// if (a.publicKey != $auth.publicKey) throw error('invalid user');
-                
-//                 a.balance -= amount;
-//                 b.balance += amount;
-// };
-// "
-//                 .to_string(),
-//             },
-//         );
-//     }
+    //         let eval_input = generate_js_function(&func_ast).unwrap();
+    //         assert_eq!(
+    //             eval_input,
+    //             JSFunc {
+    //                 code: "
+    // function error(str) {
+    //     return new Error(str);
+    // }
+
+    // const f = ($auth, args) => {
+    // const a = args[0], b = args[1], amount = args[2];
+    // if (a.publicKey != $auth.publicKey) throw error('invalid user');
+
+    //                 a.balance -= amount;
+    //                 b.balance += amount;
+    // };
+    // "
+    //                 .to_string(),
+    //             },
+    //         );
+    //     }
 
     #[test]
     fn test_error_unrecognized_token() {
