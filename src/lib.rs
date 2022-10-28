@@ -1,23 +1,19 @@
-mod ast;
 mod bindings;
 pub mod compiler;
 mod interpreter;
 mod js;
 mod validation;
 
+use polylang_parser::{ast, polylang, ParseError};
 use serde::Serialize;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
-
-use lalrpop_util::lalrpop_mod;
-
-lalrpop_mod!(pub polylang);
 
 #[derive(Debug, Serialize)]
 pub struct Error {
     pub message: String,
 }
 
-fn parse_error_to_error<T, E>(input: &str, error: lalrpop_util::ParseError<usize, T, E>) -> Error
+fn parse_error_to_error<T, E>(input: &str, error: ParseError<usize, T, E>) -> Error
 where
     T: std::fmt::Display + std::fmt::Debug,
     E: std::fmt::Display + std::fmt::Debug,
@@ -58,14 +54,12 @@ where
     };
 
     match error {
-        lalrpop_util::ParseError::InvalidToken { location } => {
-            make_err(location, location, "Invalid token")
-        }
-        lalrpop_util::ParseError::UnrecognizedEOF {
+        ParseError::InvalidToken { location } => make_err(location, location, "Invalid token"),
+        ParseError::UnrecognizedEOF {
             location,
             expected: _,
         } => make_err(location, location, "Unexpected end of file"),
-        lalrpop_util::ParseError::UnrecognizedToken {
+        ParseError::UnrecognizedToken {
             token: (start_byte, token, end_byte),
             expected,
         } => make_err(
@@ -77,10 +71,10 @@ where
                 expected.join(", "),
             ),
         ),
-        lalrpop_util::ParseError::ExtraToken {
+        ParseError::ExtraToken {
             token: (start_byte, token, end_byte),
         } => make_err(start_byte, end_byte, &format!("Extra token \"{}\"", token)),
-        lalrpop_util::ParseError::User { error } => Error {
+        ParseError::User { error } => Error {
             message: format!("{:?}", error),
         },
     }
