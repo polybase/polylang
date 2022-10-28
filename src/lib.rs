@@ -3,8 +3,8 @@ mod interpreter;
 mod js;
 mod validation;
 
+use polylang_parser::{ast, polylang, ParseError};
 use serde::Serialize;
-use spacetime_parser::{ast, polylang, ParseError};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Debug, Serialize)]
