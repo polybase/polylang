@@ -12,18 +12,65 @@ enum PrimitiveType {
     UInt64,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+impl PrimitiveType {
+    fn miden_width(&self) -> u32 {
+        match self {
+            PrimitiveType::UInt32 => uint32::WIDTH,
+            PrimitiveType::UInt64 => uint64::WIDTH,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct Struct {
+    name: String,
+    fields: Vec<(String, PrimitiveType)>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 enum Type {
     PrimitiveType(PrimitiveType),
+    Struct(Struct),
 }
 
 impl Type {
     fn miden_width(&self) -> u32 {
         match self {
-            Type::PrimitiveType(PrimitiveType::UInt32) => uint32::WIDTH,
-            Type::PrimitiveType(PrimitiveType::UInt64) => uint64::WIDTH,
+            Type::PrimitiveType(pt) => pt.miden_width(),
+            Type::Struct(struct_) => struct_.fields.iter().map(|(_, t)| t.miden_width()).sum(),
         }
     }
+}
+
+fn new_struct(compiler: &mut Compiler, struct_: Struct) -> Symbol {
+    let symbol = compiler.memory.allocate_symbol(Type::Struct(struct_));
+
+    symbol
+}
+
+fn struct_field(
+    compiler: &mut Compiler,
+    struct_symbol: Symbol,
+    field_name: &str,
+) -> Option<Symbol> {
+    let struct_ = match &struct_symbol.type_ {
+        Type::Struct(struct_) => struct_,
+        _ => panic!("expected struct"),
+    };
+
+    let mut offset = 0;
+    for (name, field_type) in &struct_.fields {
+        if name == field_name {
+            return Some(Symbol {
+                type_: Type::PrimitiveType(*field_type),
+                memory_addr: struct_symbol.memory_addr + offset,
+            });
+        }
+
+        offset += field_type.miden_width();
+    }
+
+    None
 }
 
 #[derive(Debug, Clone)]
@@ -33,9 +80,17 @@ pub(crate) struct Symbol {
 }
 
 #[derive(Debug, Clone)]
+struct Contract<'ast> {
+    name: String,
+    fields: Vec<(String, Type)>,
+    functions: Vec<(String, &'ast ast::Function)>,
+}
+
+#[derive(Debug, Clone)]
 struct Scope<'ast> {
     symbols: Vec<(String, Symbol)>,
     functions: Vec<(String, &'ast ast::Function)>,
+    contracts: Vec<(String, Contract<'ast>)>,
 }
 
 impl<'ast> Scope<'ast> {
@@ -43,6 +98,7 @@ impl<'ast> Scope<'ast> {
         Scope {
             symbols: vec![],
             functions: vec![],
+            contracts: vec![],
         }
     }
 
@@ -76,6 +132,22 @@ impl<'ast> Scope<'ast> {
             .rev()
             .find(|(n, _)| n == name)
             .map(|(_, f)| *f)
+    }
+
+    fn add_contract(&mut self, name: String, contract: Contract<'ast>) {
+        if self.find_contract(&name).is_some() {
+            panic!("Contract {} already exists", name);
+        }
+
+        self.contracts.push((name, contract));
+    }
+
+    fn find_contract(&self, name: &str) -> Option<&Contract<'ast>> {
+        self.contracts
+            .iter()
+            .rev()
+            .find(|(n, _)| n == name)
+            .map(|(_, c)| c)
     }
 }
 
@@ -187,6 +259,28 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             compile_function_call(func, compiler, &mut scope.clone(), &args_symbols)
         }
+        Expression::Assign(a, b) => {
+            let a = compile_expression(a, compiler, scope);
+            let b = compile_expression(b, compiler, scope);
+
+            assert_eq!(a.type_, b.type_);
+
+            compiler
+                .memory
+                .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
+            compiler.memory.write(
+                compiler.instructions,
+                a.memory_addr,
+                &vec![ValueSource::Stack; b.type_.miden_width() as usize],
+            );
+
+            a
+        }
+        Expression::Dot(a, b) => {
+            let a = compile_expression(a, compiler, scope);
+
+            struct_field(compiler, a, b).unwrap()
+        }
         e => unimplemented!("{:?}", e),
     }
 }
@@ -252,6 +346,9 @@ fn compile_statement(
                 else_: else_body_instructions,
             })
         }
+        Statement::Expression(expr) => {
+            compile_expression(expr, compiler, scope);
+        }
         st => unimplemented!("{:?}", st),
     }
 }
@@ -265,30 +362,31 @@ fn compile_function_call(
     let mut function_instructions = vec![];
     let mut function_compiler = Compiler::new(&mut function_instructions, compiler.memory);
 
-    let old_symbols = std::mem::replace(&mut scope.symbols, vec![]);
-    for (arg, param) in args.iter().zip(function.parameters.iter()) {
-        scope.add_symbol(param.name.clone(), arg.clone());
-    }
-
+    // let old_symbols = std::mem::replace(&mut scope.symbols, vec![]);
     let mut return_result = function_compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+    scope.with(|scope| {
+        for (arg, param) in args.iter().zip(function.parameters.iter()) {
+            scope.add_symbol(param.name.clone(), arg.clone());
+        }
 
-    for statement in &function.statements {
-        compile_statement(statement, &mut function_compiler, scope, &mut return_result);
-    }
+        for statement in &function.statements {
+            compile_statement(statement, &mut function_compiler, scope, &mut return_result);
+        }
+    });
 
     compiler.instructions.push(encoder::Instruction::Abstract(
         encoder::AbstractInstruction::InlinedFunction(function_instructions),
     ));
 
-    scope.symbols = old_symbols;
+    // scope.symbols = old_symbols;
 
     return_result
 }
 
 fn cast(compiler: &mut Compiler, from: &Symbol, to: &Symbol) {
-    match (from.type_, to.type_) {
+    match (&from.type_, &to.type_) {
         (
             Type::PrimitiveType(PrimitiveType::UInt32),
             Type::PrimitiveType(PrimitiveType::UInt64),
@@ -298,7 +396,7 @@ fn cast(compiler: &mut Compiler, from: &Symbol, to: &Symbol) {
 }
 
 fn compile_add(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
-    match (a.type_, b.type_) {
+    match (&a.type_, &b.type_) {
         (
             Type::PrimitiveType(PrimitiveType::UInt32),
             Type::PrimitiveType(PrimitiveType::UInt32),
@@ -327,7 +425,33 @@ fn prepare_scope(program: &ast::Program) -> Scope {
 
     for node in &program.nodes {
         match node {
-            ast::RootNode::Contract(_) => todo!(),
+            ast::RootNode::Contract(c) => {
+                let mut contract = Contract {
+                    name: c.name.clone(),
+                    functions: vec![],
+                    fields: vec![],
+                };
+
+                for item in &c.items {
+                    match item {
+                        ast::ContractItem::Field(f) => {
+                            contract.fields.push((
+                                f.name.clone(),
+                                match f.type_ {
+                                    ast::Type::String => todo!(),
+                                    ast::Type::Number => Type::PrimitiveType(PrimitiveType::UInt32),
+                                },
+                            ));
+                        }
+                        ast::ContractItem::Function(f) => {
+                            contract.functions.push((f.name.clone(), f));
+                        }
+                        ast::ContractItem::Index(_) => todo!(),
+                    }
+                }
+
+                scope.add_contract(contract.name.clone(), contract);
+            }
             ast::RootNode::Function(function) => {
                 scope.functions.push((function.name.clone(), function))
             }
@@ -344,7 +468,16 @@ pub fn compile(
     args: &[u32],
 ) -> String {
     let mut scope = prepare_scope(&program);
-    let function = scope.find_function(function_name).unwrap();
+    let contract = contract_name.map(|name| scope.find_contract(name).unwrap());
+    let function = contract
+        .and_then(|c| {
+            c.functions
+                .iter()
+                .find(|(name, _)| name == function_name)
+                .map(|(_, f)| *f)
+        })
+        .or_else(|| scope.find_function(function_name))
+        .unwrap();
 
     let mut instructions = vec![];
     let mut memory = Memory::new();
@@ -357,12 +490,42 @@ pub fn compile(
             .map(|arg| uint32::new(&mut compiler, *arg))
             .collect::<Vec<_>>();
 
+        if let Some(contract) = contract {
+            let struct_ = Struct {
+                name: contract.name.clone(),
+                fields: contract
+                    .fields
+                    .iter()
+                    .map(|(name, field)| {
+                        (
+                            name.clone(),
+                            match field {
+                                Type::PrimitiveType(p) => p.clone(),
+                                Type::Struct(_) => todo!(),
+                            },
+                        )
+                    })
+                    .collect(),
+            };
+
+            let this = new_struct(&mut compiler, struct_);
+            scope.add_symbol("this".to_string(), this);
+        }
+
         let result = compile_function_call(function, &mut compiler, &mut scope, &arg_symbols);
         compiler.memory.read(
             &mut compiler.instructions,
             result.memory_addr,
             result.type_.miden_width(),
         );
+
+        if let Some(this) = scope.find_symbol("this") {
+            compiler.memory.read(
+                &mut compiler.instructions,
+                this.memory_addr,
+                this.type_.miden_width(),
+            );
+        }
     }
 
     let instructions = encoder::unabstract(

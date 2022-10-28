@@ -14,7 +14,7 @@ lalrpop_mod!(pub polylang);
 
 #[derive(Debug, Serialize)]
 pub struct Error {
-    message: String,
+    pub message: String,
 }
 
 fn parse_error_to_error<T, E>(input: &str, error: lalrpop_util::ParseError<usize, T, E>) -> Error
