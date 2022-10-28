@@ -5,6 +5,7 @@ pub(crate) enum Instruction<'a> {
     Push(u32),             // push.1234
     Add,                   // add
     U32CheckedAdd,         // u32checked_add
+    U32CheckedSub,         // u32checked_sub
     Exec(&'a str),         // exec.u64::checked_add
     MemStore(Option<u32>), // mem_store.0x1234
     MemLoad(Option<u32>),  // mem_load.0x1234
@@ -35,6 +36,7 @@ impl Instruction<'_> {
             Instruction::Push(value) => write!(f, "push.{}", value),
             Instruction::Add => write!(f, "add"),
             Instruction::U32CheckedAdd => write!(f, "u32checked_add"),
+            Instruction::U32CheckedSub => write!(f, "u32checked_sub"),
             Instruction::Exec(name) => write!(f, "exec.{}", name),
             Instruction::While { condition, body } => {
                 for instruction in condition {
