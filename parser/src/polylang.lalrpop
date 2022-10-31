@@ -180,7 +180,22 @@ pub Parameter: Parameter = {
     <name:Ident> ":" <type_:ParameterType> => Parameter {
         name,
         type_,
+        required: true,
     },
+    <name:Ident> "?" ":" <type_:ParameterType> => Parameter {
+        name,
+        type_,
+        required: false,
+    },
+};
+
+pub RootFunction: Function = {
+    "function" <i: Ident> "(" <pl:ParameterList> ")" "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+        name: i,
+        parameters: pl,
+        statements: s,
+        statements_code: input[l..r].to_string(),
+    }
 };
 
 pub Function: Function = {
@@ -190,31 +205,24 @@ pub Function: Function = {
         statements: s,
         statements_code: input[l..r].to_string(),
     },
+    <i: Ident> "(" <pl:ParameterList> ")" "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+        name: i,
+        parameters: pl,
+        statements: s,
+        statements_code: input[l..r].to_string(),
+    },
 };
 
 pub Field: Field = {
-    <name:Ident> ":" <type_:Type> "!" <decorators:FieldDecorator*> => Field{
-        name,
-        type_,
-        required: true,
-        decorators,
-    },
-    <name:Ident> ":" <type_:Type> <decorators:FieldDecorator*> => Field{
+    <name:Ident> "?" ":" <type_:Type> => Field{
         name,
         type_,
         required: false,
-        decorators,
     },
-};
-
-pub FieldDecorator: FieldDecorator = {
-    "@" <name:Ident> "(" <args:PrimitiveArgumentList> ")" => FieldDecorator {
+    <name:Ident> ":" <type_:Type> => Field{
         name,
-        arguments: args,
-    },
-    "@" <name:Ident> => FieldDecorator {
-        name,
-        arguments: vec![],
+        type_,
+        required: true,
     },
 };
 
@@ -256,22 +264,26 @@ pub IndexFields: Vec<IndexField> = {
     => vec![],
 };
 
-pub CollectionItem: CollectionItem = {
-    <f:Field> ";" => CollectionItem::Field(f),
-    <i:Index> ";" => CollectionItem::Index(i),
-    <f:Function> => CollectionItem::Function(f),
+pub ContractItem: ContractItem = {
+    <f:Field> ";" => ContractItem::Field(f),
+    <i:Index> ";" => ContractItem::Index(i),
+    <f:Function> => ContractItem::Function(f),
 };
 
-pub Collection: Collection = {
-    "collection" <name:Ident> "{" <items:CollectionItem*> "}" => Collection {
+pub Contract: Contract = {
+    "contract" <name:Ident> "{" <items:ContractItem*> "}" => Contract {
+        name: name,
+        items: items,
+    },
+    "collection" <name:Ident> "{" <items:ContractItem*> "}" => Contract {
         name: name,
         items: items,
     },
 };
 
 pub RootNode: RootNode = {
-    <c:Collection> => RootNode::Collection(c),
-    <f:Function> => RootNode::Function(f),
+    <c:Contract> => RootNode::Contract(c),
+    <f:RootFunction> => RootNode::Function(f),
 };
 
 pub Program: Program = {

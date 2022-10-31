@@ -5,26 +5,25 @@ type Program struct {
 }
 
 type RootNode struct {
-	Collection *Collection
-	Function   *Function
+	Contract *Contract
+	Function *Function
 }
 
-type Collection struct {
-	Name  string           `json:"name"`
-	Items []CollectionItem `json:"items"`
+type Contract struct {
+	Name  string         `json:"name"`
+	Items []ContractItem `json:"items"`
 }
 
-type CollectionItem struct {
+type ContractItem struct {
 	Field    *Field    `json:"Field,omitempty"`
 	Function *Function `json:"Function,omitempty"`
 	Index    *Index    `json:"Index,omitempty"`
 }
 
 type Field struct {
-	Name       string           `json:"name"`
-	Type       Type             `json:"type_"`
-	Required   bool             `json:"required"`
-	Decorators []FieldDecorator `json:"decorators"`
+	Name     string `json:"name"`
+	Type     Type   `json:"type_"`
+	Required bool   `json:"required"`
 }
 
 type Type string
@@ -55,8 +54,9 @@ const (
 )
 
 type Parameter struct {
-	Name string       `json:"name"`
-	Type FunctionType `json:"type_"`
+	Name     string       `json:"name"`
+	Type     FunctionType `json:"type_"`
+	Required bool         `json:"required"`
 }
 
 type Index struct {
