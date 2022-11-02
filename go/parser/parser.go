@@ -49,11 +49,6 @@ func Parse(input string) (json.RawMessage, error) {
 	return parseResult[json.RawMessage](C.GoString(output))
 }
 
-func Interpret(program, collection, funcName, args string) (json.RawMessage, error) {
-	output := C.interpret(C.CString(program), C.CString(collection), C.CString(funcName), C.CString(args))
-	return parseResult[json.RawMessage](C.GoString(output))
-}
-
 func ValidateSet(collectionAST, data string) error {
 	output := C.validate_set(C.CString(collectionAST), C.CString(data))
 	if _, err := parseResult[json.RawMessage](C.GoString(output)); err != nil {

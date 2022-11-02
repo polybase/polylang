@@ -1,7 +1,7 @@
 const pkg = require("./pkg");
 pkg.__wasm.init();
 
-const Account = `
+const Account = pkg.parse(`
 collection Account {
     name: string;
     age: number!;
@@ -16,41 +16,6 @@ collection Account {
         a.balance -= amount;
         b.balance += amount;
     }
-}`;
+}`);
 
-const result = pkg.interpret(
-  Account,
-  "Account",
-  "transfer",
-  JSON.stringify({
-    auth: {
-      value: {
-        Map: {
-          publicKey: { value: { String: "0x123" } },
-        },
-      },
-    },
-    a: {
-      value: {
-        Map: {
-          publicKey: { value: { String: "0x123" } },
-          balance: { value: { Number: 100 } },
-        },
-      },
-    },
-    b: {
-      value: {
-        Map: {
-          balance: { value: { Number: 100 } },
-        },
-      },
-    },
-    amount: {
-      value: {
-        Number: 10,
-      },
-    },
-  })
-);
-
-console.log(JSON.stringify(JSON.parse(result), "  ", 2));
+console.log(JSON.stringify(JSON.parse(Account), "  ", 2));
