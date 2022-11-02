@@ -15,11 +15,11 @@ export interface Program {
 }
 
 export interface RootNode {
-  Contract: Contract
+  Collection: Collection
   Function: Function
 }
 
-export type Contract = any
+export type Collection = any
 export type Function = any
 
 function unwrap<T> (value: Result<T>): T {
@@ -34,14 +34,14 @@ export async function parse (code: string): Promise<Program> {
   return unwrap(JSON.parse((await parser).parse(code)))
 }
 
-export async function validateSet (contract: Contract, data: { [k: string]: any }): Promise<void> {
-  return unwrap(JSON.parse((await parser).validate_set(JSON.stringify(contract), JSON.stringify(data))))
+export async function validateSet (collection: Collection, data: { [k: string]: any }): Promise<void> {
+  return unwrap(JSON.parse((await parser).validate_set(JSON.stringify(collection), JSON.stringify(data))))
 }
 
-export interface JSContract {
+export interface JSCollection {
   code: string
 }
 
-export async function generateJSContract (contract: Contract): Promise<JSContract> {
-  return unwrap(JSON.parse((await parser).generate_js_contract(JSON.stringify(contract))))
+export async function generateJSCollection (collection: Collection): Promise<JSCollection> {
+  return unwrap(JSON.parse((await parser).generate_js_collection(JSON.stringify(collection))))
 }

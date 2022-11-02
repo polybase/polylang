@@ -2,7 +2,7 @@ const pkg = require("./pkg");
 pkg.__wasm.init();
 
 const Account = `
-contract Account {
+collection Account {
     name: string;
     age: number!;
     balance: number;

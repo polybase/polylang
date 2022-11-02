@@ -11,14 +11,14 @@ pub(crate) enum Value {
 }
 
 pub(crate) fn validate_set(
-    contract: ast::Contract,
+    collection: ast::Collection,
     data: HashMap<String, Value>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let fields = contract
+    let fields = collection
         .items
         .iter()
         .filter_map(|item| {
-            if let ast::ContractItem::Field(field) = item {
+            if let ast::CollectionItem::Field(field) = item {
                 Some(field)
             } else {
                 None
@@ -65,15 +65,15 @@ mod tests {
 
     #[test]
     fn test_validate_set() {
-        let contract = ast::Contract {
+        let collection = ast::Collection {
             name: "users".to_string(),
             items: vec![
-                ast::ContractItem::Field(ast::Field {
+                ast::CollectionItem::Field(ast::Field {
                     name: "name".to_string(),
                     type_: ast::Type::String,
                     required: true,
                 }),
-                ast::ContractItem::Field(ast::Field {
+                ast::CollectionItem::Field(ast::Field {
                     name: "age".to_string(),
                     type_: ast::Type::Number,
                     required: false,
@@ -86,20 +86,20 @@ mod tests {
             ("age".to_string(), Value::Number(30.0)),
         ]);
 
-        assert!(validate_set(contract, data).is_ok());
+        assert!(validate_set(collection, data).is_ok());
     }
 
     #[test]
     fn test_validate_set_missing_required_field() {
-        let contract = ast::Contract {
+        let collection = ast::Collection {
             name: "users".to_string(),
             items: vec![
-                ast::ContractItem::Field(ast::Field {
+                ast::CollectionItem::Field(ast::Field {
                     name: "name".to_string(),
                     type_: ast::Type::String,
                     required: true,
                 }),
-                ast::ContractItem::Field(ast::Field {
+                ast::CollectionItem::Field(ast::Field {
                     name: "age".to_string(),
                     type_: ast::Type::Number,
                     required: false,
@@ -109,20 +109,20 @@ mod tests {
 
         let data = HashMap::from([("age".to_string(), Value::Number(30.0))]);
 
-        assert!(validate_set(contract, data).is_err());
+        assert!(validate_set(collection, data).is_err());
     }
 
     #[test]
     fn test_validate_set_invalid_type() {
-        let contract = ast::Contract {
+        let collection = ast::Collection {
             name: "users".to_string(),
             items: vec![
-                ast::ContractItem::Field(ast::Field {
+                ast::CollectionItem::Field(ast::Field {
                     name: "name".to_string(),
                     type_: ast::Type::String,
                     required: true,
                 }),
-                ast::ContractItem::Field(ast::Field {
+                ast::CollectionItem::Field(ast::Field {
                     name: "age".to_string(),
                     type_: ast::Type::Number,
                     required: false,
@@ -135,20 +135,20 @@ mod tests {
             ("age".to_string(), Value::String("30".to_string())),
         ]);
 
-        assert!(validate_set(contract, data).is_err());
+        assert!(validate_set(collection, data).is_err());
     }
 
     #[test]
     fn test_validate_set_extra_field() {
-        let contract = ast::Contract {
+        let collection = ast::Collection {
             name: "users".to_string(),
             items: vec![
-                ast::ContractItem::Field(ast::Field {
+                ast::CollectionItem::Field(ast::Field {
                     name: "name".to_string(),
                     type_: ast::Type::String,
                     required: true,
                 }),
-                ast::ContractItem::Field(ast::Field {
+                ast::CollectionItem::Field(ast::Field {
                     name: "age".to_string(),
                     type_: ast::Type::Number,
                     required: false,
@@ -162,6 +162,6 @@ mod tests {
             ("extra".to_string(), Value::String("extra".to_string())),
         ]);
 
-        assert!(validate_set(contract, data).is_err());
+        assert!(validate_set(collection, data).is_err());
     }
 }
