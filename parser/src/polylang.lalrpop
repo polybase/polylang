@@ -140,6 +140,7 @@ pub CompoundStatement: Statement = {
 pub SmallStatement: Statement = {
     "return" <e:Expression> => Statement::Return(e),
     "throw" <e:Expression> => Statement::Throw(e),
+    "let" <i:Ident> "=" <e:Expression> => Statement::Let(i, e),
     <e:Expression> => Statement::Expression(e),
 };
 

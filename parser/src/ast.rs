@@ -89,6 +89,7 @@ pub enum Statement {
     Return(Expression),
     Expression(Expression),
     Throw(Expression),
+    Let(String, Expression),
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
