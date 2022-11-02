@@ -135,11 +135,14 @@ pub PrimitiveArgumentList: Vec<Primitive> = {
 
 pub CompoundStatement: Statement = {
     <i:If> => Statement::If(i),
+    <w:While> => Statement::While(w),
 }
 
 pub SmallStatement: Statement = {
+    "break" => Statement::Break,
     "return" <e:Expression> => Statement::Return(e),
     "throw" <e:Expression> => Statement::Throw(e),
+    "let" <i:Ident> "=" <e:Expression> => Statement::Let(i, e),
     <e:Expression> => Statement::Expression(e),
 };
 
@@ -162,6 +165,13 @@ pub If: If = {
         condition: e,
         then_statements: s,
         else_statements: s2.map(|s| s.1).unwrap_or(vec![]),
+    },
+};
+
+pub While: While = {
+    "while" "(" <e:Expression> ")" "{" <s:Statement*> "}" => While {
+        condition: e,
+        statements: s,
     },
 };
 
