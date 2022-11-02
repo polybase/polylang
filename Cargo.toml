@@ -23,6 +23,6 @@ console_error_panic_hook = "0.1.7"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 polylang_parser = { path = "./parser" }
-miden = { git = "https://github.com/maticnetwork/miden", branch = "next" }
-miden-processor = { git = "https://github.com/maticnetwork/miden", branch = "next" }
-miden-stdlib = { git = "https://github.com/maticnetwork/miden", branch = "next" }
+miden = { git = "https://github.com/maticnetwork/miden", rev = "cd0608eae4137493619717f124bf5ca404c28a2b" }
+miden-processor = { git = "https://github.com/maticnetwork/miden", rev = "cd0608eae4137493619717f124bf5ca404c28a2b" }
+miden-stdlib = { git = "https://github.com/maticnetwork/miden", rev = "cd0608eae4137493619717f124bf5ca404c28a2b" }
