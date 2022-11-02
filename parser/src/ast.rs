@@ -85,6 +85,7 @@ pub enum Order {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Statement {
+    Break,
     If(If),
     While(While),
     Return(Expression),
