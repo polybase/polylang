@@ -1,5 +1,4 @@
 mod bindings;
-mod interpreter;
 mod js;
 mod validation;
 
@@ -87,61 +86,6 @@ fn parse(input: &str) -> Result<ast::Program, Error> {
 
 fn parse_out_json(input: &str) -> String {
     serde_json::to_string(&parse(input)).unwrap()
-}
-
-fn interpret(
-    program: &str,
-    contract_name: &str,
-    func: &str,
-    args: HashMap<String, Rc<RefCell<interpreter::Object>>>,
-) -> Result<
-    (
-        interpreter::Object,
-        HashMap<String, Rc<RefCell<interpreter::Object>>>,
-    ),
-    Error,
-> {
-    let program = parse(program)?;
-    let mut interpreter = interpreter::Interpreter::new();
-
-    let contract = program
-        .nodes
-        .into_iter()
-        .find_map(|item| {
-            if let ast::RootNode::Contract(c) = item {
-                if c.name == contract_name {
-                    Some(c)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        })
-        .ok_or(Error {
-            message: "contract not found".to_string(),
-        })?;
-
-    interpreter.load(contract).map_err(|e| Error {
-        message: e.to_string(),
-    })?;
-
-    let (result, vars) = interpreter
-        .call(contract_name, func, args)
-        .map_err(|e| Error {
-            message: e.to_string(),
-        })?;
-
-    Ok((result, vars))
-}
-
-fn interpret_out_json(
-    program: &str,
-    contract_name: &str,
-    func: &str,
-    args: HashMap<String, Rc<RefCell<interpreter::Object>>>,
-) -> String {
-    serde_json::to_string(&interpret(program, contract_name, func, args)).unwrap()
 }
 
 fn validate_set(contract_ast_json: &str, data_json: &str) -> Result<(), Error> {
