@@ -23,13 +23,6 @@ pub fn parse(input: &str) -> String {
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
-pub fn interpret(program: &str, contract_name: &str, func: &str, args: &str) -> String {
-    let args = serde_json::from_str(args).unwrap();
-    crate::interpret_out_json(program, contract_name, func, args)
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
 pub fn validate_set(ast_json: &str, data_json: &str) -> String {
     crate::validate_set_out_json(ast_json, data_json)
 }
@@ -47,31 +40,6 @@ pub extern "C" fn parse(input: *const c_char) -> *mut c_char {
     let input = input.to_str().unwrap();
 
     let output = crate::parse_out_json(input);
-    let output = std::ffi::CString::new(output).unwrap();
-    output.into_raw()
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[no_mangle]
-pub extern "C" fn interpret(
-    program: *const c_char,
-    contract_name: *const c_char,
-    func: *const c_char,
-    args: *const c_char,
-) -> *mut c_char {
-    let program = unsafe { std::ffi::CStr::from_ptr(program) };
-    let program = program.to_str().unwrap();
-
-    let contract_name = unsafe { std::ffi::CStr::from_ptr(contract_name) };
-    let contract_name = contract_name.to_str().unwrap();
-
-    let func = unsafe { std::ffi::CStr::from_ptr(func) };
-    let func = func.to_str().unwrap();
-
-    let args = unsafe { std::ffi::CStr::from_ptr(args) };
-    let args = serde_json::from_str(args.to_str().unwrap()).unwrap();
-
-    let output = crate::interpret_out_json(program, contract_name, func, args);
     let output = std::ffi::CString::new(output).unwrap();
     output.into_raw()
 }
@@ -100,4 +68,3 @@ pub extern "C" fn generate_js_contract(contract_ast_json: *const c_char) -> *mut
     let output = std::ffi::CString::new(output).unwrap();
     output.into_raw()
 }
-

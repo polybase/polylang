@@ -85,10 +85,13 @@ pub enum Order {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Statement {
+    Break,
     If(If),
+    While(While),
     Return(Expression),
     Expression(Expression),
     Throw(Expression),
+    Let(String, Expression),
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -131,6 +134,12 @@ pub struct If {
     pub condition: Expression,
     pub then_statements: Vec<Statement>,
     pub else_statements: Vec<Statement>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct While {
+    pub condition: Expression,
+    pub statements: Vec<Statement>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
