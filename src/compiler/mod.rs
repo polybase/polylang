@@ -1,4 +1,6 @@
+mod boolean;
 mod encoder;
+mod string;
 mod uint32;
 mod uint64;
 
@@ -6,8 +8,16 @@ use std::{collections::HashMap, ops::Deref};
 
 use crate::ast::{self, Expression, Statement};
 
+macro_rules! comment {
+    ($compiler:expr, $($arg:tt)*) => {
+        #[cfg(debug_assertions)]
+        $compiler.comment(format!($($arg)*));
+    };
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum PrimitiveType {
+    Boolean,
     UInt32,
     UInt64,
 }
@@ -15,6 +25,7 @@ enum PrimitiveType {
 impl PrimitiveType {
     fn miden_width(&self) -> u32 {
         match self {
+            PrimitiveType::Boolean => boolean::WIDTH,
             PrimitiveType::UInt32 => uint32::WIDTH,
             PrimitiveType::UInt64 => uint64::WIDTH,
         }
@@ -30,6 +41,7 @@ struct Struct {
 #[derive(Clone, Debug, PartialEq)]
 enum Type {
     PrimitiveType(PrimitiveType),
+    String,
     Struct(Struct),
 }
 
@@ -37,6 +49,7 @@ impl Type {
     fn miden_width(&self) -> u32 {
         match self {
             Type::PrimitiveType(pt) => pt.miden_width(),
+            Type::String => string::WIDTH,
             Type::Struct(struct_) => struct_.fields.iter().map(|(_, t)| t.miden_width()).sum(),
         }
     }
@@ -82,10 +95,25 @@ struct Contract<'ast> {
     functions: Vec<(String, &'ast ast::Function)>,
 }
 
+#[derive(Clone)]
+enum Function<'ast> {
+    AST(&'ast ast::Function),
+    Builtin(Box<&'static dyn Fn(&mut Compiler, &[Symbol]) -> Symbol>),
+}
+
+impl std::fmt::Debug for Function<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Function::AST(ast) => write!(f, "Function::AST({:?})", ast),
+            Function::Builtin(_) => write!(f, "Function::Builtin"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct Scope<'ast> {
     symbols: Vec<(String, Symbol)>,
-    functions: Vec<(String, &'ast ast::Function)>,
+    functions: Vec<(String, Function<'ast>)>,
     contracts: Vec<(String, Contract<'ast>)>,
 }
 
@@ -118,16 +146,16 @@ impl<'ast> Scope<'ast> {
             .map(|(_, s)| s)
     }
 
-    fn add_function(&mut self, name: String, function: &'ast ast::Function) {
+    fn add_function(&mut self, name: String, function: Function<'ast>) {
         self.functions.push((name, function));
     }
 
-    fn find_function(&self, name: &str) -> Option<&'ast ast::Function> {
+    fn find_function(&self, name: &str) -> Option<&Function<'ast>> {
         self.functions
             .iter()
             .rev()
             .find(|(n, _)| n == name)
-            .map(|(_, f)| *f)
+            .map(|(_, f)| f)
     }
 
     fn add_contract(&mut self, name: String, contract: Contract<'ast>) {
@@ -173,7 +201,9 @@ struct Memory {
 impl Memory {
     fn new() -> Self {
         Memory {
-            static_alloc_ptr: 1,
+            // 0 is reserved for the null pointer
+            // 1, 2 is reserved for the error string
+            static_alloc_ptr: 3,
         }
     }
 
@@ -230,12 +260,20 @@ impl<'ast, 'b> Compiler<'ast, 'b> {
             memory,
         }
     }
+
+    fn comment(&mut self, comment: String) {
+        self.instructions
+            .push(encoder::Instruction::Comment(comment));
+    }
 }
 
 fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope) -> Symbol {
-    match expr {
+    comment!(compiler, "Compiling expression {expr:?}");
+
+    let symbol = match expr {
         Expression::Ident(id) => scope.find_symbol(id).unwrap().clone(),
         Expression::Primitive(ast::Primitive::Number(n)) => uint32::new(compiler, *n as u32),
+        Expression::Primitive(ast::Primitive::String(s)) => string::new(compiler, s),
         Expression::Add(a, b) => {
             let a = compile_expression(a, compiler, scope);
             let b = compile_expression(b, compiler, scope);
@@ -248,6 +286,12 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             compile_sub(compiler, &a, &b)
         }
+        Expression::Equal(a, b) => {
+            let a = compile_expression(a, compiler, scope);
+            let b = compile_expression(b, compiler, scope);
+
+            compile_eq(compiler, &a, &b)
+        }
         Expression::Call(func, args) => {
             let func_name = match func.deref() {
                 Expression::Ident(id) => id,
@@ -259,7 +303,12 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
                 args_symbols.push(compile_expression(arg, compiler, scope));
             }
 
-            compile_function_call(func, compiler, &mut scope.clone(), &args_symbols)
+            match func {
+                Function::AST(a) => {
+                    compile_ast_function_call(a, compiler, &mut scope.clone(), &args_symbols)
+                }
+                Function::Builtin(f) => f(compiler, &args_symbols),
+            }
         }
         Expression::Assign(a, b) => {
             let a = compile_expression(a, compiler, scope);
@@ -283,8 +332,21 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             struct_field(&a, b).unwrap()
         }
+        Expression::GreaterThanOrEqual(a, b) => {
+            let a = compile_expression(a, compiler, scope);
+            let b = compile_expression(b, compiler, scope);
+
+            compile_gte(compiler, &a, &b)
+        }
         e => unimplemented!("{:?}", e),
-    }
+    };
+
+    comment!(
+        compiler,
+        "Compiled expression {expr:?} to symbol {symbol:?}",
+    );
+
+    symbol
 }
 
 fn compile_statement(
@@ -321,7 +383,7 @@ fn compile_statement(
             let condition_symbol = compile_expression(condition, &mut condition_compiler, scope);
             assert_eq!(
                 condition_symbol.type_,
-                Type::PrimitiveType(PrimitiveType::UInt32)
+                Type::PrimitiveType(PrimitiveType::Boolean)
             );
             condition_compiler.memory.read(
                 &mut condition_compiler.instructions,
@@ -355,7 +417,7 @@ fn compile_statement(
     }
 }
 
-fn compile_function_call(
+fn compile_ast_function_call(
     function: &ast::Function,
     compiler: &mut Compiler,
     scope: &mut Scope,
@@ -447,8 +509,103 @@ fn compile_sub(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     }
 }
 
+fn compile_eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    match (&a.type_, &b.type_) {
+        (
+            Type::PrimitiveType(PrimitiveType::UInt32),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => uint32::eq(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt64),
+        ) => uint64::eq(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => {
+            let b_u64 = compiler
+                .memory
+                .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt64));
+            cast(compiler, b, &b_u64);
+
+            uint64::eq(compiler, a, &b_u64)
+        }
+        e => unimplemented!("{:?}", e),
+    }
+}
+
+fn compile_gte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    match (&a.type_, &b.type_) {
+        (
+            Type::PrimitiveType(PrimitiveType::UInt32),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => uint32::gte(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt64),
+        ) => uint64::gte(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => {
+            let b_u64 = compiler
+                .memory
+                .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt64));
+            cast(compiler, b, &b_u64);
+
+            uint64::gte(compiler, a, &b_u64)
+        }
+        e => unimplemented!("{:?}", e),
+    }
+}
+
 fn prepare_scope(program: &ast::Program) -> Scope {
     let mut scope = Scope::new();
+
+    scope.add_function(
+        "assert".to_string(),
+        Function::Builtin(Box::new(&|compiler, args| {
+            let condition = args.get(0).unwrap();
+            let message = args.get(1).unwrap();
+
+            assert_eq!(condition.type_, Type::PrimitiveType(PrimitiveType::Boolean));
+            assert_eq!(message.type_, Type::String);
+
+            let mut failure_branch = vec![];
+            let mut failure_compiler = Compiler::new(&mut failure_branch, compiler.memory);
+
+            let str_len = string::length(&mut failure_compiler, message);
+            let str_data_ptr = string::data_ptr(&mut failure_compiler, message);
+
+            failure_compiler.memory.write(
+                &mut failure_compiler.instructions,
+                1,
+                &vec![
+                    ValueSource::Memory(str_len.memory_addr),
+                    ValueSource::Memory(str_data_ptr.memory_addr),
+                ],
+            );
+
+            failure_compiler
+                .instructions
+                .push(encoder::Instruction::Push(0));
+            failure_compiler
+                .instructions
+                .push(encoder::Instruction::Assert);
+
+            compiler.instructions.push(encoder::Instruction::If {
+                condition: vec![encoder::Instruction::MemLoad(Some(condition.memory_addr))],
+                then: vec![],
+                // fail on purpose with assert(0)
+                else_: failure_branch,
+            });
+
+            Symbol {
+                type_: Type::PrimitiveType(PrimitiveType::Boolean),
+                memory_addr: 0,
+            }
+        })),
+    );
 
     for node in &program.nodes {
         match node {
@@ -479,9 +636,9 @@ fn prepare_scope(program: &ast::Program) -> Scope {
 
                 scope.add_contract(contract.name.clone(), contract);
             }
-            ast::RootNode::Function(function) => {
-                scope.functions.push((function.name.clone(), function))
-            }
+            ast::RootNode::Function(function) => scope
+                .functions
+                .push((function.name.clone(), Function::AST(function))),
         }
     }
 
@@ -512,6 +669,7 @@ pub fn compile(
                     name.clone(),
                     match field {
                         Type::PrimitiveType(p) => p.clone(),
+                        Type::String => todo!(),
                         Type::Struct(_) => todo!(),
                     },
                 )
@@ -525,7 +683,11 @@ pub fn compile(
                 .find(|(name, _)| name == function_name)
                 .map(|(_, f)| *f)
         })
-        .or_else(|| scope.find_function(function_name))
+        .or_else(|| match scope.find_function(function_name) {
+            Some(Function::AST(f)) => Some(f),
+            Some(Function::Builtin(_)) => todo!(),
+            None => None,
+        })
         .unwrap();
 
     let mut instructions = vec![];
@@ -573,7 +735,7 @@ pub fn compile(
             })
             .collect::<Vec<_>>();
 
-        let result = compile_function_call(function, &mut compiler, &mut scope, &arg_symbols);
+        let result = compile_ast_function_call(function, &mut compiler, &mut scope, &arg_symbols);
         compiler.memory.read(
             &mut compiler.instructions,
             result.memory_addr,
@@ -639,7 +801,7 @@ mod test {
         let mut instructions = Vec::new();
         let mut memory = Memory::new();
         let mut compiler = Compiler::new(&mut instructions, &mut memory);
-        compile_function_call(&main, &mut compiler, &mut Scope::new(), &[]);
+        compile_ast_function_call(&main, &mut compiler, &mut Scope::new(), &[]);
 
         assert_eq!(
             compiler.instructions,

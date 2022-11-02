@@ -3,9 +3,14 @@ pub(crate) enum Instruction<'a> {
     Comment(String),       // # ...
     Drop,                  // drop
     Push(u32),             // push.1234
+    Assert,                // assert
+    Dup,                   // dup
     Add,                   // add
     U32CheckedAdd,         // u32checked_add
     U32CheckedSub,         // u32checked_sub
+    U32CheckedEq,          // u32checked_eq
+    U32CheckedLTE,         // u32checked_lte
+    U32CheckedGTE,         // u32checked_gte
     Exec(&'a str),         // exec.u64::checked_add
     MemStore(Option<u32>), // mem_store.0x1234
     MemLoad(Option<u32>),  // mem_load.0x1234
@@ -34,9 +39,14 @@ impl Instruction<'_> {
             Instruction::Comment(s) => write!(f, "# {}", s),
             Instruction::Drop => write!(f, "drop"),
             Instruction::Push(value) => write!(f, "push.{}", value),
+            Instruction::Assert => write!(f, "assert"),
+            Instruction::Dup => write!(f, "dup"),
             Instruction::Add => write!(f, "add"),
             Instruction::U32CheckedAdd => write!(f, "u32checked_add"),
             Instruction::U32CheckedSub => write!(f, "u32checked_sub"),
+            Instruction::U32CheckedEq => write!(f, "u32checked_eq"),
+            Instruction::U32CheckedLTE => write!(f, "u32checked_lte"),
+            Instruction::U32CheckedGTE => write!(f, "u32checked_gte"),
             Instruction::Exec(name) => write!(f, "exec.{}", name),
             Instruction::While { condition, body } => {
                 for instruction in condition {
