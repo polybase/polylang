@@ -61,6 +61,7 @@ pub struct Parameter {
 pub struct Function {
     pub name: String,
     pub parameters: Vec<Parameter>,
+    pub return_type: Option<Type>,
     pub statements: Vec<Statement>,
     pub statements_code: String,
 }

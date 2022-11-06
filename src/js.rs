@@ -6,16 +6,18 @@ pub struct JSCollection {
     code: String,
 }
 
-pub fn generate_js_collection (collection_ast: &ast::Collection) -> JSCollection {
+pub fn generate_js_collection(collection_ast: &ast::Collection) -> JSCollection {
     let fns = collection_ast
         .items
         .iter()
-        .filter_map(|item| 
-            if let ast::CollectionItem::Function(f) = item { 
-                let JSFunc{ name, code } = generate_js_function(&f);
+        .filter_map(|item| {
+            if let ast::CollectionItem::Function(f) = item {
+                let JSFunc { name, code } = generate_js_function(&f);
                 Some(format!("instance.{} = {}", &name, &code))
-            } 
-            else { None })
+            } else {
+                None
+            }
+        })
         .collect::<Vec<String>>()
         .join(";");
 
@@ -50,33 +52,39 @@ fn generate_js_function(func_ast: &ast::Function) -> JSFunc {
         name: func_ast.name.clone(),
         code: format!(
             "function {} ({}) {{\n{}\n}}",
-            func_ast.name, 
-            parameters,
-            func_ast.statements_code,
+            func_ast.name, parameters, func_ast.statements_code,
         ),
     }
 }
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_generate_js_function () {
-        let func_ast = ast::Function{ 
-            name: "HelloWorld".to_string(), 
+    fn test_generate_js_function() {
+        let func_ast = ast::Function {
+            name: "HelloWorld".to_string(),
             parameters: vec![
-                ast::Parameter{ name: "a".to_string(), type_: ast::ParameterType::String, required: true },
-                ast::Parameter{ name: "b".to_string(), type_: ast::ParameterType::Number, required: false },
+                ast::Parameter {
+                    name: "a".to_string(),
+                    type_: ast::ParameterType::String,
+                    required: true,
+                },
+                ast::Parameter {
+                    name: "b".to_string(),
+                    type_: ast::ParameterType::Number,
+                    required: false,
+                },
             ],
+            return_type: Some(ast::Type::String),
             statements: vec![],
             statements_code: "return a".to_string(),
         };
 
         assert_eq!(
             generate_js_function(&func_ast),
-            JSFunc{
+            JSFunc {
                 name: "HelloWorld".to_string(),
                 code: "function HelloWorld (a, b) {\nreturn a\n}".to_string(),
             }
@@ -84,34 +92,52 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_collection_function () {
-        let collection_ast = ast::Collection{
+    fn test_generate_collection_function() {
+        let collection_ast = ast::Collection {
             name: "CollectionName".to_string(),
             items: vec![
-                ast::CollectionItem::Field(ast::Field{
+                ast::CollectionItem::Field(ast::Field {
                     name: "abc".to_string(),
                     type_: ast::Type::String,
                     required: true,
                 }),
-                ast::CollectionItem::Function(ast::Function{
+                ast::CollectionItem::Function(ast::Function {
                     name: "Hello".to_string(),
                     parameters: vec![
-                        ast::Parameter{ name: "a".to_string(), type_: ast::ParameterType::String, required: true },
-                        ast::Parameter{ name: "b".to_string(), type_: ast::ParameterType::Number, required: false },
+                        ast::Parameter {
+                            name: "a".to_string(),
+                            type_: ast::ParameterType::String,
+                            required: true,
+                        },
+                        ast::Parameter {
+                            name: "b".to_string(),
+                            type_: ast::ParameterType::Number,
+                            required: false,
+                        },
                     ],
+                    return_type: Some(ast::Type::String),
                     statements: vec![],
                     statements_code: "return a".to_string(),
                 }),
-                ast::CollectionItem::Function(ast::Function{
+                ast::CollectionItem::Function(ast::Function {
                     name: "World".to_string(),
                     parameters: vec![
-                        ast::Parameter{ name: "c".to_string(), type_: ast::ParameterType::String, required: true },
-                        ast::Parameter{ name: "d".to_string(), type_: ast::ParameterType::Number, required: false },
+                        ast::Parameter {
+                            name: "c".to_string(),
+                            type_: ast::ParameterType::String,
+                            required: true,
+                        },
+                        ast::Parameter {
+                            name: "d".to_string(),
+                            type_: ast::ParameterType::Number,
+                            required: false,
+                        },
                     ],
+                    return_type: Some(ast::Type::String),
                     statements: vec![],
                     statements_code: "return c".to_string(),
-                })
-            ]
+                }),
+            ],
         };
 
         assert_eq!(
@@ -126,5 +152,4 @@ mod tests {
             }
         )
     }
-
 }
