@@ -211,12 +211,22 @@ lazy_static::lazy_static! {
             })),
         ));
 
-        builtins.push(("readAdviceU32".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("readAdviceUInt32".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
             assert_eq!(args.len(), 0);
 
             compiler.instructions.push(encoder::Instruction::AdvPush(1));
             // TODO: assert that the number is actually a u32
             let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+            compiler.memory.write(&mut compiler.instructions, symbol.memory_addr, &vec![ValueSource::Stack]);
+            symbol
+        }))));
+
+        builtins.push(("readAdviceBoolean".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
+            assert_eq!(args.len(), 0);
+
+            compiler.instructions.push(encoder::Instruction::AdvPush(1));
+            // TODO: assert that the number is actually a boolean
+            let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
             compiler.memory.write(&mut compiler.instructions, symbol.memory_addr, &vec![ValueSource::Stack]);
             symbol
         }))));
@@ -245,7 +255,7 @@ impl PrimitiveType {
 #[derive(Clone, Debug, PartialEq)]
 struct Struct {
     name: String,
-    fields: Vec<(String, PrimitiveType)>,
+    fields: Vec<(String, Type)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -281,7 +291,7 @@ fn struct_field(struct_symbol: &Symbol, field_name: &str) -> Option<Symbol> {
     for (name, field_type) in &struct_.fields {
         if name == field_name {
             return Some(Symbol {
-                type_: Type::PrimitiveType(*field_type),
+                type_: field_type.clone(),
                 memory_addr: struct_symbol.memory_addr + offset,
             });
         }
@@ -521,7 +531,7 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
     comment!(compiler, "Compiling expression {expr:?}");
 
     let symbol = match expr {
-        Expression::Ident(id) => dbg!(scope).find_symbol(dbg!(id)).unwrap().clone(),
+        Expression::Ident(id) => scope.find_symbol(id).unwrap().clone(),
         Expression::Primitive(ast::Primitive::Number(n)) => uint32::new(compiler, *n as u32),
         Expression::Primitive(ast::Primitive::String(s)) => string::new(compiler, s),
         Expression::Add(a, b) => {
@@ -553,10 +563,7 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
                 args_symbols.push(compile_expression(arg, compiler, scope));
             }
 
-            match func {
-                Function::AST(a) => compile_ast_function_call(a, compiler, &args_symbols, None),
-                Function::Builtin(f) => f(compiler, &mut scope.deeper(), &args_symbols),
-            }
+            compile_function_call(compiler, func, &args_symbols, None)
         }
         Expression::Assign(a, b) => {
             let a = compile_expression(a, compiler, scope);
@@ -751,6 +758,18 @@ fn compile_ast_function_call(
     return_result
 }
 
+fn compile_function_call(
+    compiler: &mut Compiler,
+    function: &Function,
+    args: &[Symbol],
+    this: Option<Symbol>,
+) -> Symbol {
+    match function {
+        Function::AST(a) => compile_ast_function_call(a, compiler, args, this),
+        Function::Builtin(b) => b(compiler, &mut Scope::new(), args),
+    }
+}
+
 fn cast(compiler: &mut Compiler, from: &Symbol, to: &Symbol) {
     match (&from.type_, &to.type_) {
         (
@@ -897,6 +916,93 @@ fn dynamic_alloc(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) ->
     addr
 }
 
+fn read_struct_from_advice_tape(
+    compiler: &mut Compiler,
+    struct_symbol: &Symbol,
+    struct_type: &Struct,
+) {
+    for (name, type_) in &struct_type.fields {
+        let symbol = match type_ {
+            Type::PrimitiveType(PrimitiveType::Boolean) => compile_function_call(
+                compiler,
+                BUILTINS_SCOPE.find_function("readAdviceBoolean").unwrap(),
+                &[],
+                None,
+            ),
+            Type::PrimitiveType(PrimitiveType::UInt32) => compile_function_call(
+                compiler,
+                BUILTINS_SCOPE.find_function("readAdviceUInt32").unwrap(),
+                &[],
+                None,
+            ),
+            Type::PrimitiveType(PrimitiveType::UInt64) => todo!(),
+            Type::String => compile_function_call(
+                compiler,
+                BUILTINS_SCOPE.find_function("readAdviceString").unwrap(),
+                &[],
+                None,
+            ),
+            _ => unimplemented!("{:?}", type_),
+        };
+
+        let sf = struct_field(struct_symbol, name).unwrap();
+        compiler.memory.read(
+            &mut compiler.instructions,
+            symbol.memory_addr,
+            symbol.type_.miden_width(),
+        );
+        compiler.memory.write(
+            &mut compiler.instructions,
+            sf.memory_addr,
+            &vec![ValueSource::Stack; symbol.type_.miden_width() as _],
+        );
+    }
+}
+
+fn read_contract_inputs(
+    compiler: &mut Compiler,
+    this_struct: Struct,
+    args: &[Type],
+) -> (Symbol, Vec<Symbol>) {
+    let this = compiler.memory.allocate_symbol(Type::Struct(this_struct));
+    let this_struct = if let Type::Struct(s) = &this.type_ {
+        s
+    } else {
+        unreachable!();
+    };
+
+    read_struct_from_advice_tape(compiler, &this, this_struct);
+
+    let mut args_symbols = Vec::new();
+    for arg in args {
+        let symbol = match arg {
+            Type::PrimitiveType(PrimitiveType::Boolean) => compile_function_call(
+                compiler,
+                BUILTINS_SCOPE.find_function("readAdviceBoolean").unwrap(),
+                &[],
+                None,
+            ),
+            Type::PrimitiveType(PrimitiveType::UInt32) => compile_function_call(
+                compiler,
+                BUILTINS_SCOPE.find_function("readAdviceUInt32").unwrap(),
+                &[],
+                None,
+            ),
+            Type::PrimitiveType(PrimitiveType::UInt64) => todo!(),
+            Type::Struct(struct_) => {
+                let symbol = compiler.memory.allocate_symbol(arg.clone());
+                read_struct_from_advice_tape(compiler, &symbol, struct_);
+                symbol
+            }
+            _ => unimplemented!(),
+        };
+
+        args_symbols.push(symbol);
+    }
+
+    (this, args_symbols)
+}
+
 fn prepare_scope(program: &ast::Program) -> Scope {
     let mut scope = Scope::new();
 
@@ -919,7 +1025,7 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                             contract.fields.push((
                                 f.name.clone(),
                                 match f.type_ {
-                                    ast::Type::String => todo!(),
+                                    ast::Type::String => Type::String,
                                     ast::Type::Number => Type::PrimitiveType(PrimitiveType::UInt32),
                                 },
                             ));
@@ -947,31 +1053,15 @@ pub enum CompileTimeArg {
     Record(HashMap<String, u32>),
 }
 
-pub fn compile(
-    program: ast::Program,
-    contract_name: Option<&str>,
-    function_name: &str,
-    args: &[CompileTimeArg],
-    this: Option<HashMap<String, u32>>,
-) -> String {
-    let mut scope = prepare_scope(&program);
-    let mut root_scope = scope.clone();
+pub fn compile(program: ast::Program, contract_name: Option<&str>, function_name: &str) -> String {
+    let scope = prepare_scope(&program);
     let contract = contract_name.map(|name| scope.find_contract(name).unwrap());
     let contract_struct = contract.map(|contract| Struct {
         name: contract.name.clone(),
         fields: contract
             .fields
             .iter()
-            .map(|(name, field)| {
-                (
-                    name.clone(),
-                    match field {
-                        Type::PrimitiveType(p) => p.clone(),
-                        Type::String => todo!(),
-                        Type::Struct(_) => todo!(),
-                    },
-                )
-            })
+            .map(|(name, field)| (name.clone(), field.clone()))
             .collect(),
     });
     let function = contract
@@ -992,48 +1082,27 @@ pub fn compile(
     let mut memory = Memory::new();
 
     {
-        let mut compiler = Compiler::new(&mut instructions, &mut memory, &mut root_scope);
+        let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
 
-        let this_symbol = contract.map(|contract| {
-            let this_symbol = new_struct(&mut compiler, contract_struct.as_ref().unwrap().clone());
+        let (this_symbol, arg_symbols) = read_contract_inputs(
+            &mut compiler,
+            contract_struct.clone().unwrap_or(Struct {
+                name: "empty".to_string(),
+                fields: vec![],
+            }),
+            &function
+                .parameters
+                .iter()
+                .map(|p| match p.type_ {
+                    ast::ParameterType::String => todo!(),
+                    ast::ParameterType::Number => Type::PrimitiveType(PrimitiveType::UInt32),
+                    ast::ParameterType::Record => Type::Struct(contract_struct.clone().unwrap()),
+                })
+                .collect::<Vec<_>>(),
+        );
 
-            if let Some(this) = this {
-                for (field, value) in this {
-                    let field_symbol = struct_field(&this_symbol, &field).unwrap();
-                    compiler.memory.write(
-                        compiler.instructions,
-                        field_symbol.memory_addr,
-                        &[ValueSource::Immediate(value)],
-                    );
-                }
-            }
-
-            this_symbol
-        });
-
-        let arg_symbols = args
-            .iter()
-            .map(|arg| match arg {
-                CompileTimeArg::U32(n) => uint32::new(&mut compiler, *n),
-                CompileTimeArg::Record(sv) => {
-                    let struct_ = contract_struct.as_ref().unwrap().clone();
-
-                    let symbol = new_struct(&mut compiler, struct_);
-                    for (field_name, value) in sv {
-                        let field_symbol = struct_field(&symbol, field_name).unwrap();
-                        compiler.memory.write(
-                            &mut compiler.instructions,
-                            field_symbol.memory_addr,
-                            &[ValueSource::Immediate(*value)],
-                        );
-                    }
-
-                    symbol
-                }
-            })
-            .collect::<Vec<_>>();
-
-        let result = compile_ast_function_call(function, &mut compiler, &arg_symbols, this_symbol);
+        let result =
+            compile_ast_function_call(function, &mut compiler, &arg_symbols, Some(this_symbol));
         compiler.memory.read(
             &mut compiler.instructions,
             result.memory_addr,
