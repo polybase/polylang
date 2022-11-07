@@ -49,13 +49,8 @@ func Parse(input string) (json.RawMessage, error) {
 	return parseResult[json.RawMessage](C.GoString(output))
 }
 
-func Interpret(program, contract, funcName, args string) (json.RawMessage, error) {
-	output := C.interpret(C.CString(program), C.CString(contract), C.CString(funcName), C.CString(args))
-	return parseResult[json.RawMessage](C.GoString(output))
-}
-
-func ValidateSet(contractAST, data string) error {
-	output := C.validate_set(C.CString(contractAST), C.CString(data))
+func ValidateSet(collectionAST, data string) error {
+	output := C.validate_set(C.CString(collectionAST), C.CString(data))
 	if _, err := parseResult[json.RawMessage](C.GoString(output)); err != nil {
 		return err
 	}
@@ -63,7 +58,7 @@ func ValidateSet(contractAST, data string) error {
 	return nil
 }
 
-func GenerateJSContract(contractAST string) (EvalInput, error) {
-	output := C.generate_js_contract(C.CString(contractAST))
+func GenerateJSCollection(collectionAST string) (EvalInput, error) {
+	output := C.generate_js_collection(C.CString(collectionAST))
 	return parseResult[EvalInput](C.GoString(output))
 }

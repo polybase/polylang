@@ -888,7 +888,7 @@ fn prepare_scope(program: &ast::Program) -> Scope {
 
     for node in &program.nodes {
         match node {
-            ast::RootNode::Contract(c) => {
+            ast::RootNode::Collection(c) => {
                 let mut contract = Contract {
                     name: c.name.clone(),
                     functions: vec![],
@@ -897,7 +897,7 @@ fn prepare_scope(program: &ast::Program) -> Scope {
 
                 for item in &c.items {
                     match item {
-                        ast::ContractItem::Field(f) => {
+                        ast::CollectionItem::Field(f) => {
                             contract.fields.push((
                                 f.name.clone(),
                                 match f.type_ {
@@ -906,10 +906,10 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                                 },
                             ));
                         }
-                        ast::ContractItem::Function(f) => {
-                            contract.functions.push((f.name.clone(), f));
+                        ast::CollectionItem::Function(f) => {
+                            contract.functions.push((f.name.clone(), &f));
                         }
-                        ast::ContractItem::Index(_) => todo!(),
+                        ast::CollectionItem::Index(_) => todo!(),
                     }
                 }
 
@@ -1079,6 +1079,7 @@ mod test {
                 Box::new(ast::Expression::Primitive(ast::Primitive::Number(2.0))),
             ))],
             statements_code: String::new(),
+            return_type: None,
         };
 
         let mut instructions = Vec::new();

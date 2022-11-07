@@ -200,24 +200,27 @@ pub Parameter: Parameter = {
 };
 
 pub RootFunction: Function = {
-    "function" <i: Ident> "(" <pl:ParameterList> ")" "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+    "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
         parameters: pl,
+        return_type: return_type.map(|(_, t)| t),
         statements: s,
         statements_code: input[l..r].to_string(),
     }
 };
 
 pub Function: Function = {
-    "function" <i: Ident> "(" <pl:ParameterList> ")" "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+    "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
         parameters: pl,
+        return_type: return_type.map(|(_, t)| t),
         statements: s,
         statements_code: input[l..r].to_string(),
     },
-    <i: Ident> "(" <pl:ParameterList> ")" "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+    <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
         parameters: pl,
+        return_type: return_type.map(|(_, t)| t),
         statements: s,
         statements_code: input[l..r].to_string(),
     },
@@ -274,25 +277,21 @@ pub IndexFields: Vec<IndexField> = {
     => vec![],
 };
 
-pub ContractItem: ContractItem = {
-    <f:Field> ";" => ContractItem::Field(f),
-    <i:Index> ";" => ContractItem::Index(i),
-    <f:Function> => ContractItem::Function(f),
+pub CollectionItem: CollectionItem = {
+    <f:Field> ";" => CollectionItem::Field(f),
+    <i:Index> ";" => CollectionItem::Index(i),
+    <f:Function> => CollectionItem::Function(f),
 };
 
-pub Contract: Contract = {
-    "contract" <name:Ident> "{" <items:ContractItem*> "}" => Contract {
-        name: name,
-        items: items,
-    },
-    "collection" <name:Ident> "{" <items:ContractItem*> "}" => Contract {
+pub Collection: Collection = {
+    "collection" <name:Ident> "{" <items:CollectionItem*> "}" => Collection {
         name: name,
         items: items,
     },
 };
 
 pub RootNode: RootNode = {
-    <c:Contract> => RootNode::Contract(c),
+    <c:Collection> => RootNode::Collection(c),
     <f:RootFunction> => RootNode::Function(f),
 };
 

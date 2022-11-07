@@ -29,8 +29,8 @@ pub fn validate_set(ast_json: &str, data_json: &str) -> String {
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
-pub fn generate_js_contract(contract_ast_json: &str) -> String {
-    crate::generate_js_contract_out_json(contract_ast_json)
+pub fn generate_js_collection(collection_ast_json: &str) -> String {
+    crate::generate_js_collection_out_json(collection_ast_json)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -60,11 +60,11 @@ pub extern "C" fn validate_set(ast_json: *const c_char, data_json: *const c_char
 
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-pub extern "C" fn generate_js_contract(contract_ast_json: *const c_char) -> *mut c_char {
-    let contract_ast_json = unsafe { std::ffi::CStr::from_ptr(contract_ast_json) };
-    let contract_ast_json = contract_ast_json.to_str().unwrap();
+pub extern "C" fn generate_js_collection(collection_ast_json: *const c_char) -> *mut c_char {
+    let collection_ast_json = unsafe { std::ffi::CStr::from_ptr(collection_ast_json) };
+    let collection_ast_json = collection_ast_json.to_str().unwrap();
 
-    let output = crate::generate_js_contract_out_json(contract_ast_json);
+    let output = crate::generate_js_collection_out_json(collection_ast_json);
     let output = std::ffi::CString::new(output).unwrap();
     output.into_raw()
 }

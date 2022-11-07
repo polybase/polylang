@@ -5,16 +5,16 @@ type Program struct {
 }
 
 type RootNode struct {
-	Contract *Contract
-	Function *Function
+	Collection *Collection
+	Function   *Function
 }
 
-type Contract struct {
-	Name  string         `json:"name"`
-	Items []ContractItem `json:"items"`
+type Collection struct {
+	Name  string           `json:"name"`
+	Items []CollectionItem `json:"items"`
 }
 
-type ContractItem struct {
+type CollectionItem struct {
 	Field    *Field    `json:"Field,omitempty"`
 	Function *Function `json:"Function,omitempty"`
 	Index    *Index    `json:"Index,omitempty"`
@@ -41,6 +41,7 @@ type FieldDecorator struct {
 type Function struct {
 	Name           string        `json:"name"`
 	Parameters     []Parameter   `json:"parameters"`
+	ReturnType     *Type         `json:"return_type"`
 	Statements     []interface{} `json:"statements"`
 	StatementsCode string        `json:"statements_code"`
 }
