@@ -16,6 +16,7 @@ macro_rules! comment {
 }
 
 lazy_static::lazy_static! {
+    // TODO: rewrite this in raw instructions for better performance
     static ref READ_ADVICE_INTO_STRING: ast::Function = crate::polylang::FunctionParser::new().parse(r#"
         function readAdviceIntoString(length: number, dataPtr: number): number {
             if (length == 0) return 0;
