@@ -158,9 +158,6 @@ lazy_static::lazy_static! {
         builtins.push((
             "assert".to_string(),
             Function::Builtin(Box::new(&|compiler, _, args| {
-                let mut scope = Scope::new();
-                scope.parent = Some(&BUILTINS_SCOPE);
-
                 let condition = args.get(0).unwrap();
                 let message = args.get(1).unwrap();
 
@@ -208,11 +205,21 @@ lazy_static::lazy_static! {
             Function::Builtin(Box::new(&|compiler, _, args| {
                 let old_root_scope = compiler.root_scope;
                 compiler.root_scope = &BUILTINS_SCOPE;
-                let result = compile_ast_function_call(&READ_ADVICE_STRING, compiler, args);
+                let result = compile_ast_function_call(&READ_ADVICE_STRING, compiler, args, None);
                 compiler.root_scope = old_root_scope;
                 result
             })),
         ));
+
+        builtins.push(("readAdviceU32".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
+            assert_eq!(args.len(), 0);
+
+            compiler.instructions.push(encoder::Instruction::AdvPush(1));
+            // TODO: assert that the number is actually a u32
+            let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+            compiler.memory.write(&mut compiler.instructions, symbol.memory_addr, &vec![ValueSource::Stack]);
+            symbol
+        }))));
 
         Box::leak(Box::new(builtins))
     };
@@ -514,7 +521,7 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
     comment!(compiler, "Compiling expression {expr:?}");
 
     let symbol = match expr {
-        Expression::Ident(id) => scope.find_symbol(id).unwrap().clone(),
+        Expression::Ident(id) => dbg!(scope).find_symbol(dbg!(id)).unwrap().clone(),
         Expression::Primitive(ast::Primitive::Number(n)) => uint32::new(compiler, *n as u32),
         Expression::Primitive(ast::Primitive::String(s)) => string::new(compiler, s),
         Expression::Add(a, b) => {
@@ -547,7 +554,7 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
             }
 
             match func {
-                Function::AST(a) => compile_ast_function_call(a, compiler, &args_symbols),
+                Function::AST(a) => compile_ast_function_call(a, compiler, &args_symbols, None),
                 Function::Builtin(f) => f(compiler, &mut scope.deeper(), &args_symbols),
             }
         }
@@ -706,6 +713,7 @@ fn compile_ast_function_call(
     function: &ast::Function,
     compiler: &mut Compiler,
     args: &[Symbol],
+    this: Option<Symbol>,
 ) -> Symbol {
     let mut function_instructions = vec![];
     let mut function_compiler = Compiler::new(
@@ -716,6 +724,10 @@ fn compile_ast_function_call(
 
     let scope = &mut Scope::new();
     scope.parent = Some(compiler.root_scope);
+
+    if let Some(this) = this {
+        scope.add_symbol("this".to_string(), this);
+    }
 
     let mut return_result = function_compiler
         .memory
@@ -982,7 +994,7 @@ pub fn compile(
     {
         let mut compiler = Compiler::new(&mut instructions, &mut memory, &mut root_scope);
 
-        if let Some(contract) = contract {
+        let this_symbol = contract.map(|contract| {
             let this_symbol = new_struct(&mut compiler, contract_struct.as_ref().unwrap().clone());
 
             if let Some(this) = this {
@@ -996,8 +1008,8 @@ pub fn compile(
                 }
             }
 
-            scope.add_symbol("this".to_string(), this_symbol);
-        }
+            this_symbol
+        });
 
         let arg_symbols = args
             .iter()
@@ -1021,7 +1033,7 @@ pub fn compile(
             })
             .collect::<Vec<_>>();
 
-        let result = compile_ast_function_call(function, &mut compiler, &arg_symbols);
+        let result = compile_ast_function_call(function, &mut compiler, &arg_symbols, this_symbol);
         compiler.memory.read(
             &mut compiler.instructions,
             result.memory_addr,
@@ -1056,11 +1068,10 @@ pub fn compile(
     let mut miden_code = String::new();
     miden_code.push_str("use.std::math::u64\n");
     miden_code.push_str("begin\n");
-    miden_code.push_str("push.");
+    miden_code.push_str("  push.");
     miden_code.push_str(&memory.static_alloc_ptr.to_string());
-    miden_code.push_str("\nmem_store.3\n"); // dynamic allocation pointer
+    miden_code.push_str("\n  mem_store.3\n  drop\n"); // dynamic allocation pointer
     for instruction in instructions {
-        miden_code.push_str("  ");
         instruction
             .encode(unsafe { miden_code.as_mut_vec() }, 1)
             .unwrap();
