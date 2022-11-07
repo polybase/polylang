@@ -17,7 +17,7 @@ macro_rules! comment {
 
 lazy_static::lazy_static! {
     static ref READ_ADVICE_INTO_STRING: ast::Function = crate::polylang::FunctionParser::new().parse(r#"
-        function readAdviceIntoString(length: number, dataPtr: number) {
+        function readAdviceIntoString(length: number, dataPtr: number): number {
             if (length == 0) return 0;
             let i = 0;
             let y = length - 1;
@@ -25,10 +25,12 @@ lazy_static::lazy_static! {
                 writeMemory(dataPtr + i, readAdvice());
                 i = i + 1;
             }
+
+            return length;
         }
     "#).unwrap();
     static ref READ_ADVICE_STRING: ast::Function = crate::polylang::FunctionParser::new().parse(r#"
-        function readAdviceString() {
+        function readAdviceString(): string {
             let length = readAdvice();
             let dataPtr = dynamicAlloc(length);
             readAdviceIntoString(length, dataPtr);
@@ -717,7 +719,11 @@ fn compile_ast_function_call(
 
     let mut return_result = function_compiler
         .memory
-        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+        .allocate_symbol(match function.return_type {
+            None => Type::PrimitiveType(PrimitiveType::Boolean),
+            Some(ast::Type::Number) => Type::PrimitiveType(PrimitiveType::UInt32),
+            Some(ast::Type::String) => Type::String,
+        });
     for (arg, param) in args.iter().zip(function.parameters.iter()) {
         scope.add_symbol(param.name.clone(), arg.clone());
     }
