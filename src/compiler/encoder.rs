@@ -12,8 +12,9 @@ pub(crate) enum Instruction<'a> {
     U32CheckedLTE,         // u32checked_lte
     U32CheckedGTE,         // u32checked_gte
     Exec(&'a str),         // exec.u64::checked_add
-    MemStore(Option<u32>), // mem_store.0x1234
-    MemLoad(Option<u32>),  // mem_load.0x1234
+    MemStore(Option<u32>), // mem_store.1234
+    MemLoad(Option<u32>),  // mem_load.1234
+    AdvPush(u32),          // adv_push.1234
     While {
         condition: Vec<Instruction<'a>>,
         body: Vec<Instruction<'a>>,
@@ -34,84 +35,90 @@ pub(crate) enum AbstractInstruction<'a> {
 }
 
 impl Instruction<'_> {
-    pub(crate) fn encode(&self, f: &mut impl std::io::Write) -> std::io::Result<()> {
+    pub(crate) fn encode(&self, f: &mut impl std::io::Write, depth: usize) -> std::io::Result<()> {
+        // write_indent wraps write! but first writes depth*2 spaces
+        macro_rules! write_indent {
+            ($($arg:tt)*) => {{
+                for _ in 0..depth {
+                    f.write(b"  ")?;
+                }
+
+                write!($($arg)*)?
+            }}
+        }
+
         match self {
-            Instruction::Comment(s) => write!(f, "# {}", s),
-            Instruction::Drop => write!(f, "drop"),
-            Instruction::Push(value) => write!(f, "push.{}", value),
-            Instruction::Assert => write!(f, "assert"),
-            Instruction::Dup => write!(f, "dup"),
-            Instruction::Add => write!(f, "add"),
-            Instruction::U32CheckedAdd => write!(f, "u32checked_add"),
-            Instruction::U32CheckedSub => write!(f, "u32checked_sub"),
-            Instruction::U32CheckedEq => write!(f, "u32checked_eq"),
-            Instruction::U32CheckedLTE => write!(f, "u32checked_lte"),
-            Instruction::U32CheckedGTE => write!(f, "u32checked_gte"),
-            Instruction::Exec(name) => write!(f, "exec.{}", name),
+            Instruction::Comment(s) => write_indent!(f, "# {}", s),
+            Instruction::Drop => write_indent!(f, "drop"),
+            Instruction::Push(value) => write_indent!(f, "push.{}", value),
+            Instruction::Assert => write_indent!(f, "assert"),
+            Instruction::Dup => write_indent!(f, "dup"),
+            Instruction::Add => write_indent!(f, "add"),
+            Instruction::U32CheckedAdd => write_indent!(f, "u32checked_add"),
+            Instruction::U32CheckedSub => write_indent!(f, "u32checked_sub"),
+            Instruction::U32CheckedEq => write_indent!(f, "u32checked_eq"),
+            Instruction::U32CheckedLTE => write_indent!(f, "u32checked_lte"),
+            Instruction::U32CheckedGTE => write_indent!(f, "u32checked_gte"),
+            Instruction::Exec(name) => write_indent!(f, "exec.{}", name),
             Instruction::While { condition, body } => {
                 for instruction in condition {
-                    instruction.encode(f)?;
+                    instruction.encode(f, depth)?;
                     f.write(b"\n")?;
                 }
-                write!(f, "while.true")?;
+                write_indent!(f, "while.true");
                 f.write(b"\n")?;
                 for instruction in body {
-                    instruction.encode(f)?;
+                    instruction.encode(f, depth + 1)?;
                     f.write(b"\n")?;
                 }
                 for instruction in condition {
-                    instruction.encode(f)?;
+                    instruction.encode(f, depth + 1)?;
                     f.write(b"\n")?;
                 }
-                write!(f, "end")
+                write_indent!(f, "end");
             }
-            Instruction::Abstract(_) => {
-                unreachable!("abstract instructions should be unabstracted before encoding")
-            }
-            Instruction::MemStore(Some(addr)) => {
-                write!(f, "mem_store.{}", addr)
-            }
-            Instruction::MemStore(None) => {
-                write!(f, "mem_store")
-            }
-            Instruction::MemLoad(Some(addr)) => {
-                write!(f, "mem_load.{}", addr)
-            }
-            Instruction::MemLoad(None) => {
-                write!(f, "mem_load")
-            }
+            Instruction::MemStore(Some(addr)) => write_indent!(f, "mem_store.{}", addr),
+            Instruction::MemStore(None) => write_indent!(f, "mem_store"),
+            Instruction::MemLoad(Some(addr)) => write_indent!(f, "mem_load.{}", addr),
+            Instruction::MemLoad(None) => write_indent!(f, "mem_load"),
+            Instruction::AdvPush(addr) => write_indent!(f, "adv_push.{}", addr),
             Instruction::If {
                 condition,
                 then,
                 else_,
             } => {
                 for instruction in condition {
-                    instruction.encode(f)?;
+                    instruction.encode(f, depth)?;
                     f.write(b"\n")?;
                 }
 
-                write!(f, "if.true\n")?;
+                write_indent!(f, "if.true\n");
 
                 for instruction in then {
-                    instruction.encode(f)?;
+                    instruction.encode(f, depth + 1)?;
                     f.write(b"\n")?;
                 }
                 if then.len() == 0 {
-                    write!(f, "push.0\n")?;
-                    write!(f, "drop\n")?;
+                    write_indent!(f, "  push.0\n");
+                    write_indent!(f, "  drop\n");
                 }
 
                 if else_.len() > 0 {
-                    write!(f, "else\n")?;
+                    write_indent!(f, "else\n");
                     for instruction in else_ {
-                        instruction.encode(f)?;
+                        instruction.encode(f, depth + 1)?;
                         f.write(b"\n")?;
                     }
                 }
 
-                write!(f, "end")
+                write_indent!(f, "end");
             }
-        }
+            Instruction::Abstract(_) => {
+                unreachable!("abstract instructions should be unabstracted before encoding")
+            }
+        };
+
+        std::io::Result::Ok(())
     }
 }
 

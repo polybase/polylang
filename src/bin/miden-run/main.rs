@@ -13,7 +13,39 @@ const fn mont_red_cst(x: u128) -> u64 {
     r.wrapping_sub(0u32.wrapping_sub(c as u32) as u64)
 }
 
+struct Args {
+    advice_tape: Vec<u64>,
+}
+
+impl Args {
+    fn parse(args: std::env::Args) -> Result<Self, String> {
+        let mut args = args.skip(1);
+        let mut advice_tape = Vec::new();
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--advice-tape" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| format!("missing value for argument {}", arg))?;
+
+                    let values = value
+                        .split(',')
+                        .map(|s| s.parse::<u64>())
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(|e| format!("invalid value for argument {}: {}", arg, e))?;
+
+                    advice_tape.extend(values);
+                }
+                _ => return Err(format!("unknown argument: {}", arg)),
+            }
+        }
+        Ok(Self { advice_tape })
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args = Args::parse(std::env::args())?;
+
     let mut masm_code = String::new();
     std::io::stdin().read_to_string(&mut masm_code)?;
 
@@ -23,7 +55,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .compile(&masm_code)
         .expect("Failed to compile miden assembly");
 
-    let mut process = miden_processor::Process::new_debug(miden::ProgramInputs::none());
+    let mut process = miden_processor::Process::new_debug(
+        miden::ProgramInputs::new(&[], &args.advice_tape, vec![]).unwrap(),
+    );
     match process.execute(&program) {
         Ok(output) => {
             println!("Output: {:?}", output);
@@ -44,7 +78,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let str_data_ptr = get_mem_value(2).unwrap();
 
             if str_data_ptr == 0 {
-                return Err("Foreign (not from our language) assertion failed".into());
+                Err("Foreign (not from our language) assertion failed".into())
             } else {
                 let mut error_str_bytes = Vec::new();
                 for i in 0..str_len {
@@ -53,7 +87,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 let error_str = String::from_utf8(error_str_bytes).unwrap();
-                return Err(format!("Assertion failed: {}", error_str).into());
+                Err(format!("Assertion failed: {}", error_str).into())
             }
         }
         Err(e) => Err(format!("Execution error: {:?}", e).into()),

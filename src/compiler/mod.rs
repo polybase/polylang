@@ -15,6 +15,207 @@ macro_rules! comment {
     };
 }
 
+lazy_static::lazy_static! {
+    static ref READ_ADVICE_INTO_STRING: ast::Function = crate::polylang::FunctionParser::new().parse(r#"
+        function readAdviceIntoString(length: number, dataPtr: number) {
+            if (length == 0) return 0;
+            let i = 0;
+            let y = length - 1;
+            while (y >= i) {
+                writeMemory(dataPtr + i, readAdvice());
+                i = i + 1;
+            }
+        }
+    "#).unwrap();
+    static ref READ_ADVICE_STRING: ast::Function = crate::polylang::FunctionParser::new().parse(r#"
+        function readAdviceString() {
+            let length = readAdvice();
+            let dataPtr = dynamicAlloc(length);
+            readAdviceIntoString(length, dataPtr);
+            return unsafeToString(length, dataPtr);
+        }
+    "#).unwrap();
+    static ref BUILTINS_SCOPE: &'static Scope<'static, 'static> = {
+        let mut scope = Scope::new();
+
+        for function in HIDDEN_BUILTINS.iter() {
+            scope.add_function(function.0.clone(), function.1.clone());
+        }
+
+        for function in USABLE_BUILTINS.iter() {
+            scope.add_function(function.0.clone(), function.1.clone());
+        }
+
+        Box::leak(Box::new(scope))
+    };
+    static ref HIDDEN_BUILTINS: &'static [(String, Function<'static>)] = {
+        let mut builtins = Vec::new();
+
+        builtins.push((
+            "dynamicAlloc".to_string(),
+            Function::Builtin(Box::new(&dynamic_alloc)),
+        ));
+
+        builtins.push((
+            "writeMemory".to_string(),
+            Function::Builtin(Box::new(&|compiler, _, args| {
+                let address = args.get(0).unwrap();
+                let value = args.get(1).unwrap();
+
+                assert_eq!(address.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+                assert_eq!(value.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    value.memory_addr,
+                    value.type_.miden_width(),
+                );
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    address.memory_addr,
+                    address.type_.miden_width(),
+                );
+                compiler
+                    .instructions
+                    .push(encoder::Instruction::MemStore(None));
+
+                Symbol {
+                    type_: Type::PrimitiveType(PrimitiveType::UInt32),
+                    memory_addr: 0,
+                }
+            })),
+        ));
+
+        builtins.push((
+            "readAdvice".to_string(),
+            Function::Builtin(Box::new(&|compiler, _, args| {
+                let args: &[Symbol] = &[];
+                let symbol = compiler
+                    .memory
+                    .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+                compiler.instructions.push(encoder::Instruction::AdvPush(1));
+                compiler.memory.write(
+                    &mut compiler.instructions,
+                    symbol.memory_addr,
+                    &vec![ValueSource::Stack],
+                );
+
+                symbol
+            })),
+        ));
+
+        builtins.push((
+            "readAdviceIntoString".to_string(),
+            Function::AST(&READ_ADVICE_INTO_STRING),
+        ));
+
+
+        builtins.push((
+            "unsafeToString".to_string(),
+            Function::Builtin(Box::new(&|compiler, _, args| {
+                let length = args.get(0).unwrap();
+                let address_ptr = args.get(1).unwrap();
+
+                assert_eq!(length.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+                assert_eq!(address_ptr.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+
+                let s = string::new(compiler, "");
+
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    length.memory_addr,
+                    length.type_.miden_width(),
+                );
+                compiler.memory.write(
+                    &mut compiler.instructions,
+                    string::length(&s).memory_addr,
+                    &vec![ValueSource::Stack; length.type_.miden_width() as _],
+                );
+
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    address_ptr.memory_addr,
+                    address_ptr.type_.miden_width(),
+                );
+                compiler.memory.write(
+                    &mut compiler.instructions,
+                    string::data_ptr(&s).memory_addr,
+                    &vec![ValueSource::Stack; address_ptr.type_.miden_width() as _],
+                );
+
+                s
+            })),
+        ));
+
+        Box::leak(Box::new(builtins))
+    };
+    static ref USABLE_BUILTINS: &'static [(String, Function<'static>)] = {
+        let mut builtins = Vec::new();
+
+        builtins.push((
+            "assert".to_string(),
+            Function::Builtin(Box::new(&|compiler, _, args| {
+                let mut scope = Scope::new();
+                scope.parent = Some(&BUILTINS_SCOPE);
+
+                let condition = args.get(0).unwrap();
+                let message = args.get(1).unwrap();
+
+                assert_eq!(condition.type_, Type::PrimitiveType(PrimitiveType::Boolean));
+                assert_eq!(message.type_, Type::String);
+
+                let mut failure_branch = vec![];
+                let mut failure_compiler = Compiler::new(&mut failure_branch, compiler.memory, compiler.root_scope);
+
+                let str_len = string::length(message);
+                let str_data_ptr = string::data_ptr(message);
+
+                failure_compiler.memory.write(
+                    &mut failure_compiler.instructions,
+                    1,
+                    &vec![
+                        ValueSource::Memory(str_len.memory_addr),
+                        ValueSource::Memory(str_data_ptr.memory_addr),
+                    ],
+                );
+
+                failure_compiler
+                    .instructions
+                    .push(encoder::Instruction::Push(0));
+                failure_compiler
+                    .instructions
+                    .push(encoder::Instruction::Assert);
+
+                compiler.instructions.push(encoder::Instruction::If {
+                    condition: vec![encoder::Instruction::MemLoad(Some(condition.memory_addr))],
+                    then: vec![],
+                    // fail on purpose with assert(0)
+                    else_: failure_branch,
+                });
+
+                Symbol {
+                    type_: Type::PrimitiveType(PrimitiveType::Boolean),
+                    memory_addr: 0,
+                }
+            })),
+        ));
+
+        builtins.push((
+            "readAdviceString".to_string(),
+            Function::Builtin(Box::new(&|compiler, _, args| {
+                let old_root_scope = compiler.root_scope;
+                compiler.root_scope = &BUILTINS_SCOPE;
+                let result = compile_ast_function_call(&READ_ADVICE_STRING, compiler, args);
+                compiler.root_scope = old_root_scope;
+                result
+            })),
+        ));
+
+        Box::leak(Box::new(builtins))
+    };
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum PrimitiveType {
     Boolean,
@@ -98,7 +299,7 @@ struct Contract<'ast> {
 #[derive(Clone)]
 enum Function<'ast> {
     AST(&'ast ast::Function),
-    Builtin(Box<&'static dyn Fn(&mut Compiler, &[Symbol]) -> Symbol>),
+    Builtin(Box<&'static (dyn Fn(&mut Compiler, &mut Scope, &[Symbol]) -> Symbol + Sync)>),
 }
 
 impl std::fmt::Debug for Function<'_> {
@@ -111,27 +312,32 @@ impl std::fmt::Debug for Function<'_> {
 }
 
 #[derive(Debug, Clone)]
-struct Scope<'ast> {
+struct Scope<'ast, 'b> {
+    parent: Option<&'b Scope<'ast, 'b>>,
     symbols: Vec<(String, Symbol)>,
     functions: Vec<(String, Function<'ast>)>,
     contracts: Vec<(String, Contract<'ast>)>,
 }
 
-impl<'ast> Scope<'ast> {
+impl<'ast> Scope<'ast, '_> {
     fn new() -> Self {
         Scope {
+            parent: None,
             symbols: vec![],
             functions: vec![],
             contracts: vec![],
         }
     }
 
-    fn with(&mut self, body: impl FnOnce(&mut Self)) {
-        let symbols_start_len = self.symbols.len();
-        let functions_start_len = self.functions.len();
-        body(self);
-        self.symbols.truncate(symbols_start_len);
-        self.functions.truncate(functions_start_len);
+    fn deeper<'b>(&'b self) -> Scope<'ast, 'b> {
+        let scope = Scope {
+            parent: Some(self),
+            symbols: vec![],
+            functions: vec![],
+            contracts: vec![],
+        };
+
+        scope
     }
 
     fn add_symbol(&mut self, name: String, symbol: Symbol) {
@@ -139,11 +345,21 @@ impl<'ast> Scope<'ast> {
     }
 
     fn find_symbol(&self, name: &str) -> Option<&Symbol> {
-        self.symbols
+        if let Some(symbol) = self
+            .symbols
             .iter()
             .rev()
             .find(|(n, _)| n == name)
             .map(|(_, s)| s)
+        {
+            return Some(symbol);
+        }
+
+        if let Some(parent) = self.parent.as_ref() {
+            return parent.find_symbol(name);
+        }
+
+        None
     }
 
     fn add_function(&mut self, name: String, function: Function<'ast>) {
@@ -151,11 +367,21 @@ impl<'ast> Scope<'ast> {
     }
 
     fn find_function(&self, name: &str) -> Option<&Function<'ast>> {
-        self.functions
+        if let Some(func) = self
+            .functions
             .iter()
             .rev()
             .find(|(n, _)| n == name)
             .map(|(_, f)| f)
+        {
+            return Some(func);
+        }
+
+        if let Some(parent) = self.parent.as_ref() {
+            return parent.find_function(name);
+        }
+
+        None
     }
 
     fn add_contract(&mut self, name: String, contract: Contract<'ast>) {
@@ -167,11 +393,17 @@ impl<'ast> Scope<'ast> {
     }
 
     fn find_contract(&self, name: &str) -> Option<&Contract<'ast>> {
-        self.contracts
+        if let Some(contract) = self
+            .contracts
             .iter()
             .rev()
             .find(|(n, _)| n == name)
             .map(|(_, c)| c)
+        {
+            return Some(contract);
+        }
+
+        self.parent.and_then(|p| p.find_contract(name))
     }
 }
 
@@ -203,7 +435,8 @@ impl Memory {
         Memory {
             // 0 is reserved for the null pointer
             // 1, 2 is reserved for the error string
-            static_alloc_ptr: 3,
+            // 3 is reserved for the dynamic allocation pointer
+            static_alloc_ptr: 4,
         }
     }
 
@@ -221,8 +454,8 @@ impl Memory {
         }
     }
 
-    // write(vec![], addr, &[ValueSource::Immediate(0), ValueSource::Immediate(1)])
-    // will set addr to 0 and addr + 1 to 1
+    /// write(vec![], addr, &[ValueSource::Immediate(0), ValueSource::Immediate(1)])
+    /// will set addr to 0 and addr + 1 to 1
     fn write(
         &self,
         instructions: &mut Vec<encoder::Instruction>,
@@ -238,9 +471,11 @@ impl Memory {
         }
     }
 
-    // read reads the values from the memory starting at start_addr and pushes them to the stack
-    // the top most stack item will be the value of start_addr
-    // the bottom most stack item will be the value of start_addr + count - 1
+    /// read reads the values from the memory starting at start_addr and pushes them to the stack.
+    ///
+    /// The top most stack item will be the value of start_addr.
+    ///
+    /// The bottom most stack item will be the value of start_addr + count - 1.
     fn read(&self, instructions: &mut Vec<encoder::Instruction>, start_addr: u32, count: u32) {
         for i in 1..=count {
             ValueSource::Memory(start_addr + count - i).load(instructions);
@@ -248,16 +483,22 @@ impl Memory {
     }
 }
 
-pub(crate) struct Compiler<'ast, 'b> {
-    instructions: &'b mut Vec<encoder::Instruction<'ast>>,
-    memory: &'b mut Memory,
+pub(crate) struct Compiler<'ast, 'c, 's> {
+    instructions: &'c mut Vec<encoder::Instruction<'ast>>,
+    memory: &'c mut Memory,
+    root_scope: &'c Scope<'ast, 's>,
 }
 
-impl<'ast, 'b> Compiler<'ast, 'b> {
-    fn new(instructions: &'b mut Vec<encoder::Instruction<'ast>>, memory: &'b mut Memory) -> Self {
+impl<'ast, 'c, 's> Compiler<'ast, 'c, 's> {
+    fn new(
+        instructions: &'c mut Vec<encoder::Instruction<'ast>>,
+        memory: &'c mut Memory,
+        root_scope: &'c Scope<'ast, 's>,
+    ) -> Self {
         Compiler {
             instructions,
             memory,
+            root_scope,
         }
     }
 
@@ -304,10 +545,8 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
             }
 
             match func {
-                Function::AST(a) => {
-                    compile_ast_function_call(a, compiler, &mut scope.clone(), &args_symbols)
-                }
-                Function::Builtin(f) => f(compiler, &args_symbols),
+                Function::AST(a) => compile_ast_function_call(a, compiler, &args_symbols),
+                Function::Builtin(f) => f(compiler, &mut scope.deeper(), &args_symbols),
             }
         }
         Expression::Assign(a, b) => {
@@ -378,8 +617,11 @@ fn compile_statement(
             else_statements,
         }) => {
             let mut condition_instructions = vec![];
-            let mut condition_compiler =
-                Compiler::new(&mut condition_instructions, compiler.memory);
+            let mut condition_compiler = Compiler::new(
+                &mut condition_instructions,
+                compiler.memory,
+                compiler.root_scope,
+            );
             let condition_symbol = compile_expression(condition, &mut condition_compiler, scope);
             assert_eq!(
                 condition_symbol.type_,
@@ -392,14 +634,18 @@ fn compile_statement(
             );
 
             let mut body_instructions = vec![];
-            let mut body_compiler = Compiler::new(&mut body_instructions, compiler.memory);
+            let mut body_compiler =
+                Compiler::new(&mut body_instructions, compiler.memory, compiler.root_scope);
             for statement in then_statements {
                 compile_statement(statement, &mut body_compiler, scope, return_result);
             }
 
             let mut else_body_instructions = vec![];
-            let mut else_body_compiler =
-                Compiler::new(&mut else_body_instructions, compiler.memory);
+            let mut else_body_compiler = Compiler::new(
+                &mut else_body_instructions,
+                compiler.memory,
+                compiler.root_scope,
+            );
             for statement in else_statements {
                 compile_statement(statement, &mut else_body_compiler, scope, return_result);
             }
@@ -409,6 +655,43 @@ fn compile_statement(
                 then: body_instructions,
                 else_: else_body_instructions,
             })
+        }
+        Statement::While(ast::While {
+            condition,
+            statements,
+        }) => {
+            let mut condition_instructions = vec![];
+            let mut condition_compiler = Compiler::new(
+                &mut condition_instructions,
+                compiler.memory,
+                compiler.root_scope,
+            );
+            let condition_symbol = compile_expression(condition, &mut condition_compiler, scope);
+            assert_eq!(
+                condition_symbol.type_,
+                Type::PrimitiveType(PrimitiveType::Boolean)
+            );
+            condition_compiler.memory.read(
+                &mut condition_compiler.instructions,
+                condition_symbol.memory_addr,
+                condition_symbol.type_.miden_width(),
+            );
+
+            let mut body_instructions = vec![];
+            let mut body_compiler =
+                Compiler::new(&mut body_instructions, compiler.memory, compiler.root_scope);
+            for statement in statements {
+                compile_statement(statement, &mut body_compiler, scope, return_result);
+            }
+
+            compiler.instructions.push(encoder::Instruction::While {
+                condition: condition_instructions,
+                body: body_instructions,
+            })
+        }
+        Statement::Let(name, expr) => {
+            let symbol = compile_expression(expr, compiler, scope);
+            scope.add_symbol(name.to_string(), symbol);
         }
         Statement::Expression(expr) => {
             compile_expression(expr, compiler, scope);
@@ -420,31 +703,32 @@ fn compile_statement(
 fn compile_ast_function_call(
     function: &ast::Function,
     compiler: &mut Compiler,
-    scope: &mut Scope,
     args: &[Symbol],
 ) -> Symbol {
     let mut function_instructions = vec![];
-    let mut function_compiler = Compiler::new(&mut function_instructions, compiler.memory);
+    let mut function_compiler = Compiler::new(
+        &mut function_instructions,
+        compiler.memory,
+        compiler.root_scope,
+    );
 
-    // let old_symbols = std::mem::replace(&mut scope.symbols, vec![]);
+    let scope = &mut Scope::new();
+    scope.parent = Some(compiler.root_scope);
+
     let mut return_result = function_compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
-    scope.with(|scope| {
-        for (arg, param) in args.iter().zip(function.parameters.iter()) {
-            scope.add_symbol(param.name.clone(), arg.clone());
-        }
+    for (arg, param) in args.iter().zip(function.parameters.iter()) {
+        scope.add_symbol(param.name.clone(), arg.clone());
+    }
 
-        for statement in &function.statements {
-            compile_statement(statement, &mut function_compiler, scope, &mut return_result);
-        }
-    });
+    for statement in &function.statements {
+        compile_statement(statement, &mut function_compiler, scope, &mut return_result);
+    }
 
     compiler.instructions.push(encoder::Instruction::Abstract(
         encoder::AbstractInstruction::InlinedFunction(function_instructions),
     ));
-
-    // scope.symbols = old_symbols;
 
     return_result
 }
@@ -559,53 +843,48 @@ fn compile_gte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     }
 }
 
+fn dynamic_alloc(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Symbol {
+    let size = &args[0];
+    assert_eq!(size.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+
+    let addr = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+    compiler
+        .instructions
+        .push(encoder::Instruction::MemLoad(Some(3)));
+    compiler.instructions.push(encoder::Instruction::Dup);
+    compiler.memory.write(
+        &mut compiler.instructions,
+        addr.memory_addr,
+        &vec![ValueSource::Stack],
+    );
+    compiler.memory.read(
+        &mut compiler.instructions,
+        size.memory_addr,
+        size.type_.miden_width(),
+    );
+    // old addr + size
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedAdd);
+
+    // store new addr
+    compiler
+        .instructions
+        .push(encoder::Instruction::MemStore(Some(3)));
+
+    // return old addr
+    addr
+}
+
 fn prepare_scope(program: &ast::Program) -> Scope {
     let mut scope = Scope::new();
 
-    scope.add_function(
-        "assert".to_string(),
-        Function::Builtin(Box::new(&|compiler, args| {
-            let condition = args.get(0).unwrap();
-            let message = args.get(1).unwrap();
-
-            assert_eq!(condition.type_, Type::PrimitiveType(PrimitiveType::Boolean));
-            assert_eq!(message.type_, Type::String);
-
-            let mut failure_branch = vec![];
-            let mut failure_compiler = Compiler::new(&mut failure_branch, compiler.memory);
-
-            let str_len = string::length(&mut failure_compiler, message);
-            let str_data_ptr = string::data_ptr(&mut failure_compiler, message);
-
-            failure_compiler.memory.write(
-                &mut failure_compiler.instructions,
-                1,
-                &vec![
-                    ValueSource::Memory(str_len.memory_addr),
-                    ValueSource::Memory(str_data_ptr.memory_addr),
-                ],
-            );
-
-            failure_compiler
-                .instructions
-                .push(encoder::Instruction::Push(0));
-            failure_compiler
-                .instructions
-                .push(encoder::Instruction::Assert);
-
-            compiler.instructions.push(encoder::Instruction::If {
-                condition: vec![encoder::Instruction::MemLoad(Some(condition.memory_addr))],
-                then: vec![],
-                // fail on purpose with assert(0)
-                else_: failure_branch,
-            });
-
-            Symbol {
-                type_: Type::PrimitiveType(PrimitiveType::Boolean),
-                memory_addr: 0,
-            }
-        })),
-    );
+    for func in USABLE_BUILTINS.iter() {
+        scope.add_function(func.0.clone(), func.1.clone());
+    }
 
     for node in &program.nodes {
         match node {
@@ -658,6 +937,7 @@ pub fn compile(
     this: Option<HashMap<String, u32>>,
 ) -> String {
     let mut scope = prepare_scope(&program);
+    let mut root_scope = scope.clone();
     let contract = contract_name.map(|name| scope.find_contract(name).unwrap());
     let contract_struct = contract.map(|contract| Struct {
         name: contract.name.clone(),
@@ -694,7 +974,7 @@ pub fn compile(
     let mut memory = Memory::new();
 
     {
-        let mut compiler = Compiler::new(&mut instructions, &mut memory);
+        let mut compiler = Compiler::new(&mut instructions, &mut memory, &mut root_scope);
 
         if let Some(contract) = contract {
             let this_symbol = new_struct(&mut compiler, contract_struct.as_ref().unwrap().clone());
@@ -735,7 +1015,7 @@ pub fn compile(
             })
             .collect::<Vec<_>>();
 
-        let result = compile_ast_function_call(function, &mut compiler, &mut scope, &arg_symbols);
+        let result = compile_ast_function_call(function, &mut compiler, &arg_symbols);
         compiler.memory.read(
             &mut compiler.instructions,
             result.memory_addr,
@@ -770,10 +1050,13 @@ pub fn compile(
     let mut miden_code = String::new();
     miden_code.push_str("use.std::math::u64\n");
     miden_code.push_str("begin\n");
+    miden_code.push_str("push.");
+    miden_code.push_str(&memory.static_alloc_ptr.to_string());
+    miden_code.push_str("\nmem_store.3\n"); // dynamic allocation pointer
     for instruction in instructions {
         miden_code.push_str("  ");
         instruction
-            .encode(unsafe { miden_code.as_mut_vec() })
+            .encode(unsafe { miden_code.as_mut_vec() }, 1)
             .unwrap();
         miden_code.push_str("\n");
     }
@@ -800,8 +1083,9 @@ mod test {
 
         let mut instructions = Vec::new();
         let mut memory = Memory::new();
-        let mut compiler = Compiler::new(&mut instructions, &mut memory);
-        compile_ast_function_call(&main, &mut compiler, &mut Scope::new(), &[]);
+        let mut root_scope = Scope::new();
+        let mut compiler = Compiler::new(&mut instructions, &mut memory, &mut root_scope);
+        compile_ast_function_call(&main, &mut compiler, &[]);
 
         assert_eq!(
             compiler.instructions,
@@ -831,7 +1115,8 @@ mod test {
     fn test_compile_add_u64_u32() {
         let mut instructions = Vec::new();
         let mut memory = Memory::new();
-        let mut compiler = Compiler::new(&mut instructions, &mut memory);
+        let mut scope = Scope::new();
+        let mut compiler = Compiler::new(&mut instructions, &mut memory, &mut scope);
 
         let a = compiler
             .memory
