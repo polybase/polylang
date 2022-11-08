@@ -633,13 +633,14 @@ fn compile_statement(
             then_statements,
             else_statements,
         }) => {
+            let mut scope = scope.deeper();
             let mut condition_instructions = vec![];
             let mut condition_compiler = Compiler::new(
                 &mut condition_instructions,
                 compiler.memory,
                 compiler.root_scope,
             );
-            let condition_symbol = compile_expression(condition, &mut condition_compiler, scope);
+            let condition_symbol = compile_expression(condition, &mut condition_compiler, &scope);
             assert_eq!(
                 condition_symbol.type_,
                 Type::PrimitiveType(PrimitiveType::Boolean)
@@ -654,7 +655,7 @@ fn compile_statement(
             let mut body_compiler =
                 Compiler::new(&mut body_instructions, compiler.memory, compiler.root_scope);
             for statement in then_statements {
-                compile_statement(statement, &mut body_compiler, scope, return_result);
+                compile_statement(statement, &mut body_compiler, &mut scope, return_result);
             }
 
             let mut else_body_instructions = vec![];
@@ -664,7 +665,12 @@ fn compile_statement(
                 compiler.root_scope,
             );
             for statement in else_statements {
-                compile_statement(statement, &mut else_body_compiler, scope, return_result);
+                compile_statement(
+                    statement,
+                    &mut else_body_compiler,
+                    &mut scope,
+                    return_result,
+                );
             }
 
             compiler.instructions.push(encoder::Instruction::If {
@@ -677,13 +683,14 @@ fn compile_statement(
             condition,
             statements,
         }) => {
+            let mut scope = scope.deeper();
             let mut condition_instructions = vec![];
             let mut condition_compiler = Compiler::new(
                 &mut condition_instructions,
                 compiler.memory,
                 compiler.root_scope,
             );
-            let condition_symbol = compile_expression(condition, &mut condition_compiler, scope);
+            let condition_symbol = compile_expression(condition, &mut condition_compiler, &scope);
             assert_eq!(
                 condition_symbol.type_,
                 Type::PrimitiveType(PrimitiveType::Boolean)
@@ -698,7 +705,7 @@ fn compile_statement(
             let mut body_compiler =
                 Compiler::new(&mut body_instructions, compiler.memory, compiler.root_scope);
             for statement in statements {
-                compile_statement(statement, &mut body_compiler, scope, return_result);
+                compile_statement(statement, &mut body_compiler, &mut scope, return_result);
             }
 
             compiler.instructions.push(encoder::Instruction::While {
