@@ -43,8 +43,7 @@ lazy_static::lazy_static! {
             if (value == 0) return '0';
 
             let length = 0;
-            let i = 0;
-            i = value;
+            let i = value;
             while (i >= 1) {
                 i = i / 10;
                 length = length + 1;
@@ -52,8 +51,7 @@ lazy_static::lazy_static! {
 
             let dataPtr = dynamicAlloc(length); 
 
-            let offset = 0;
-            offset = length;
+            let offset = length;
             while (value >= 1) {
                 offset = offset - 1;
                 let digit = value % 10;
@@ -776,7 +774,21 @@ fn compile_statement(
         }
         Statement::Let(name, expr) => {
             let symbol = compile_expression(expr, compiler, scope);
-            scope.add_symbol(name.to_string(), symbol);
+            // we need to copy symbol to a new symbol,
+            // because Ident expressions return symbols of variables
+            let new_symbol = compiler.memory.allocate_symbol(symbol.type_);
+            compiler.memory.read(
+                &mut compiler.instructions,
+                symbol.memory_addr,
+                new_symbol.type_.miden_width(),
+            );
+            compiler.memory.write(
+                &mut compiler.instructions,
+                new_symbol.memory_addr,
+                &vec![ValueSource::Stack; new_symbol.type_.miden_width() as usize],
+            );
+
+            scope.add_symbol(name.to_string(), new_symbol);
         }
         Statement::Expression(expr) => {
             compile_expression(expr, compiler, scope);
