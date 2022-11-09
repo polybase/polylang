@@ -1,24 +1,26 @@
 #[derive(Debug, PartialEq)]
 pub(crate) enum Instruction<'a> {
-    Comment(String),       // # ...
-    Drop,                  // drop
-    Push(u32),             // push.1234
-    Assert,                // assert
-    Dup,                   // dup
-    Add,                   // add
-    U32CheckedAdd,         // u32checked_add
-    U32CheckedSub,         // u32checked_sub
-    U32CheckedMod,         // u32checked_mod
-    U32CheckedDiv,         // u32checked_div
-    U32CheckedEq,          // u32checked_eq
-    U32CheckedLTE,         // u32checked_lte
-    U32CheckedLT,          // u32checked_lt
-    U32CheckedGTE,         // u32checked_gte
-    U32CheckedGT,          // u32checked_gt
-    Exec(&'a str),         // exec.u64::checked_add
-    MemStore(Option<u32>), // mem_store.1234
-    MemLoad(Option<u32>),  // mem_load.1234
-    AdvPush(u32),          // adv_push.1234
+    Comment(String),            // # ...
+    Drop,                       // drop
+    Push(u32),                  // push.1234
+    Assert,                     // assert
+    Dup,                        // dup
+    Add,                        // add
+    U32CheckedAdd,              // u32checked_add
+    U32CheckedSub,              // u32checked_sub
+    U32CheckedMod,              // u32checked_mod
+    U32CheckedDiv,              // u32checked_div
+    U32CheckedEq,               // u32checked_eq
+    U32CheckedLTE,              // u32checked_lte
+    U32CheckedLT,               // u32checked_lt
+    U32CheckedGTE,              // u32checked_gte
+    U32CheckedGT,               // u32checked_gt
+    U32CheckedSHL(Option<u32>), // u32checked_shl
+    U32CheckedSHR(Option<u32>), // u32checked_shr
+    Exec(&'a str),              // exec.u64::checked_add
+    MemStore(Option<u32>),      // mem_store.1234
+    MemLoad(Option<u32>),       // mem_load.1234
+    AdvPush(u32),               // adv_push.1234
     While {
         condition: Vec<Instruction<'a>>,
         body: Vec<Instruction<'a>>,
@@ -67,6 +69,10 @@ impl Instruction<'_> {
             Instruction::U32CheckedLT => write_indent!(f, "u32checked_lt"),
             Instruction::U32CheckedGTE => write_indent!(f, "u32checked_gte"),
             Instruction::U32CheckedGT => write_indent!(f, "u32checked_gt"),
+            Instruction::U32CheckedSHL(Some(value)) => write_indent!(f, "u32checked_shl.{}", value),
+            Instruction::U32CheckedSHL(None) => write_indent!(f, "u32checked_shl"),
+            Instruction::U32CheckedSHR(Some(value)) => write_indent!(f, "u32checked_shr.{}", value),
+            Instruction::U32CheckedSHR(None) => write_indent!(f, "u32checked_shr"),
             Instruction::Exec(name) => write_indent!(f, "exec.{}", name),
             Instruction::While { condition, body } => {
                 for instruction in condition {
