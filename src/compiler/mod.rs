@@ -38,6 +38,32 @@ lazy_static::lazy_static! {
             return unsafeToString(length, dataPtr);
         }
     "#).unwrap();
+    static ref UINT32_TO_STRING: ast::Function = crate::polylang::FunctionParser::new().parse(r#"
+        function uint32ToString(value: number): string {
+            if (value == 0) return '0';
+
+            let length = 0;
+            let i = 0;
+            i = value;
+            while (i >= 1) {
+                i = i / 10;
+                length = length + 1;
+            }
+
+            let dataPtr = dynamicAlloc(length); 
+
+            let offset = 0;
+            offset = length;
+            while (value >= 1) {
+                offset = offset - 1;
+                let digit = value % 10;
+                value = value / 10;
+                writeMemory(dataPtr + offset, digit + 48);
+            }
+
+            return unsafeToString(length, dataPtr);
+        }
+    "#).unwrap();
     static ref BUILTINS_SCOPE: &'static Scope<'static, 'static> = {
         let mut scope = Scope::new();
 
@@ -81,6 +107,9 @@ lazy_static::lazy_static! {
                 compiler
                     .instructions
                     .push(encoder::Instruction::MemStore(None));
+                compiler
+                    .instructions
+                    .push(encoder::Instruction::Drop);
 
                 Symbol {
                     type_: Type::PrimitiveType(PrimitiveType::UInt32),
@@ -230,6 +259,14 @@ lazy_static::lazy_static! {
             let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
             compiler.memory.write(&mut compiler.instructions, symbol.memory_addr, &vec![ValueSource::Stack]);
             symbol
+        }))));
+
+        builtins.push(("uint32ToString".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
+            let old_root_scope = compiler.root_scope;
+            compiler.root_scope = &BUILTINS_SCOPE;
+            let result = compile_ast_function_call(&UINT32_TO_STRING, compiler, args, None);
+            compiler.root_scope = old_root_scope;
+            result
         }))));
 
         Box::leak(Box::new(builtins))
@@ -547,6 +584,18 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             compile_sub(compiler, &a, &b)
         }
+        Expression::Modulo(a, b) => {
+            let a = compile_expression(a, compiler, scope);
+            let b = compile_expression(b, compiler, scope);
+
+            compile_mod(compiler, &a, &b)
+        }
+        Expression::Divide(a, b) => {
+            let a = compile_expression(a, compiler, scope);
+            let b = compile_expression(b, compiler, scope);
+
+            compile_div(compiler, &a, &b)
+        }
         Expression::Equal(a, b) => {
             let a = compile_expression(a, compiler, scope);
             let b = compile_expression(b, compiler, scope);
@@ -839,6 +888,56 @@ fn compile_sub(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             cast(compiler, b, &b_u64);
 
             uint64::sub(compiler, a, &b_u64)
+        }
+        e => unimplemented!("{:?}", e),
+    }
+}
+
+fn compile_mod(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    match (&a.type_, &b.type_) {
+        (
+            Type::PrimitiveType(PrimitiveType::UInt32),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => uint32::modulo(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt64),
+        ) => uint64::modulo(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => {
+            let b_u64 = compiler
+                .memory
+                .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt64));
+            cast(compiler, b, &b_u64);
+
+            uint64::modulo(compiler, a, &b_u64)
+        }
+        e => unimplemented!("{:?}", e),
+    }
+}
+
+fn compile_div(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    match (&a.type_, &b.type_) {
+        (
+            Type::PrimitiveType(PrimitiveType::UInt32),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => uint32::div(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt64),
+        ) => uint64::div(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => {
+            let b_u64 = compiler
+                .memory
+                .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt64));
+            cast(compiler, b, &b_u64);
+
+            uint64::div(compiler, a, &b_u64)
         }
         e => unimplemented!("{:?}", e),
     }

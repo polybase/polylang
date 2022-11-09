@@ -8,6 +8,8 @@ pub(crate) enum Instruction<'a> {
     Add,                   // add
     U32CheckedAdd,         // u32checked_add
     U32CheckedSub,         // u32checked_sub
+    U32CheckedMod,         // u32checked_mod
+    U32CheckedDiv,         // u32checked_div
     U32CheckedEq,          // u32checked_eq
     U32CheckedLTE,         // u32checked_lte
     U32CheckedGTE,         // u32checked_gte
@@ -56,6 +58,8 @@ impl Instruction<'_> {
             Instruction::Add => write_indent!(f, "add"),
             Instruction::U32CheckedAdd => write_indent!(f, "u32checked_add"),
             Instruction::U32CheckedSub => write_indent!(f, "u32checked_sub"),
+            Instruction::U32CheckedMod => write_indent!(f, "u32checked_mod"),
+            Instruction::U32CheckedDiv => write_indent!(f, "u32checked_div"),
             Instruction::U32CheckedEq => write_indent!(f, "u32checked_eq"),
             Instruction::U32CheckedLTE => write_indent!(f, "u32checked_lte"),
             Instruction::U32CheckedGTE => write_indent!(f, "u32checked_gte"),

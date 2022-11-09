@@ -152,3 +152,57 @@ pub(crate) fn lte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
     result
 }
+
+pub(crate) fn modulo(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt64));
+
+    compiler.memory.read(
+        &mut compiler.instructions,
+        a.memory_addr,
+        a.type_.miden_width(),
+    );
+    compiler.memory.read(
+        &mut compiler.instructions,
+        b.memory_addr,
+        b.type_.miden_width(),
+    );
+    compiler
+        .instructions
+        .push(encoder::Instruction::Exec("u64::checked_mod"));
+    compiler.memory.write(
+        &mut compiler.instructions,
+        result.memory_addr,
+        &[ValueSource::Stack, ValueSource::Stack],
+    );
+
+    result
+}
+
+pub(crate) fn div(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt64));
+
+    compiler.memory.read(
+        &mut compiler.instructions,
+        a.memory_addr,
+        a.type_.miden_width(),
+    );
+    compiler.memory.read(
+        &mut compiler.instructions,
+        b.memory_addr,
+        b.type_.miden_width(),
+    );
+    compiler
+        .instructions
+        .push(encoder::Instruction::Exec("u64::checked_div"));
+    compiler.memory.write(
+        &mut compiler.instructions,
+        result.memory_addr,
+        &[ValueSource::Stack, ValueSource::Stack],
+    );
+
+    result
+}
