@@ -20,7 +20,10 @@ fn main() {
         }
     }
 
-    let program = polylang::parse(&code).unwrap_or_else(|e| panic!("{}", e.message));
+    let program = polylang::parse(&code).unwrap_or_else(|e| {
+        eprintln!("{}", e.message);
+        std::process::exit(1);
+    });
     let miden_code = polylang::compiler::compile(program, contract_name.as_deref(), &function_name);
     println!("{}", miden_code);
 }
