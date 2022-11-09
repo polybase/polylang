@@ -279,3 +279,30 @@ pub(crate) fn shift_left(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Sym
 
     result
 }
+
+pub(crate) fn shift_right(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+    compiler.memory.read(
+        &mut compiler.instructions,
+        a.memory_addr,
+        a.type_.miden_width(),
+    );
+    compiler.memory.read(
+        &mut compiler.instructions,
+        b.memory_addr,
+        b.type_.miden_width(),
+    );
+    // TODO: SHR with Some is an order of magnitude faster, optimize this for constants
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedSHR(None));
+    compiler.memory.write(
+        &mut compiler.instructions,
+        result.memory_addr,
+        &[ValueSource::Stack],
+    );
+
+    result
+}

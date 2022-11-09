@@ -665,6 +665,12 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             compile_shift_left(compiler, &a, &b)
         }
+        Expression::ShiftRight(a, b) => {
+            let a = compile_expression(a, compiler, scope);
+            let b = compile_expression(b, compiler, scope);
+
+            compile_shift_right(compiler, &a, &b)
+        }
         e => unimplemented!("{:?}", e),
     };
 
@@ -1118,6 +1124,31 @@ fn compile_shift_left(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol
             cast(compiler, b, &b_u64);
 
             uint64::shift_left(compiler, a, &b_u64)
+        }
+        e => unimplemented!("{:?}", e),
+    }
+}
+
+fn compile_shift_right(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    match (&a.type_, &b.type_) {
+        (
+            Type::PrimitiveType(PrimitiveType::UInt32),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => uint32::shift_right(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt64),
+        ) => uint64::shift_right(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => {
+            let b_u64 = compiler
+                .memory
+                .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt64));
+            cast(compiler, b, &b_u64);
+
+            uint64::shift_right(compiler, a, &b_u64)
         }
         e => unimplemented!("{:?}", e),
     }
