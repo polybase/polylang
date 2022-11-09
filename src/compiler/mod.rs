@@ -86,6 +86,7 @@ lazy_static::lazy_static! {
         builtins.push((
             "writeMemory".to_string(),
             Function::Builtin(Box::new(&|compiler, _, args| {
+                assert_eq!(args.len(), 2);
                 let address = args.get(0).unwrap();
                 let value = args.get(1).unwrap();
 
@@ -118,8 +119,7 @@ lazy_static::lazy_static! {
 
         builtins.push((
             "readAdvice".to_string(),
-            Function::Builtin(Box::new(&|compiler, _, args| {
-                let args: &[Symbol] = &[];
+            Function::Builtin(Box::new(&|compiler, _, _| {
                 let symbol = compiler
                     .memory
                     .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
@@ -641,6 +641,12 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             compile_gte(compiler, &a, &b)
         }
+        Expression::GreaterThan(a, b) => {
+            let a = compile_expression(a, compiler, scope);
+            let b = compile_expression(b, compiler, scope);
+
+            compile_gt(compiler, &a, &b)
+        }
         Expression::LessThanOrEqual(a, b) => {
             let a = compile_expression(a, compiler, scope);
             let b = compile_expression(b, compiler, scope);
@@ -1006,6 +1012,31 @@ fn compile_gte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             cast(compiler, b, &b_u64);
 
             uint64::gte(compiler, a, &b_u64)
+        }
+        e => unimplemented!("{:?}", e),
+    }
+}
+
+fn compile_gt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    match (&a.type_, &b.type_) {
+        (
+            Type::PrimitiveType(PrimitiveType::UInt32),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => uint32::gt(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt64),
+        ) => uint64::gt(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => {
+            let b_u64 = compiler
+                .memory
+                .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt64));
+            cast(compiler, b, &b_u64);
+
+            uint64::gt(compiler, a, &b_u64)
         }
         e => unimplemented!("{:?}", e),
     }

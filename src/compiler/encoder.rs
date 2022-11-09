@@ -14,6 +14,7 @@ pub(crate) enum Instruction<'a> {
     U32CheckedLTE,         // u32checked_lte
     U32CheckedLT,          // u32checked_lt
     U32CheckedGTE,         // u32checked_gte
+    U32CheckedGT,          // u32checked_gt
     Exec(&'a str),         // exec.u64::checked_add
     MemStore(Option<u32>), // mem_store.1234
     MemLoad(Option<u32>),  // mem_load.1234
@@ -65,6 +66,7 @@ impl Instruction<'_> {
             Instruction::U32CheckedLTE => write_indent!(f, "u32checked_lte"),
             Instruction::U32CheckedLT => write_indent!(f, "u32checked_lt"),
             Instruction::U32CheckedGTE => write_indent!(f, "u32checked_gte"),
+            Instruction::U32CheckedGT => write_indent!(f, "u32checked_gt"),
             Instruction::Exec(name) => write_indent!(f, "exec.{}", name),
             Instruction::While { condition, body } => {
                 for instruction in condition {
