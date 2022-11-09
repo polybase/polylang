@@ -147,5 +147,4 @@ pub struct While {
 pub enum Primitive {
     Number(f64),
     String(String),
-    Regex(String),
 }

@@ -80,5 +80,4 @@ const (
 type Primitive struct {
 	Number *float64 `json:"Number,omitempty"`
 	String *string  `json:"String,omitempty"`
-	Regex  *string  `json:"Regex,omitempty"`
 }

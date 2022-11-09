@@ -36,14 +36,9 @@ pub Boolean: bool = {
     "false" => false,
 };
 
-pub Regex: String = {
-    <s:r#"/[^/]*/"#> => s[1..s.len()-1].to_string(),
-};
-
 pub Primitive: Primitive = {
     <n:Number> => Primitive::Number(n),
     <s:String> => Primitive::String(s),
-    <r:Regex> => Primitive::Regex(r),
 };
 
 pub Expression: Expression = {
