@@ -6,6 +6,7 @@ pub(crate) enum Instruction<'a> {
     Assert,                     // assert
     Dup,                        // dup
     Add,                        // add
+    And,                        // and
     U32CheckedAdd,              // u32checked_add
     U32CheckedSub,              // u32checked_sub
     U32CheckedMod,              // u32checked_mod
@@ -60,6 +61,7 @@ impl Instruction<'_> {
             Instruction::Assert => write_indent!(f, "assert"),
             Instruction::Dup => write_indent!(f, "dup"),
             Instruction::Add => write_indent!(f, "add"),
+            Instruction::And => write_indent!(f, "and"),
             Instruction::U32CheckedAdd => write_indent!(f, "u32checked_add"),
             Instruction::U32CheckedSub => write_indent!(f, "u32checked_sub"),
             Instruction::U32CheckedMod => write_indent!(f, "u32checked_mod"),
@@ -141,10 +143,10 @@ pub(crate) fn unabstract<'a>(
     allocate: &mut impl FnMut(u32) -> u32,
     break_ptr: &mut Option<u32>,
     return_ptr: &mut Option<u32>,
+    ptr_value_might_have_been_flipped: &mut bool,
     is_condition: bool,
 ) -> Vec<Instruction<'a>> {
     let mut result = Vec::new();
-    let mut ptr_value_might_have_been_flipped = false;
     for instruction in instructions {
         let mut unabstract_inst =
             |result: &mut Vec<Instruction<'a>>,
@@ -183,14 +185,29 @@ pub(crate) fn unabstract<'a>(
                             }
                         }
                         AbstractInstruction::InlinedFunction(func) => {
-                            result.extend(unabstract(func, allocate, &mut None, &mut None, false));
+                            result.extend(unabstract(
+                                func, allocate, &mut None, &mut None, &mut false, false,
+                            ));
                         }
                     },
                     Instruction::While { condition, body } => {
                         let mut break_ptr = None;
-                        let body = unabstract(body, allocate, &mut break_ptr, return_ptr, false);
-                        let condition =
-                            unabstract(condition, allocate, &mut break_ptr, return_ptr, true);
+                        let body = unabstract(
+                            body,
+                            allocate,
+                            &mut break_ptr,
+                            return_ptr,
+                            ptr_value_might_have_been_flipped,
+                            false,
+                        );
+                        let condition = unabstract(
+                            condition,
+                            allocate,
+                            &mut break_ptr,
+                            return_ptr,
+                            ptr_value_might_have_been_flipped,
+                            true,
+                        );
                         result.push(Instruction::While {
                             condition: condition,
                             body: body,
@@ -202,9 +219,25 @@ pub(crate) fn unabstract<'a>(
                         else_,
                     } => {
                         result.push(Instruction::If {
-                            condition: unabstract(condition, allocate, &mut None, &mut None, true),
-                            then: unabstract(then, allocate, break_ptr, return_ptr, false),
-                            else_: unabstract(else_, allocate, break_ptr, return_ptr, false),
+                            condition: unabstract(
+                                condition, allocate, &mut None, &mut None, &mut false, true,
+                            ),
+                            then: unabstract(
+                                then,
+                                allocate,
+                                break_ptr,
+                                return_ptr,
+                                ptr_value_might_have_been_flipped,
+                                false,
+                            ),
+                            else_: unabstract(
+                                else_,
+                                allocate,
+                                break_ptr,
+                                return_ptr,
+                                ptr_value_might_have_been_flipped,
+                                false,
+                            ),
                         });
                     }
                     other => result.push(other),
@@ -212,15 +245,13 @@ pub(crate) fn unabstract<'a>(
             };
 
         if let Some(break_return_ptr_inner) = break_ptr.or(*return_ptr) {
-            let break_ptr = &mut None;
-
             let cond = || Instruction::MemLoad(Some(break_return_ptr_inner));
             match result.last_mut() {
                 Some(Instruction::If {
                     condition,
                     then: _,
                     else_,
-                }) if &condition[..] == &[cond()] && !ptr_value_might_have_been_flipped => {
+                }) if &condition[..] == &[cond()] && !*ptr_value_might_have_been_flipped => {
                     // if the previous instruction is an if with the same condition,
                     // then add to that if
                     unabstract_inst(
@@ -228,11 +259,11 @@ pub(crate) fn unabstract<'a>(
                         instruction,
                         break_ptr,
                         return_ptr,
-                        &mut ptr_value_might_have_been_flipped,
+                        ptr_value_might_have_been_flipped,
                     );
                 }
                 _ => {
-                    ptr_value_might_have_been_flipped = false;
+                    *ptr_value_might_have_been_flipped = false;
 
                     result.push(Instruction::If {
                         condition: vec![cond()],
@@ -248,7 +279,7 @@ pub(crate) fn unabstract<'a>(
                                 instruction,
                                 break_ptr,
                                 return_ptr,
-                                &mut ptr_value_might_have_been_flipped,
+                                ptr_value_might_have_been_flipped,
                             );
                             else_
                         },
@@ -261,7 +292,7 @@ pub(crate) fn unabstract<'a>(
                 instruction,
                 break_ptr,
                 return_ptr,
-                &mut ptr_value_might_have_been_flipped,
+                ptr_value_might_have_been_flipped,
             );
         }
     }
@@ -271,6 +302,7 @@ pub(crate) fn unabstract<'a>(
 #[cfg(test)]
 mod test {
     use super::*;
+    use pretty_assertions::{assert_eq, assert_ne};
 
     #[test]
     fn test_unabstract_break() {
@@ -321,7 +353,12 @@ mod test {
                     else_: vec![
                         Instruction::If {
                             condition: vec![Instruction::Push(1)],
-                            then: vec![Instruction::Push(1)],
+                            then: vec![Instruction::If {
+                                // TODO: this if is not needed
+                                condition: vec![Instruction::MemLoad(Some(1))],
+                                then: vec![],
+                                else_: vec![Instruction::Push(1)],
+                            }],
                             else_: vec![],
                         },
                         Instruction::Push(2),
@@ -330,7 +367,19 @@ mod test {
             ],
         }];
 
-        let unabstracted = unabstract(instructions, &mut |_| 1, &mut None, &mut None, false);
+        let mut ptr = 1;
+        let unabstracted = unabstract(
+            instructions,
+            &mut |_| {
+                ptr += 1;
+                ptr - 1
+            },
+            &mut None,
+            &mut None,
+            &mut false,
+            false,
+        );
+
         assert_eq!(unabstracted, expected);
     }
 
@@ -365,7 +414,18 @@ mod test {
             },
         ];
 
-        let unabstracted = unabstract(instructions, &mut |_| 1, &mut None, &mut None, false);
+        let mut ptr = 1;
+        let unabstracted = unabstract(
+            instructions,
+            &mut |_| {
+                ptr += 1;
+                ptr - 1
+            },
+            &mut None,
+            &mut None,
+            &mut false,
+            false,
+        );
         assert_eq!(unabstracted, expected);
     }
 
@@ -410,6 +470,112 @@ mod test {
             },
             &mut None,
             &mut None,
+            &mut false,
+            false,
+        );
+        assert_eq!(unabstracted, expected);
+    }
+
+    #[test]
+    fn test_unabstract_return_3() {
+        let instructions = vec![
+            Instruction::If {
+                condition: vec![Instruction::Push(1)],
+                then: vec![Instruction::Abstract(AbstractInstruction::Return)],
+                else_: vec![],
+            },
+            Instruction::Push(201),
+        ];
+
+        let expected = vec![
+            Instruction::If {
+                condition: vec![Instruction::Push(1)],
+                then: vec![
+                    Instruction::Push(1),
+                    Instruction::MemStore(Some(1)),
+                    Instruction::Drop,
+                ],
+                else_: vec![],
+            },
+            Instruction::If {
+                condition: vec![Instruction::MemLoad(Some(1))],
+                then: vec![],
+                else_: vec![Instruction::Push(201)],
+            },
+        ];
+
+        let mut ptr = 1;
+        let unabstracted = unabstract(
+            instructions,
+            &mut |_| {
+                ptr += 1;
+                ptr - 1
+            },
+            &mut None,
+            &mut None,
+            &mut false,
+            false,
+        );
+        assert_eq!(unabstracted, expected);
+    }
+
+    #[test]
+    fn test_unabstract_return_4() {
+        let instructions = vec![
+            Instruction::Push(199),
+            Instruction::Abstract(AbstractInstruction::Return),
+            Instruction::Push(200),
+            Instruction::If {
+                condition: vec![Instruction::Push(1)],
+                then: vec![Instruction::Abstract(AbstractInstruction::Return)],
+                else_: vec![],
+            },
+            Instruction::Push(201),
+        ];
+
+        let expected = vec![
+            Instruction::Push(199),
+            Instruction::Push(1),
+            Instruction::MemStore(Some(1)),
+            Instruction::Drop,
+            Instruction::If {
+                condition: vec![Instruction::MemLoad(Some(1))],
+                then: vec![],
+                else_: vec![
+                    Instruction::Push(200),
+                    Instruction::If {
+                        condition: vec![Instruction::Push(1)],
+                        then: vec![Instruction::If {
+                            // TODO: this if is not needed
+                            condition: vec![Instruction::MemLoad(Some(1))],
+                            then: vec![],
+                            else_: vec![
+                                Instruction::Push(1),
+                                Instruction::MemStore(Some(1)),
+                                Instruction::Drop,
+                            ],
+                        }],
+                        else_: vec![],
+                    },
+                ],
+            },
+            Instruction::If {
+                condition: vec![Instruction::MemLoad(Some(1))],
+                then: vec![],
+                else_: vec![Instruction::Push(201)],
+            },
+        ];
+
+        let mut ptr = 1;
+        let unabstracted = unabstract(
+            instructions,
+            &mut |_| {
+                ptr += 1;
+                ptr - 1
+            },
+            &mut None,
+            &mut None,
+            &mut false,
             false,
         );
         assert_eq!(unabstracted, expected);

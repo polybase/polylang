@@ -671,6 +671,12 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             compile_shift_right(compiler, &a, &b)
         }
+        Expression::And(a, b) => {
+            let a = compile_expression(a, compiler, scope);
+            let b = compile_expression(b, compiler, scope);
+
+            boolean::compile_and(compiler, &a, &b)
+        }
         e => unimplemented!("{:?}", e),
     };
 
@@ -703,6 +709,11 @@ fn compile_statement(
             );
             compiler.instructions.push(encoder::Instruction::Abstract(
                 encoder::AbstractInstruction::Return,
+            ));
+        }
+        Statement::Break => {
+            compiler.instructions.push(encoder::Instruction::Abstract(
+                encoder::AbstractInstruction::Break,
             ));
         }
         Statement::If(ast::If {
@@ -1405,6 +1416,7 @@ pub fn compile(program: ast::Program, contract_name: Option<&str>, function_name
         &mut |size| memory.allocate(size),
         &mut None,
         &mut None,
+        &mut false,
         false,
     );
 
