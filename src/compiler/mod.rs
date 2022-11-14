@@ -267,6 +267,60 @@ lazy_static::lazy_static! {
             result
         }))));
 
+        builtins.push(("uint32WrappingAdd".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
+            let a = &args[0];
+            let b = &args[1];
+            assert_eq!(a.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+            assert_eq!(b.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+
+            let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+            compiler.memory.read(
+                &mut compiler.instructions,
+                a.memory_addr,
+                a.type_.miden_width(),
+            );
+            compiler.memory.read(
+                &mut compiler.instructions,
+                b.memory_addr,
+                b.type_.miden_width(),
+            );
+            compiler.instructions.push(encoder::Instruction::U32WrappingAdd);
+            compiler.memory.write(&mut compiler.instructions, result.memory_addr, &vec![ValueSource::Stack]);
+            result
+        }))));
+
+        builtins.push(("uint32WrappingSub".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
+            let a = &args[0];
+            let b = &args[1];
+            assert_eq!(a.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+            assert_eq!(b.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+
+            let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+            compiler.memory.read(
+                &mut compiler.instructions,
+                a.memory_addr,
+                a.type_.miden_width(),
+            );
+            compiler.memory.read(
+                &mut compiler.instructions,
+                b.memory_addr,
+                b.type_.miden_width(),
+            );
+            compiler.instructions.push(encoder::Instruction::U32WrappingSub);
+            compiler.memory.write(&mut compiler.instructions, result.memory_addr, &vec![ValueSource::Stack]);
+            result
+        }))));
+
+        // TODO: remove this when we add proper comments
+        builtins.push(("comment".to_string(), Function::Builtin(Box::new(&|_, _, _| {
+            Symbol {
+                type_: Type::PrimitiveType(PrimitiveType::Boolean),
+                memory_addr: 0,
+            }
+        }))));
+
         Box::leak(Box::new(builtins))
     };
 }
@@ -600,6 +654,12 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             compile_eq(compiler, &a, &b)
         }
+        Expression::NotEqual(a, b) => {
+            let a = compile_expression(a, compiler, scope);
+            let b = compile_expression(b, compiler, scope);
+
+            compile_neq(compiler, &a, &b)
+        }
         Expression::Call(func, args) => {
             let func_name = match func.deref() {
                 Expression::Ident(id) => id,
@@ -676,6 +736,12 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
             let b = compile_expression(b, compiler, scope);
 
             boolean::compile_and(compiler, &a, &b)
+        }
+        Expression::Or(a, b) => {
+            let a = compile_expression(a, compiler, scope);
+            let b = compile_expression(b, compiler, scope);
+
+            boolean::compile_or(compiler, &a, &b)
         }
         e => unimplemented!("{:?}", e),
     };
@@ -1013,6 +1079,25 @@ fn compile_eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
         }
         e => unimplemented!("{:?}", e),
     }
+}
+
+fn compile_neq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    let eq = compile_eq(compiler, a, b);
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+    compiler.memory.read(
+        compiler.instructions,
+        eq.memory_addr,
+        eq.type_.miden_width(),
+    );
+    compiler.instructions.push(encoder::Instruction::Not);
+    compiler.memory.write(
+        compiler.instructions,
+        result.memory_addr,
+        &vec![ValueSource::Stack; result.type_.miden_width() as _],
+    );
+    result
 }
 
 fn compile_gte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {

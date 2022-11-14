@@ -45,3 +45,30 @@ pub(crate) fn compile_and(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Sy
 
     result
 }
+
+pub(crate) fn compile_or(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    assert_eq!(a.type_, b.type_);
+    assert_eq!(a.type_, Type::PrimitiveType(PrimitiveType::Boolean));
+
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+    compiler.memory.read(
+        &mut compiler.instructions,
+        a.memory_addr,
+        a.type_.miden_width(),
+    );
+    compiler.memory.read(
+        &mut compiler.instructions,
+        b.memory_addr,
+        b.type_.miden_width(),
+    );
+    compiler.instructions.push(encoder::Instruction::Or);
+    compiler.memory.write(
+        &mut compiler.instructions,
+        result.memory_addr,
+        &[ValueSource::Stack],
+    );
+
+    result
+}

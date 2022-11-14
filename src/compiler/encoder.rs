@@ -7,6 +7,8 @@ pub(crate) enum Instruction<'a> {
     Dup,                        // dup
     Add,                        // add
     And,                        // and
+    Or,                         // or
+    Not,                        // not
     U32CheckedAdd,              // u32checked_add
     U32CheckedSub,              // u32checked_sub
     U32CheckedMod,              // u32checked_mod
@@ -18,6 +20,8 @@ pub(crate) enum Instruction<'a> {
     U32CheckedGT,               // u32checked_gt
     U32CheckedSHL(Option<u32>), // u32checked_shl
     U32CheckedSHR(Option<u32>), // u32checked_shr
+    U32WrappingAdd,             // u32wrapping_add
+    U32WrappingSub,             // u32wrapping_sub
     Exec(&'a str),              // exec.u64::checked_add
     MemStore(Option<u32>),      // mem_store.1234
     MemLoad(Option<u32>),       // mem_load.1234
@@ -62,6 +66,8 @@ impl Instruction<'_> {
             Instruction::Dup => write_indent!(f, "dup"),
             Instruction::Add => write_indent!(f, "add"),
             Instruction::And => write_indent!(f, "and"),
+            Instruction::Or => write_indent!(f, "or"),
+            Instruction::Not => write_indent!(f, "not"),
             Instruction::U32CheckedAdd => write_indent!(f, "u32checked_add"),
             Instruction::U32CheckedSub => write_indent!(f, "u32checked_sub"),
             Instruction::U32CheckedMod => write_indent!(f, "u32checked_mod"),
@@ -75,6 +81,8 @@ impl Instruction<'_> {
             Instruction::U32CheckedSHL(None) => write_indent!(f, "u32checked_shl"),
             Instruction::U32CheckedSHR(Some(value)) => write_indent!(f, "u32checked_shr.{}", value),
             Instruction::U32CheckedSHR(None) => write_indent!(f, "u32checked_shr"),
+            Instruction::U32WrappingAdd => write_indent!(f, "u32wrapping_add"),
+            Instruction::U32WrappingSub => write_indent!(f, "u32wrapping_sub"),
             Instruction::Exec(name) => write_indent!(f, "exec.{}", name),
             Instruction::While { condition, body } => {
                 for instruction in condition {
