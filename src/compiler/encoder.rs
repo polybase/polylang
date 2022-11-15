@@ -13,6 +13,7 @@ pub(crate) enum Instruction<'a> {
     U32CheckedSub,              // u32checked_sub
     U32CheckedMod,              // u32checked_mod
     U32CheckedDiv,              // u32checked_div
+    U32CheckedMul,              // u32checked_mul
     U32CheckedEq,               // u32checked_eq
     U32CheckedLTE,              // u32checked_lte
     U32CheckedLT,               // u32checked_lt
@@ -22,6 +23,7 @@ pub(crate) enum Instruction<'a> {
     U32CheckedSHR(Option<u32>), // u32checked_shr
     U32WrappingAdd,             // u32wrapping_add
     U32WrappingSub,             // u32wrapping_sub
+    U32WrappingMul,             // u32wrapping_mul
     Exec(&'a str),              // exec.u64::checked_add
     MemStore(Option<u32>),      // mem_store.1234
     MemLoad(Option<u32>),       // mem_load.1234
@@ -72,6 +74,7 @@ impl Instruction<'_> {
             Instruction::U32CheckedSub => write_indent!(f, "u32checked_sub"),
             Instruction::U32CheckedMod => write_indent!(f, "u32checked_mod"),
             Instruction::U32CheckedDiv => write_indent!(f, "u32checked_div"),
+            Instruction::U32CheckedMul => write_indent!(f, "u32checked_mul"),
             Instruction::U32CheckedEq => write_indent!(f, "u32checked_eq"),
             Instruction::U32CheckedLTE => write_indent!(f, "u32checked_lte"),
             Instruction::U32CheckedLT => write_indent!(f, "u32checked_lt"),
@@ -83,6 +86,7 @@ impl Instruction<'_> {
             Instruction::U32CheckedSHR(None) => write_indent!(f, "u32checked_shr"),
             Instruction::U32WrappingAdd => write_indent!(f, "u32wrapping_add"),
             Instruction::U32WrappingSub => write_indent!(f, "u32wrapping_sub"),
+            Instruction::U32WrappingMul => write_indent!(f, "u32wrapping_mul"),
             Instruction::Exec(name) => write_indent!(f, "exec.{}", name),
             Instruction::While { condition, body } => {
                 for instruction in condition {

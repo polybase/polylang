@@ -313,6 +313,29 @@ lazy_static::lazy_static! {
             result
         }))));
 
+        builtins.push(("uint32WrappingMul".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
+            let a = &args[0];
+            let b = &args[1];
+            assert_eq!(a.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+            assert_eq!(b.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+
+            let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+            compiler.memory.read(
+                &mut compiler.instructions,
+                a.memory_addr,
+                a.type_.miden_width(),
+            );
+            compiler.memory.read(
+                &mut compiler.instructions,
+                b.memory_addr,
+                b.type_.miden_width(),
+            );
+            compiler.instructions.push(encoder::Instruction::U32WrappingMul);
+            compiler.memory.write(&mut compiler.instructions, result.memory_addr, &vec![ValueSource::Stack]);
+            result
+        }))));
+
         // TODO: remove this when we add proper comments
         builtins.push(("comment".to_string(), Function::Builtin(Box::new(&|_, _, _| {
             Symbol {
@@ -647,6 +670,12 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
             let b = compile_expression(b, compiler, scope);
 
             compile_div(compiler, &a, &b)
+        }
+        Expression::Multiply(a, b) => {
+            let a = compile_expression(a, compiler, scope);
+            let b = compile_expression(b, compiler, scope);
+
+            compile_mul(compiler, &a, &b)
         }
         Expression::Equal(a, b) => {
             let a = compile_expression(a, compiler, scope);
@@ -1051,6 +1080,31 @@ fn compile_div(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             cast(compiler, b, &b_u64);
 
             uint64::div(compiler, a, &b_u64)
+        }
+        e => unimplemented!("{:?}", e),
+    }
+}
+
+fn compile_mul(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    match (&a.type_, &b.type_) {
+        (
+            Type::PrimitiveType(PrimitiveType::UInt32),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => uint32::mul(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt64),
+        ) => uint64::mul(compiler, a, b),
+        (
+            Type::PrimitiveType(PrimitiveType::UInt64),
+            Type::PrimitiveType(PrimitiveType::UInt32),
+        ) => {
+            let b_u64 = compiler
+                .memory
+                .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt64));
+            cast(compiler, b, &b_u64);
+
+            uint64::mul(compiler, a, &b_u64)
         }
         e => unimplemented!("{:?}", e),
     }
