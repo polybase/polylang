@@ -3,8 +3,12 @@ pub(crate) enum Instruction<'a> {
     Comment(String),            // # ...
     Drop,                       // drop
     Push(u32),                  // push.1234
+    MovUp(u32),                 // movup.1234
+    MovDown(u32),               // movdn.1234
+    Swap,                       // swap
     Assert,                     // assert
-    Dup,                        // dup
+    AssertZero,                 // assertz
+    Dup(Option<u32>),           // dup.1234
     Add,                        // add
     And,                        // and
     Or,                         // or
@@ -21,6 +25,7 @@ pub(crate) enum Instruction<'a> {
     U32CheckedGT,               // u32checked_gt
     U32CheckedSHL(Option<u32>), // u32checked_shl
     U32CheckedSHR(Option<u32>), // u32checked_shr
+    U32CheckedXOR,              // u32checked_xor
     U32WrappingAdd,             // u32wrapping_add
     U32WrappingSub,             // u32wrapping_sub
     U32WrappingMul,             // u32wrapping_mul
@@ -64,8 +69,13 @@ impl Instruction<'_> {
             Instruction::Comment(s) => write_indent!(f, "# {}", s),
             Instruction::Drop => write_indent!(f, "drop"),
             Instruction::Push(value) => write_indent!(f, "push.{}", value),
+            Instruction::MovUp(value) => write_indent!(f, "movup.{}", value),
+            Instruction::MovDown(value) => write_indent!(f, "movdn.{}", value),
+            Instruction::Swap => write_indent!(f, "swap"),
             Instruction::Assert => write_indent!(f, "assert"),
-            Instruction::Dup => write_indent!(f, "dup"),
+            Instruction::AssertZero => write_indent!(f, "assertz"),
+            Instruction::Dup(None) => write_indent!(f, "dup"),
+            Instruction::Dup(Some(value)) => write_indent!(f, "dup.{}", value),
             Instruction::Add => write_indent!(f, "add"),
             Instruction::And => write_indent!(f, "and"),
             Instruction::Or => write_indent!(f, "or"),
@@ -84,6 +94,7 @@ impl Instruction<'_> {
             Instruction::U32CheckedSHL(None) => write_indent!(f, "u32checked_shl"),
             Instruction::U32CheckedSHR(Some(value)) => write_indent!(f, "u32checked_shr.{}", value),
             Instruction::U32CheckedSHR(None) => write_indent!(f, "u32checked_shr"),
+            Instruction::U32CheckedXOR => write_indent!(f, "u32checked_xor"),
             Instruction::U32WrappingAdd => write_indent!(f, "u32wrapping_add"),
             Instruction::U32WrappingSub => write_indent!(f, "u32wrapping_sub"),
             Instruction::U32WrappingMul => write_indent!(f, "u32wrapping_mul"),

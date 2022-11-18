@@ -58,22 +58,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut process = miden_processor::Process::new_debug(
         miden::ProgramInputs::new(&[], &args.advice_tape, vec![]).unwrap(),
     );
-    match process.execute(&program) {
+    let execution_result = process.execute(&program);
+    let (_system, _decoder, stack, _range_checker, chiplets) = process.to_components();
+
+    let get_mem_value = |addr| {
+        chiplets
+            .get_mem_value(0, addr)
+            .map(|word| mont_red_cst(word[0].inner() as _))
+    };
+    let read_string = |len: u64, data_ptr: u64| {
+        let mut str_bytes = Vec::new();
+        for i in 0..len {
+            let c = get_mem_value(data_ptr + i).unwrap() as u8;
+            str_bytes.push(c);
+        }
+
+        String::from_utf8(str_bytes).unwrap()
+    };
+
+    let mut log_messages = Vec::new();
+    let (mut prev, mut str_ptr) = (get_mem_value(4), get_mem_value(5));
+    loop {
+        if str_ptr == Some(0) || str_ptr == None {
+            break;
+        }
+
+        let len = get_mem_value(str_ptr.unwrap()).unwrap();
+        let data_ptr = get_mem_value(str_ptr.unwrap() + 1).unwrap();
+        let str = read_string(len, data_ptr);
+        log_messages.push(str);
+
+        str_ptr = get_mem_value(prev.unwrap() + 1);
+        prev = get_mem_value(prev.unwrap());
+    }
+    log_messages.reverse();
+
+    for msg in log_messages {
+        println!("Log: {}", msg);
+    }
+
+    match execution_result {
         Ok(output) => {
             println!("Output: {:?}", output);
             Ok(())
         }
         Err(miden::ExecutionError::FailedAssertion(_)) => {
-            let (_system, _decoder, stack, _range_checker, chiplets) = process.to_components();
             println!("Output: {:?}", stack.get_outputs());
 
             // read the error string out from the memory
-            let get_mem_value = |addr| {
-                chiplets
-                    .get_mem_value(0, addr)
-                    .map(|word| mont_red_cst(word[0].inner() as _))
-            };
-
             let str_len = get_mem_value(1).ok_or_else(|| "Got an error, but no error string")?;
             let str_data_ptr = get_mem_value(2).unwrap();
 
@@ -87,7 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 let error_str = String::from_utf8(error_str_bytes).unwrap();
-                Err(format!("Assertion failed: {}", error_str).into())
+                Err(format!("Assertion failed: {}", read_string(str_len, str_data_ptr)).into())
             }
         }
         Err(e) => Err(format!("Execution error: {:?}", e).into()),

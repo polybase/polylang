@@ -1,5 +1,6 @@
 mod boolean;
 mod encoder;
+mod int32;
 mod string;
 mod uint32;
 mod uint64;
@@ -60,6 +61,16 @@ lazy_static::lazy_static! {
             }
 
             return unsafeToString(length, dataPtr);
+        }
+    "#).unwrap();
+    // TODO: rewrite this in raw instructions for better performance
+    static ref LOG_STRING: ast::Function = crate::polylang::FunctionParser::new().parse(r#"
+        function logString(message: string) {
+            let newLog = dynamicAlloc(2);
+            writeMemory(newLog, deref(4));
+            writeMemory(newLog + 1, deref(5));
+            writeMemory(4, newLog);
+            writeMemory(5, addressOf(message));
         }
     "#).unwrap();
     static ref BUILTINS_SCOPE: &'static Scope<'static, 'static> = {
@@ -140,7 +151,6 @@ lazy_static::lazy_static! {
             Function::AST(&READ_ADVICE_INTO_STRING),
         ));
 
-
         builtins.push((
             "unsafeToString".to_string(),
             Function::Builtin(Box::new(&|compiler, _, args| {
@@ -177,6 +187,38 @@ lazy_static::lazy_static! {
                 s
             })),
         ));
+
+        builtins.push(("deref".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
+            let address = args.get(0).unwrap();
+
+            assert_eq!(address.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+
+            let result = compiler
+                .memory
+                .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+            compiler.memory.read(
+                &mut compiler.instructions,
+                address.memory_addr,
+                address.type_.miden_width(),
+            );
+            compiler.instructions.push(encoder::Instruction::MemLoad(None));
+            compiler.memory.write(
+                &mut compiler.instructions,
+                result.memory_addr,
+                &[ValueSource::Stack],
+            );
+
+            result
+         }))));
+
+         builtins.push(("addressOf".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
+            let a = args.get(0).unwrap();
+
+            let result = uint32::new(compiler, a.memory_addr);
+
+            result
+         }))));
 
         Box::leak(Box::new(builtins))
     };
@@ -225,6 +267,18 @@ lazy_static::lazy_static! {
                     type_: Type::PrimitiveType(PrimitiveType::Boolean),
                     memory_addr: 0,
                 }
+            })),
+        ));
+
+        builtins.push((
+            "log".to_string(),
+            Function::Builtin(Box::new(&|compiler, _, args| {
+                let old_root_scope = compiler.root_scope;
+                compiler.root_scope = &BUILTINS_SCOPE;
+                let mut scope = compiler.root_scope.deeper();
+                let result = log(compiler, &mut scope, args);
+                compiler.root_scope = old_root_scope;
+                result
             })),
         ));
 
@@ -336,12 +390,51 @@ lazy_static::lazy_static! {
             result
         }))));
 
+        builtins.push(("uint32CheckedXor".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
+            let a = &args[0];
+            let b = &args[1];
+            assert_eq!(a.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+            assert_eq!(b.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+
+            let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+            compiler.memory.read(
+                &mut compiler.instructions,
+                a.memory_addr,
+                a.type_.miden_width(),
+            );
+            compiler.memory.read(
+                &mut compiler.instructions,
+                b.memory_addr,
+                b.type_.miden_width(),
+            );
+            compiler.instructions.push(encoder::Instruction::U32CheckedXOR);
+            compiler.memory.write(&mut compiler.instructions, result.memory_addr, &vec![ValueSource::Stack]);
+            result
+        }))));
+
         // TODO: remove this when we add proper comments
         builtins.push(("comment".to_string(), Function::Builtin(Box::new(&|_, _, _| {
             Symbol {
                 type_: Type::PrimitiveType(PrimitiveType::Boolean),
                 memory_addr: 0,
             }
+        }))));
+
+        builtins.push(("int32".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
+            let a = &args[0];
+            assert_eq!(a.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+
+            let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Int32));
+
+            compiler.memory.read(
+                &mut compiler.instructions,
+                a.memory_addr,
+                a.type_.miden_width(),
+            );
+            compiler.memory.write(&mut compiler.instructions, result.memory_addr, &vec![ValueSource::Stack]);
+
+            result
         }))));
 
         Box::leak(Box::new(builtins))
@@ -353,6 +446,7 @@ enum PrimitiveType {
     Boolean,
     UInt32,
     UInt64,
+    Int32,
 }
 
 impl PrimitiveType {
@@ -361,6 +455,7 @@ impl PrimitiveType {
             PrimitiveType::Boolean => boolean::WIDTH,
             PrimitiveType::UInt32 => uint32::WIDTH,
             PrimitiveType::UInt64 => uint64::WIDTH,
+            PrimitiveType::Int32 => int32::WIDTH,
         }
     }
 }
@@ -566,9 +661,10 @@ impl Memory {
     fn new() -> Self {
         Memory {
             // 0 is reserved for the null pointer
-            // 1, 2 is reserved for the error string
+            // 1, 2 and reserved for the error string
             // 3 is reserved for the dynamic allocation pointer
-            static_alloc_ptr: 4,
+            // 4, 5 and reserved for logging
+            static_alloc_ptr: 6,
         }
     }
 
@@ -949,7 +1045,22 @@ fn compile_ast_function_call(
             Some(ast::Type::String) => Type::String,
         });
     for (arg, param) in args.iter().zip(function.parameters.iter()) {
-        scope.add_symbol(param.name.clone(), arg.clone());
+        // We need to make a copy of the arg, because Ident expressions return symbols of variables.
+        // Modifying them in a function would modify the original variable.
+        // TODO: fix this
+        let new_arg = function_compiler.memory.allocate_symbol(arg.type_.clone());
+        function_compiler.memory.read(
+            &mut function_compiler.instructions,
+            arg.memory_addr,
+            arg.type_.miden_width(),
+        );
+        function_compiler.memory.write(
+            &mut function_compiler.instructions,
+            new_arg.memory_addr,
+            &vec![ValueSource::Stack; new_arg.type_.miden_width() as usize],
+        );
+
+        scope.add_symbol(param.name.clone(), new_arg);
     }
 
     for statement in &function.statements {
@@ -995,6 +1106,9 @@ fn compile_add(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt64),
         ) => uint64::add(compiler, a, b),
+        (Type::PrimitiveType(PrimitiveType::Int32), Type::PrimitiveType(PrimitiveType::Int32)) => {
+            int32::add(compiler, a, b)
+        }
         (
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt32),
@@ -1020,6 +1134,9 @@ fn compile_sub(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt64),
         ) => uint64::sub(compiler, a, b),
+        (Type::PrimitiveType(PrimitiveType::Int32), Type::PrimitiveType(PrimitiveType::Int32)) => {
+            int32::sub(compiler, a, b)
+        }
         (
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt32),
@@ -1070,6 +1187,9 @@ fn compile_div(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt64),
         ) => uint64::div(compiler, a, b),
+        (Type::PrimitiveType(PrimitiveType::Int32), Type::PrimitiveType(PrimitiveType::Int32)) => {
+            int32::div(compiler, a, b)
+        }
         (
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt32),
@@ -1095,6 +1215,9 @@ fn compile_mul(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt64),
         ) => uint64::mul(compiler, a, b),
+        (Type::PrimitiveType(PrimitiveType::Int32), Type::PrimitiveType(PrimitiveType::Int32)) => {
+            int32::mul(compiler, a, b)
+        }
         (
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt32),
@@ -1315,7 +1438,7 @@ fn dynamic_alloc(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) ->
     compiler
         .instructions
         .push(encoder::Instruction::MemLoad(Some(3)));
-    compiler.instructions.push(encoder::Instruction::Dup);
+    compiler.instructions.push(encoder::Instruction::Dup(None));
     compiler.memory.write(
         &mut compiler.instructions,
         addr.memory_addr,
@@ -1338,6 +1461,34 @@ fn dynamic_alloc(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) ->
 
     // return old addr
     addr
+}
+
+fn log(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Symbol {
+    let mut str_args = vec![];
+
+    for arg in args {
+        let message = match &arg.type_ {
+            Type::String => arg.clone(),
+            Type::PrimitiveType(PrimitiveType::UInt32) => compile_function_call(
+                compiler,
+                scope.find_function("uint32ToString").unwrap(),
+                &[arg.clone()],
+                None,
+            ),
+            t => unimplemented!("You can't log a {:?} yet", t),
+        };
+
+        str_args.push(message);
+    }
+
+    for arg in str_args {
+        compile_function_call(compiler, &Function::AST(&LOG_STRING), &[arg], None);
+    }
+
+    Symbol {
+        type_: Type::PrimitiveType(PrimitiveType::Boolean),
+        memory_addr: 0,
+    }
 }
 
 fn read_struct_from_advice_tape(
