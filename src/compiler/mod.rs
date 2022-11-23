@@ -421,6 +421,7 @@ lazy_static::lazy_static! {
             }
         }))));
 
+        // TODO: remove this when we add int32 to the parser.
         builtins.push(("int32".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
             let a = &args[0];
             assert_eq!(a.type_, Type::PrimitiveType(PrimitiveType::UInt32));
@@ -433,6 +434,28 @@ lazy_static::lazy_static! {
                 a.type_.miden_width(),
             );
             compiler.memory.write(&mut compiler.instructions, result.memory_addr, &vec![ValueSource::Stack]);
+
+            result
+        }))));
+
+        builtins.push(("tuple".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
+            let tuple_type = Type::Tuple(args.iter().map(|a| a.type_.clone()).collect());
+            let result = compiler.memory.allocate_symbol(tuple_type);
+
+            let mut offset = 0;
+            for arg in args {
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    arg.memory_addr,
+                    arg.type_.miden_width(),
+                );
+                compiler.memory.write(
+                    &mut compiler.instructions,
+                    result.memory_addr + offset,
+                    &vec![ValueSource::Stack; arg.type_.miden_width() as _],
+                );
+                offset += arg.type_.miden_width();
+            }
 
             result
         }))));
@@ -471,6 +494,7 @@ enum Type {
     PrimitiveType(PrimitiveType),
     String,
     Struct(Struct),
+    Tuple(Vec<Type>),
 }
 
 impl Type {
@@ -479,6 +503,7 @@ impl Type {
             Type::PrimitiveType(pt) => pt.miden_width(),
             Type::String => string::WIDTH,
             Type::Struct(struct_) => struct_.fields.iter().map(|(_, t)| t.miden_width()).sum(),
+            Type::Tuple(types) => types.iter().map(|t| t.miden_width()).sum(),
         }
     }
 }
@@ -818,7 +843,33 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
         Expression::Dot(a, b) => {
             let a = compile_expression(a, compiler, scope);
 
-            struct_field(&a, b).unwrap()
+            match &a.type_ {
+                Type::Struct(_) => struct_field(&a, b).unwrap(),
+                Type::Tuple(t) => {
+                    // For now, if you want to access the nth element of a tuple, you have to prefix N with an underscore.
+                    // So, to access the first element of a tuple, you would write _0.
+                    // TODO: Remove this restriction once we change the parser.
+                    let n = &b[1..];
+                    let n = n.parse::<usize>().unwrap();
+
+                    let mut offset = 0;
+                    let mut type_ = None;
+                    for (i, t) in t.iter().enumerate() {
+                        if i == n {
+                            type_ = Some(t);
+                            break;
+                        }
+
+                        offset += t.miden_width();
+                    }
+
+                    Symbol {
+                        type_: type_.unwrap().clone(),
+                        memory_addr: a.memory_addr + offset,
+                    }
+                }
+                _ => panic!("expected struct"),
+            }
         }
         Expression::GreaterThanOrEqual(a, b) => {
             let a = compile_expression(a, compiler, scope);

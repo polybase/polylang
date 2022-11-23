@@ -263,7 +263,7 @@ pub(crate) fn mul(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
         encoder::Instruction::Push(0),
         // [0]
     ];
-    let mut if_not_zero = {
+    let if_not_zero = {
         let mut instructions = Vec::new();
         let mut compiler = Compiler::new(&mut instructions, compiler.memory, compiler.root_scope);
         // [b, a, b_sign, a_sign]
