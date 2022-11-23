@@ -537,9 +537,68 @@ function x() {
         eprintln!("{}", collection.as_ref().unwrap_err().message);
         assert_eq!(
             collection.unwrap_err().message,
-            r#"Error found at line 3, column 22: Unrecognized token "object". Expected one of: "number", "string"
+            r#"Error found at line 3, column 22: Unrecognized token "object". Expected one of: "(", "number", "string"
 name: object;
       ^^^^^^"#,
+        );
+    }
+
+    #[test]
+    fn test_tuple() {
+        let code = "(1, (2), 3)";
+        let tuple = polylang::ExpressionParser::new().parse(code).unwrap();
+        assert_eq!(
+            tuple,
+            ast::Expression::Tuple(vec![
+                ast::Expression::Primitive(ast::Primitive::Number(1.0)),
+                ast::Expression::Primitive(ast::Primitive::Number(2.0)),
+                ast::Expression::Primitive(ast::Primitive::Number(3.0)),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_tuple_with_one_element() {
+        let code = "(1,)";
+        let tuple = polylang::ExpressionParser::new().parse(code).unwrap();
+        assert_eq!(
+            tuple,
+            ast::Expression::Tuple(vec![ast::Expression::Primitive(ast::Primitive::Number(
+                1.0
+            )),])
+        );
+    }
+
+    #[test]
+    fn test_function_types() {
+        let code = "
+            function f(num: number, str: string, tup: (number, string)): (number, string) {}
+        ";
+
+        let function = polylang::FunctionParser::new().parse(code).unwrap();
+        assert_eq!(
+            function.parameters,
+            vec![
+                ast::Parameter {
+                    name: "num".to_owned(),
+                    type_: ast::ParameterType::Number,
+                    required: true,
+                },
+                ast::Parameter {
+                    name: "str".to_owned(),
+                    type_: ast::ParameterType::String,
+                    required: true,
+                },
+                ast::Parameter {
+                    name: "tup".to_owned(),
+                    type_: ast::ParameterType::Tuple(vec![ast::Type::Number, ast::Type::String,]),
+                    required: true,
+                }
+            ]
+        );
+        assert_eq!(
+            function.return_type,
+            Some(ast::Type::Tuple(vec![ast::Type::Number, ast::Type::String]))
         );
     }
 }

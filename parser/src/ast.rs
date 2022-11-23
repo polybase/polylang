@@ -37,20 +37,22 @@ pub struct FieldDecorator {
     pub arguments: Vec<Primitive>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Type {
     String,
     Number,
+    Tuple(Vec<Type>),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ParameterType {
     String,
     Number,
+    Tuple(Vec<Type>),
     Record,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Parameter {
     pub name: String,
     pub type_: ParameterType,
@@ -100,6 +102,7 @@ pub enum Expression {
     Primitive(Primitive),
     Ident(String),
     Boolean(bool),
+    Tuple(Vec<Expression>),
     Assign(Box<Expression>, Box<Expression>),
     AssignSub(Box<Expression>, Box<Expression>),
     AssignAdd(Box<Expression>, Box<Expression>),
@@ -127,6 +130,7 @@ pub enum Expression {
     Negate(Box<Expression>),
     Dot(Box<Expression>, String),
     Index(Box<Expression>, Box<Expression>),
+    IndexTuple(Box<Expression>, u8),
     Call(Box<Expression>, Vec<Expression>),
 }
 

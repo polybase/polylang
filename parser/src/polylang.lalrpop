@@ -13,11 +13,24 @@ Ident: String = {
 Type: Type = {
     "string" => Type::String,
     "number" => Type::Number,
+    <t:TupleType> => t,
+};
+
+TupleType: Type = {
+    "(" <t:Type> <ts:("," Type)+> ")" => {
+        let mut v = vec![t];
+        v.extend(ts.into_iter().map(|(_, t)| t));
+        Type::Tuple(v)
+    },
+    "(" <t:Type> ")" => Type::Tuple(vec![t]),
 };
 
 ParameterType: ParameterType = {
-    "string" => ParameterType::String,
-    "number" => ParameterType::Number,
+    <t:Type> => match t {
+        Type::String => ParameterType::String,
+        Type::Number => ParameterType::Number,
+        Type::Tuple(v) => ParameterType::Tuple(v),
+    },
     "record" => ParameterType::Record,
 };
 
@@ -58,9 +71,13 @@ pub Expression: Expression = {
     #[precedence(level="1")]
     <l:Expression> "." <id:Ident> => Expression::Dot(Box::new(l), id),
     #[precedence(level="1")]
+    <l:Expression> "." <n:Number> => Expression::IndexTuple(Box::new(l), n as u8),
+    #[precedence(level="1")]
     <l:Expression> "(" <args:ArgumentList> ")" => Expression::Call(Box::new(l), args),
     #[precedence(level="1")]
     "(" <e:Expression> ")" => e,
+    #[precedence(level="1")]
+    <t:Tuple> => Expression::Tuple(t),
     #[precedence(level="2")]
     <l:Expression> "!" => Expression::Not(Box::new(l)),
     #[precedence(level="2")]
@@ -109,6 +126,15 @@ pub Expression: Expression = {
     <l:Expression> "+=" <r:Expression> => Expression::AssignAdd(Box::new(l), Box::new(r)),
     #[precedence(level="14")] #[assoc(side="none")]
     <l:Expression> "=" <r:Expression> => Expression::Assign(Box::new(l), Box::new(r)),
+};
+
+Tuple: Vec<Expression> = {
+    "(" <el:Expression> <els:("," Expression)+> ")" => {
+        let mut v = vec![el];
+        v.extend(els.into_iter().map(|(_, e)| e));
+        v
+    },
+    "(" <el:Expression> "," ")" => vec![el],
 };
 
 ArgumentList: Vec<Expression> = {
