@@ -4,18 +4,18 @@ use lalrpop_util::ParseError;
 
 grammar;
 
-pub Ident: String = {
+Ident: String = {
     <s:r"[a-zA-Z_\$][a-zA-Z0-9_]*"> => s.to_string(),
     "desc" => "desc".to_string(),
     "asc" => "asc".to_string(),
 };
 
-pub Type: Type = {
+Type: Type = {
     "string" => Type::String,
     "number" => Type::Number,
 };
 
-pub ParameterType: ParameterType = {
+ParameterType: ParameterType = {
     "string" => ParameterType::String,
     "number" => ParameterType::Number,
     "record" => ParameterType::Record,
@@ -31,16 +31,16 @@ pub String: String = {
     <s:r#"'[^']*'"#> => s[1..s.len()-1].to_string(),
 };
 
-pub Boolean: bool = {
+Boolean: bool = {
     "true" => true,
     "false" => false,
 };
 
-pub Regex: String = {
+Regex: String = {
     <s:r#"/[^/]*/"#> => s[1..s.len()-1].to_string(),
 };
 
-pub Primitive: Primitive = {
+Primitive: Primitive = {
     <n:Number> => Primitive::Number(n),
     <s:String> => Primitive::String(s),
     <r:Regex> => Primitive::Regex(r),
@@ -111,7 +111,7 @@ pub Expression: Expression = {
     <l:Expression> "=" <r:Expression> => Expression::Assign(Box::new(l), Box::new(r)),
 };
 
-pub ArgumentList: Vec<Expression> = {
+ArgumentList: Vec<Expression> = {
     <e:Expression> <rest:("," Expression)*> => {
         let mut args = vec![e];
         for (_, e) in rest {
@@ -122,7 +122,7 @@ pub ArgumentList: Vec<Expression> = {
     => vec![],
 };
 
-pub PrimitiveArgumentList: Vec<Primitive> = {
+PrimitiveArgumentList: Vec<Primitive> = {
     <p:Primitive> <rest:("," Primitive)*> => {
         let mut args = vec![p];
         for (_, p) in rest {
@@ -133,12 +133,12 @@ pub PrimitiveArgumentList: Vec<Primitive> = {
     => vec![],
 };
 
-pub CompoundStatement: Statement = {
+CompoundStatement: Statement = {
     <i:If> => Statement::If(i),
     <w:While> => Statement::While(w),
 }
 
-pub SmallStatement: Statement = {
+SmallStatement: Statement = {
     "break" => Statement::Break,
     "return" <e:Expression> => Statement::Return(e),
     "throw" <e:Expression> => Statement::Throw(e),
@@ -146,16 +146,16 @@ pub SmallStatement: Statement = {
     <e:Expression> => Statement::Expression(e),
 };
 
-pub SimpleStatement: Statement = {
+SimpleStatement: Statement = {
     <s:SmallStatement> ";" => s,
 };
 
-pub Statement: Statement = {
+Statement: Statement = {
     SimpleStatement,
     CompoundStatement,
 };
 
-pub StatementsOrSimpleStatement: Vec<Statement> = {
+StatementsOrSimpleStatement: Vec<Statement> = {
     "{" <s:Statement*> "}" => s,
     <s:SimpleStatement> => vec![s],
 };
@@ -168,14 +168,14 @@ pub If: If = {
     },
 };
 
-pub While: While = {
+While: While = {
     "while" "(" <e:Expression> ")" "{" <s:Statement*> "}" => While {
         condition: e,
         statements: s,
     },
 };
 
-pub ParameterList: Vec<Parameter> = {
+ParameterList: Vec<Parameter> = {
     <p:Parameter> <rest:("," Parameter)*> => {
         let mut params = vec![p];
         for (_, p) in rest {
@@ -186,7 +186,7 @@ pub ParameterList: Vec<Parameter> = {
     => vec![],
 };
 
-pub Parameter: Parameter = {
+Parameter: Parameter = {
     <name:Ident> ":" <type_:ParameterType> => Parameter {
         name,
         type_,
@@ -199,7 +199,7 @@ pub Parameter: Parameter = {
     },
 };
 
-pub RootFunction: Function = {
+RootFunction: Function = {
     "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
         parameters: pl,
@@ -226,7 +226,7 @@ pub Function: Function = {
     },
 };
 
-pub Field: Field = {
+Field: Field = {
     <name:Ident> "?" ":" <type_:Type> => Field{
         name,
         type_,
@@ -239,7 +239,7 @@ pub Field: Field = {
     },
 };
 
-pub IndexField: IndexField = {
+IndexField: IndexField = {
     "[" <name:Ident> "," <order:Order> "]" => IndexField{
         name,
         order,
@@ -250,12 +250,12 @@ pub IndexField: IndexField = {
     },
 };
 
-pub Order: Order = {
+Order: Order = {
     "asc" => Order::Asc,
     "desc" => Order::Desc,
 };
 
-pub Index: Index = {
+Index: Index = {
     "@index" "(" <fields:IndexFields> ")"  => Index{
         unique: false,
         fields: fields,
@@ -266,7 +266,7 @@ pub Index: Index = {
     },
 };
 
-pub IndexFields: Vec<IndexField> = {
+IndexFields: Vec<IndexField> = {
     <f:IndexField> <rest:("," IndexField)*> => {
         let mut fields = vec![f];
         for (_, f) in rest {
@@ -277,7 +277,7 @@ pub IndexFields: Vec<IndexField> = {
     => vec![],
 };
 
-pub CollectionItem: CollectionItem = {
+CollectionItem: CollectionItem = {
     <f:Field> ";" => CollectionItem::Field(f),
     <i:Index> ";" => CollectionItem::Index(i),
     <f:Function> => CollectionItem::Function(f),
@@ -290,7 +290,7 @@ pub Collection: Collection = {
     },
 };
 
-pub RootNode: RootNode = {
+RootNode: RootNode = {
     <c:Collection> => RootNode::Collection(c),
     <f:RootFunction> => RootNode::Function(f),
 };
