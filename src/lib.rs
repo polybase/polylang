@@ -117,9 +117,10 @@ fn validate_set_out_json(collection_ast_json: &str, data_json: &str) -> String {
 }
 
 fn generate_collection_function(collection_ast: &str) -> Result<js::JSCollection, Error> {
-    let collection_ast: ast::Collection = serde_json::from_str(collection_ast).map_err(|e| Error {
-        message: e.to_string(),
-    })?;
+    let collection_ast: ast::Collection =
+        serde_json::from_str(collection_ast).map_err(|e| Error {
+            message: e.to_string(),
+        })?;
 
     Ok(js::generate_js_collection(&collection_ast))
 }
@@ -236,7 +237,7 @@ mod tests {
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Function(ast::Function { name, parameters, statements, statements_code }) if name == "get_age" && parameters.len() == 2 && statements.len() == 1 && statements_code == "return 42;")
+            matches!(&collection.items[0], ast::CollectionItem::Function(ast::Function { name, parameters, statements, statements_code, return_type: _ }) if name == "get_age" && parameters.len() == 2 && statements.len() == 1 && statements_code == "return 42;")
         );
 
         let function = match &collection.items[0] {
