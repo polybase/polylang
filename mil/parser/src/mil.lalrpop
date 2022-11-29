@@ -1,0 +1,60 @@
+use crate::ast;
+
+grammar;
+
+Separated<Sep, T>: Vec<T> = {
+    <mut v:(<T> Sep)*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+Ident: ast::Identifier = {
+    <s:r"[a-zA-Z_][a-zA-Z0-9_]*"> => ast::Identifier(s.to_string()),
+};
+
+Number: u64 = {
+    <s:r"[0-9]+"> => s.parse().unwrap(),
+};
+
+FunctionCall: ast::Node<ast::FunctionCall> = {
+    <l:@L> <i:Ident> "(" <args:Separated<",", Expr>> ")" <r:@R> => ast::Node::new(ast::FunctionCall { name: i, args: args }, l..r),
+};
+
+Expr: ast::Node<ast::Expression> = {
+    <l:@L> <n:Number> <r:@R> => ast::Node::new(ast::Expression::Number(n), l..r),
+    <l:@L> <i:Ident> <r:@R> => ast::Node::new(ast::Expression::Identifier(i), l..r),
+    <l:@L> <f:FunctionCall> <r:@R> => ast::Node::new(ast::Expression::FunctionCall(f.node), l..r),
+};
+
+Binding: ast::Binding = {
+    <i:Ident> "=" <e:Expr> => ast::Binding { names: vec![i], expr: e },
+    "(" <i:Ident> "," <ids:Separated<",", Ident>> ")" "=" <e:Expr> => {
+        let mut idents = vec![i];
+        idents.extend(ids);
+        ast::Binding { names: idents, expr: e }
+    }
+};
+
+If: ast::If = {
+    "if" "(" <c:Expr> ")" "{" <t:Statements> "}" "else" "{" <f:Statements> "}" => ast::If { condition: c, then: t, otherwise: f },
+};
+
+Statement: ast::Statement = {
+    <b:Binding> ";" => ast::Statement::Binding(b),
+    <f:FunctionCall> ";" => ast::Statement::FunctionCall(f),
+    <i:If> => ast::Statement::If(i),
+};
+
+Statements: Vec<ast::Statement> = Statement*;
+
+pub Function: ast::Function = {
+    "function" <i:Ident> "(" <args:Separated<",", Ident>> ")" ":" "(" <outputs:Separated<",", Ident>> ")" "{" <statements:Statements> "}" => ast::Function { name: i, args, outputs, body: statements },
+};
+
+pub Program: ast::Program = {
+    <functions:Function*> => ast::Program { functions },
+};
