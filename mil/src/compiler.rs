@@ -1,10 +1,11 @@
-use std::{collections::HashMap, io::Write};
+use std::{borrow::Cow, collections::HashMap, io::Write};
 
 use mil_parser::ast;
 
 #[derive(Debug)]
 enum Expression {
     Number(u64),
+    Dup(ExpressionRef),
     FunctionCall {
         name: String,
         // args are indexes to expression values
@@ -42,7 +43,7 @@ impl ToString for ExpressionRef {
 
 #[derive(Clone)]
 struct Function {
-    name: String,
+    name: std::borrow::Cow<'static, str>,
     num_args: usize,
     num_outputs: usize,
     /// If None, we call using `exec`, otherwise we output the instruction
@@ -61,7 +62,7 @@ struct Compiler {
     used_exprs: Vec<usize>,
     /// Expression -> dependency.
     expr_to_dependency: Vec<(ExpressionRef, ExpressionRef)>,
-    /// Expression -> how many times it was used.
+    /// Expression -> usage count.
     expr_use_count: HashMap<ExpressionRef, usize>,
     /// Functions available to call.
     functions: Vec<Function>,
@@ -74,63 +75,63 @@ impl Compiler {
     fn new(user_functions: &[Function], grapher: Grapher) -> Self {
         let default_functions = [
             Function {
-                name: "add".to_string(),
+                name: Cow::Borrowed("add"),
                 num_args: 2,
                 num_outputs: 1,
                 instruction: Some("add"),
                 pure: true,
             },
             Function {
-                name: "sub".to_string(),
+                name: Cow::Borrowed("sub"),
                 num_args: 2,
                 num_outputs: 1,
                 instruction: Some("sub"),
                 pure: true,
             },
             Function {
-                name: "dup".to_string(),
+                name: Cow::Borrowed("dup"),
                 num_args: 1,
                 num_outputs: 2,
                 instruction: Some("dup"),
                 pure: true,
             },
             Function {
-                name: "eq".to_string(),
+                name: Cow::Borrowed("eq"),
                 num_args: 2,
                 num_outputs: 1,
                 instruction: Some("eq"),
                 pure: true,
             },
             Function {
-                name: "not".to_string(),
+                name: Cow::Borrowed("not"),
                 num_args: 1,
                 num_outputs: 1,
                 instruction: Some("not"),
                 pure: true,
             },
             Function {
-                name: "assert".to_string(),
+                name: Cow::Borrowed("assert"),
                 num_args: 1,
                 num_outputs: 0,
                 instruction: Some("assert"),
                 pure: false,
             },
             Function {
-                name: "u32wrapping_add".to_string(),
+                name: Cow::Borrowed("u32wrapping_add"),
                 num_args: 2,
                 num_outputs: 1,
                 instruction: Some("u32wrapping_add"),
                 pure: true,
             },
             Function {
-                name: "u32wrapping_sub".to_string(),
+                name: Cow::Borrowed("u32wrapping_sub"),
                 num_args: 2,
                 num_outputs: 1,
                 instruction: Some("u32wrapping_sub"),
                 pure: true,
             },
             Function {
-                name: "u32checked_shr".to_string(),
+                name: "u32checked_shr".into(),
                 num_args: 2,
                 num_outputs: 1,
                 instruction: Some("u32checked_shr"),
@@ -174,13 +175,17 @@ impl Compiler {
             panic!("no outputs");
         }
 
-        dbg!(&self.expr_use_count);
-
         for output in outputs.iter().rev() {
             self.compile_expr(*output);
         }
 
-        for dep in dependencies.iter().rev() {
+        for dep in dependencies.iter() {
+            if self.used_exprs.contains(&dep.expr_index) {
+                // THIS WAS THE CRUCIAL FIX! OUTPUTS ALREADY COMPILED THE DEPS, COMPILING THEM AGAIN WAS WRONG! MAYBE WE SHOULD HAVE TRY_COMPILE_EXPR?
+                // TODO: bring back automatic dup-ing, remove manual dup
+                continue;
+            }
+
             self.compile_expr(*dep);
         }
 
@@ -194,7 +199,6 @@ impl Compiler {
     }
 
     fn compile_expr(&mut self, expr_ref: ExpressionRef) {
-        dbg!(&expr_ref);
         for dependency in self
             .expr_to_dependency
             .iter()
@@ -212,20 +216,6 @@ impl Compiler {
         }
 
         if self.stack.contains(&expr_ref) {
-            if self
-                .expr_use_count
-                .get(&expr_ref)
-                .map(|count| *count)
-                .unwrap_or(0)
-                > 1
-            {
-                self.dup(&expr_ref);
-                self.expr_use_count
-                    .get_mut(&expr_ref)
-                    .map(|count| *count -= 1);
-            } else {
-                self.movup(&expr_ref);
-            }
         } else if self.used_exprs.contains(&expr_ref.expr_index) {
             panic!(
                 "Expression {:?} is already used and not on the stack",
@@ -237,8 +227,18 @@ impl Compiler {
                 Expression::Number(n) => {
                     self.miden_code.push_str(&format!("push.{}\n", n));
                     self.stack.push(ExpressionRef::new(expr_ref.expr_index, 0));
-                    // Don't add to self.used_exprs, just re-compile again when it's needed, since it's only 1 instruction.
-                    // self.used_exprs.push(expr_ref.expr_index);
+                    self.used_exprs.push(expr_ref.expr_index);
+                }
+                Expression::Dup(e) => {
+                    let e = e.clone();
+                    dbg!(e, expr_ref);
+                    eprintln!("{}", &self.grapher.graph);
+                    if !self.used_exprs.contains(&e.expr_index) {
+                        self.compile_expr(e);
+                    }
+
+                    self.dup(&e);
+                    *self.stack.last_mut().unwrap() = expr_ref;
                 }
                 Expression::FunctionCall { name, args } => {
                     let function = self
@@ -274,7 +274,7 @@ impl Compiler {
                         self.grapher.define_edge(&arg.to_string(), &name);
                         self.compile_expr(*arg);
                     }
-                    self.movup_many(&args);
+                    self.align_exprs_stack(&args);
 
                     self.miden_code.push_str(&call_inst);
                     self.miden_code.push_str("\n");
@@ -304,7 +304,7 @@ impl Compiler {
                     let otherwise_dependencies = otherwise_dependencies.clone();
 
                     self.compile_expr(condition);
-                    self.movup(&condition);
+                    self.align_exprs_stack(&[condition]);
                     self.grapher
                         .define_edge(&condition.to_string(), &expr_ref.expr_index.to_string());
 
@@ -321,12 +321,12 @@ impl Compiler {
                         for dep in then_dependencies {
                             self.compile_expr(dep);
                         }
-                        self.movup_many(&then);
+                        self.align_exprs_stack(&then);
                         for _ in then.iter() {
                             self.stack.pop();
                         }
                     } else {
-                        // no-op, then branch cannot be empty in MASM
+                        // branch cannot be empty in MASM
                         self.miden_code.push_str("push.0\ndrop\n");
                     }
 
@@ -341,7 +341,7 @@ impl Compiler {
                             self.compile_expr(dep);
                         }
 
-                        self.movup_many(&otherwise);
+                        self.align_exprs_stack(&otherwise);
                         for _ in otherwise.iter() {
                             self.stack.pop();
                         }
@@ -429,6 +429,19 @@ impl Compiler {
             }
             n => panic!("Element {:?} is too deep on the stack: {}", expr_ref, n),
         }
+    }
+
+    fn align_exprs_stack(&mut self, exprs: &[ExpressionRef]) {
+        for expr in exprs.iter().rev() {
+            let count = *self.expr_use_count.get(expr).unwrap_or(&1);
+
+            if count > 1 {
+                self.dup(expr);
+                self.expr_use_count.entry(*expr).and_modify(|e| *e -= 1);
+            }
+        }
+
+        self.movup_many(exprs);
     }
 
     /// Exprs is highest to lowest.
@@ -567,6 +580,23 @@ fn handle_ast_expression(
 
             expr_ref
         }
+        ast::Expression::Dup(id) => {
+            let expr_ref = bindings
+                .iter()
+                .rev()
+                .find_map(|(expr_ref, name)| {
+                    if name == &id.0 {
+                        Some(expr_ref.clone())
+                    } else {
+                        None
+                    }
+                })
+                .expect(&format!("Could not find binding for identifier {}", &id.0));
+
+            expressions.push(Expression::Dup(expr_ref));
+            let expr_ref = ExpressionRef::new(expressions.len() - 1, 0);
+            expr_ref
+        }
         ast::Expression::FunctionCall(fc) => {
             let mut args = vec![];
 
@@ -607,7 +637,7 @@ fn handle_ast_expression(
 
     expr_use_count
         .entry(expr_ref)
-        .and_modify(|count| *count += 1)
+        .and_modify(|e| *e += 1)
         .or_insert(1);
 
     expr_ref
@@ -836,7 +866,7 @@ pub(crate) fn compile(code: &str) -> (String, String) {
         miden_code.push_str(&format!("proc.{}\n{}\nend\n", function.name.0, mc));
 
         functions.push(Function {
-            name: function.name.0,
+            name: Cow::Owned(function.name.0),
             num_args,
             num_outputs: function.outputs.len(),
             instruction: None,
