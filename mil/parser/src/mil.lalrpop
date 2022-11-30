@@ -26,7 +26,6 @@ FunctionCall: ast::Node<ast::FunctionCall> = {
 
 Expr: ast::Node<ast::Expression> = {
     <l:@L> <n:Number> <r:@R> => ast::Node::new(ast::Expression::Number(n), l..r),
-    <l:@L> "dup" <i:Ident> <r:@R> => ast::Node::new(ast::Expression::Dup(i), l..r),
     <l:@L> <i:Ident> <r:@R> => ast::Node::new(ast::Expression::Identifier(i), l..r),
     <l:@L> <f:FunctionCall> <r:@R> => ast::Node::new(ast::Expression::FunctionCall(f.node), l..r),
 };

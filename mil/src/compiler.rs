@@ -580,23 +580,6 @@ fn handle_ast_expression(
 
             expr_ref
         }
-        ast::Expression::Dup(id) => {
-            let expr_ref = bindings
-                .iter()
-                .rev()
-                .find_map(|(expr_ref, name)| {
-                    if name == &id.0 {
-                        Some(expr_ref.clone())
-                    } else {
-                        None
-                    }
-                })
-                .expect(&format!("Could not find binding for identifier {}", &id.0));
-
-            expressions.push(Expression::Dup(expr_ref));
-            let expr_ref = ExpressionRef::new(expressions.len() - 1, 0);
-            expr_ref
-        }
         ast::Expression::FunctionCall(fc) => {
             let mut args = vec![];
 

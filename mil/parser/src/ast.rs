@@ -18,7 +18,6 @@ pub struct FunctionCall {
 
 pub enum Expression {
     Number(u64),
-    Dup(Identifier),
     Identifier(Identifier),
     FunctionCall(FunctionCall),
 }
