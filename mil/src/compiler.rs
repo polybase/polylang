@@ -5,7 +5,6 @@ use mil_parser::ast;
 #[derive(Debug)]
 enum Expression {
     Number(u64),
-    Dup(ExpressionRef),
     FunctionCall {
         name: String,
         // args are indexes to expression values
@@ -107,6 +106,13 @@ impl Compiler {
                 num_args: 1,
                 num_outputs: 1,
                 instruction: Some("not"),
+                pure: true,
+            },
+            Function {
+                name: Cow::Borrowed("or"),
+                num_args: 2,
+                num_outputs: 1,
+                instruction: Some("or"),
                 pure: true,
             },
             Function {
@@ -229,17 +235,6 @@ impl Compiler {
                     self.stack.push(ExpressionRef::new(expr_ref.expr_index, 0));
                     self.used_exprs.push(expr_ref.expr_index);
                 }
-                Expression::Dup(e) => {
-                    let e = e.clone();
-                    dbg!(e, expr_ref);
-                    eprintln!("{}", &self.grapher.graph);
-                    if !self.used_exprs.contains(&e.expr_index) {
-                        self.compile_expr(e);
-                    }
-
-                    self.dup(&e);
-                    *self.stack.last_mut().unwrap() = expr_ref;
-                }
                 Expression::FunctionCall { name, args } => {
                     let function = self
                         .functions
@@ -314,6 +309,8 @@ impl Compiler {
                     // if.true consumes the condition from the stack.
                     self.stack.pop();
 
+                    let stack_before_then = self.stack.len();
+
                     if then.len() > 0 || then_dependencies.len() > 0 {
                         for expr in then.iter().rev() {
                             self.compile_expr(*expr);
@@ -352,6 +349,12 @@ impl Compiler {
                     for expr in then_used_expressions {
                         self.used_exprs.push(expr);
                     }
+
+                    assert_eq!(
+                        self.stack.len(),
+                        stack_before_then,
+                        "Compiling then or else resulted in different stack sizes. TODO: Fix this."
+                    );
 
                     for i in (0..then.len()).rev() {
                         let el_expr_ref = ExpressionRef {
@@ -838,7 +841,7 @@ pub(crate) fn compile(code: &str) -> (String, String) {
             );
         }
 
-        let (mc, _) = compiler.compile(
+        let (mc, graph) = compiler.compile(
             &function
                 .outputs
                 .iter()
