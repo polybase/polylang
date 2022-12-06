@@ -1,6 +1,7 @@
 mod boolean;
 mod encoder;
 mod int32;
+mod ir;
 mod string;
 mod uint32;
 mod uint64;

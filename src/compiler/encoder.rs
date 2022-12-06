@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Instruction<'a> {
     Comment(String),            // # ...
     Drop,                       // drop
@@ -42,10 +42,13 @@ pub(crate) enum Instruction<'a> {
         then: Vec<Instruction<'a>>,
         else_: Vec<Instruction<'a>>,
     },
+    IfTrue,
+    IfElse,
+    IfEnd,
     Abstract(AbstractInstruction<'a>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum AbstractInstruction<'a> {
     Break,
     Return,
@@ -152,6 +155,9 @@ impl Instruction<'_> {
 
                 write_indent!(f, "end");
             }
+            Instruction::IfTrue => write_indent!(f, "if.true"),
+            Instruction::IfElse => write_indent!(f, "else"),
+            Instruction::IfEnd => write_indent!(f, "end"),
             Instruction::Abstract(_) => {
                 unreachable!("abstract instructions should be unabstracted before encoding")
             }
