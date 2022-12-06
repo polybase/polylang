@@ -56,6 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed to compile miden assembly");
 
     let mut process = miden_processor::Process::new_debug(
+        assembler.kernel(),
         miden::ProgramInputs::new(&[], &args.advice_tape, vec![]).unwrap(),
     );
     let execution_result = process.execute(&program);

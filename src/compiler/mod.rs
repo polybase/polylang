@@ -695,7 +695,6 @@ impl Memory {
         for v in values {
             v.load(instructions);
             instructions.push(encoder::Instruction::MemStore(Some(addr)));
-            instructions.push(encoder::Instruction::Drop);
             addr += 1;
         }
     }
