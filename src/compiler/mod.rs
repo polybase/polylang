@@ -1162,6 +1162,9 @@ fn compile_mod(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt64),
         ) => uint64::modulo(compiler, a, b),
+        (Type::PrimitiveType(PrimitiveType::Int32), Type::PrimitiveType(PrimitiveType::Int32)) => {
+            int32::modulo(compiler, a, b)
+        }
         (
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt32),
@@ -1387,6 +1390,9 @@ fn compile_shift_left(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt64),
         ) => uint64::shift_left(compiler, a, b),
+        (Type::PrimitiveType(PrimitiveType::Int32), Type::PrimitiveType(PrimitiveType::Int32)) => {
+            int32::shift_left(compiler, a, b)
+        }
         (
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt32),
@@ -1412,6 +1418,9 @@ fn compile_shift_right(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbo
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt64),
         ) => uint64::shift_right(compiler, a, b),
+        (Type::PrimitiveType(PrimitiveType::Int32), Type::PrimitiveType(PrimitiveType::Int32)) => {
+            int32::shift_right(compiler, a, b)
+        }
         (
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt32),

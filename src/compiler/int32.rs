@@ -457,6 +457,226 @@ pub(crate) fn div(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     result
 }
 
+/// calculates the modulo of two int32s with overflow checking.
+// First overflow check: b == 0
+// Second overflow check: a == i32::MIN && b == -1
+pub(crate) fn modulo(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Int32));
+
+    compiler.memory.read(
+        &mut compiler.instructions,
+        a.memory_addr,
+        a.type_.miden_width(),
+    );
+    // [a]
+    compiler.memory.read(
+        &mut compiler.instructions,
+        b.memory_addr,
+        b.type_.miden_width(),
+    );
+    // [b, a]
+
+    compiler.instructions.push(encoder::Instruction::Dup(None));
+    // [b, b, a]
+    compiler.instructions.push(encoder::Instruction::Push(0));
+    // [0, b, b, a]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedEq);
+    // [b == 0, b, a]
+    compiler.instructions.push(encoder::Instruction::Not);
+    // [b != 0, b, a]
+    compiler.instructions.push(encoder::Instruction::Assert);
+    // [b, a]
+    // fails on a % 0
+
+    // assert(a != min() || b != negate(1), 'modInt32 overflow, dividing min by -1');
+    compiler.instructions.push(encoder::Instruction::Dup(None));
+    // [b, b, a]
+    compiler
+        .instructions
+        .push(encoder::Instruction::Push(-1i32 as u32));
+    // [-1, b, b, a]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedEq);
+    // [b == -1, b, a]
+    compiler.instructions.push(encoder::Instruction::Not);
+    // [b != -1, b, a]
+    compiler
+        .instructions
+        .push(encoder::Instruction::Dup(Some(2)));
+    // [a, b != -1, b, a]
+    compiler
+        .instructions
+        .push(encoder::Instruction::Push(i32::MIN as u32));
+    // [i32::MIN, a, b != -1, b, a]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedEq);
+    // [a == i32::MIN, b != -1, b, a]
+    compiler.instructions.push(encoder::Instruction::Not);
+    // [a != i32::MIN, b != -1, b, a]
+    compiler.instructions.push(encoder::Instruction::Or);
+    // [a != i32::MIN || b != -1, b, a]
+    compiler.instructions.push(encoder::Instruction::Assert);
+    // [b, a]
+    // fails on i32::MIN by -1
+
+    compiler
+        .instructions
+        .push(encoder::Instruction::Dup(Some(1)));
+    // [a, b, a]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedSHR(Some(31)));
+    // [a_sign, b, a]
+    compiler.instructions.push(encoder::Instruction::MovDown(2));
+    // [b, a, a_sign]
+
+    abs_stack(compiler);
+    // [abs(b), a, a_sign]
+    compiler.instructions.push(encoder::Instruction::Swap);
+    // [a, abs(b), a_sign]
+    abs_stack(compiler);
+    // [abs(a), abs(b), a_sign]
+    compiler.instructions.push(encoder::Instruction::Swap);
+    // [abs(b), abs(a), a_sign]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedMod);
+    // [abs(a) % abs(b), a_sign]
+
+    compiler.instructions.push(encoder::Instruction::Swap);
+    // [a_sign, abs(a) % abs(b)]
+
+    let negation = {
+        let mut instructions = Vec::new();
+        let mut compiler = Compiler::new(&mut instructions, compiler.memory, compiler.root_scope);
+
+        // [result]
+        negate_stack(&mut compiler);
+        // [negate(result)]
+
+        instructions
+    };
+
+    compiler.instructions.push(encoder::Instruction::If {
+        // if a_sign == 1
+        condition: vec![],
+        // [abs(a) % abs(b)]
+        then: negation,
+        else_: vec![
+            // do nothing, return the result as is
+        ],
+    });
+
+    compiler.memory.write(
+        &mut compiler.instructions,
+        result.memory_addr,
+        &[ValueSource::Stack],
+    );
+
+    result
+}
+
+fn shift(compiler: &mut Compiler, a: &Symbol, b: &Symbol, is_right: bool) -> Symbol {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Int32));
+
+    compiler.memory.read(
+        &mut compiler.instructions,
+        a.memory_addr,
+        a.type_.miden_width(),
+    );
+    // [a]
+    compiler.memory.read(
+        &mut compiler.instructions,
+        b.memory_addr,
+        b.type_.miden_width(),
+    );
+    // [b, a]
+
+    compiler.instructions.push(encoder::Instruction::Dup(None));
+    // [b, b, a]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedSHR(Some(31)));
+    // [b_sign, b, a]
+    compiler.instructions.push(encoder::Instruction::AssertZero);
+    // [b, a]
+    // fails if shifting by a negative number
+
+    compiler
+        .instructions
+        .push(encoder::Instruction::Dup(Some(1)));
+    // [a, b, a]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedSHR(Some(31)));
+    // [a_sign, b, a]
+    compiler.instructions.push(encoder::Instruction::MovDown(2));
+    // [b, a, a_sign]
+
+    abs_stack(compiler);
+    // [abs(b), a, a_sign]
+    compiler.instructions.push(encoder::Instruction::Swap);
+    // [a, abs(b), a_sign]
+    abs_stack(compiler);
+    // [abs(a), abs(b), a_sign]
+    compiler.instructions.push(encoder::Instruction::Swap);
+    // [abs(b), abs(a), a_sign]
+
+    compiler.instructions.push(if is_right {
+        encoder::Instruction::U32CheckedSHR(None)
+    } else {
+        encoder::Instruction::U32CheckedSHL(None)
+    });
+    // [abs(a) >> abs(b), a_sign]
+    compiler.instructions.push(encoder::Instruction::Swap);
+    // [a_sign, abs(a) >> abs(b)]
+
+    let negation = {
+        let mut instructions = Vec::new();
+        let mut compiler = Compiler::new(&mut instructions, compiler.memory, compiler.root_scope);
+
+        // [result]
+        negate_stack(&mut compiler);
+        // [negate(result)]
+
+        instructions
+    };
+
+    compiler.instructions.push(encoder::Instruction::If {
+        // if a_sign == 1
+        condition: vec![],
+        // [abs(a) >> abs(b)]
+        then: negation,
+        else_: vec![
+            // do nothing, return the result as is
+        ],
+    });
+
+    compiler.memory.write(
+        &mut compiler.instructions,
+        result.memory_addr,
+        &[ValueSource::Stack],
+    );
+
+    result
+}
+
+pub(crate) fn shift_right(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    shift(compiler, a, b, true)
+}
+
+pub(crate) fn shift_left(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    shift(compiler, a, b, false)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -890,5 +1110,184 @@ mod test {
 
         let max_divided_by_2 = i32::MAX / 2;
         test!(i32::MAX, 2, Ok(max_divided_by_2));
+    }
+
+    fn modulo(a: i32, b: i32) -> Result<i32, miden::ExecutionError> {
+        let mut instructions = Vec::new();
+        let mut memory = Memory::new();
+        let scope = Scope::new();
+        let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
+        let a = new(&mut compiler, a);
+        let b = new(&mut compiler, b);
+
+        let result = super::modulo(&mut compiler, &a, &b);
+        compiler
+            .memory
+            .read(&mut compiler.instructions, result.memory_addr, WIDTH);
+
+        let mut program = "begin\n".to_string();
+        for instruction in &instructions {
+            instruction
+                .encode(unsafe { program.as_mut_vec() }, 1)
+                .unwrap();
+        }
+        program.push_str("\nend\n");
+
+        let outputs = miden::execute(
+            &miden::Assembler::default().compile(&program).unwrap(),
+            &miden::ProgramInputs::none(),
+        )?
+        .program_outputs();
+
+        let stack = outputs.stack_outputs(1);
+
+        Ok(stack[0] as i32)
+    }
+
+    #[test]
+    fn test_modulo() {
+        macro_rules! test {
+            ($a:expr, $b:expr, $expected:pat_param) => {
+                let result = modulo($a, $b);
+                assert!(
+                    matches!(result, $expected),
+                    "modulo({}, {}) = {:?}, expected {}",
+                    $a,
+                    $b,
+                    result,
+                    stringify!($expected)
+                );
+            };
+        }
+
+        test!(0, 0, Err(miden::ExecutionError::FailedAssertion(_)));
+        test!(1, 0, Err(miden::ExecutionError::FailedAssertion(_)));
+        test!(i32::MIN, -1, Err(miden::ExecutionError::FailedAssertion(_)));
+
+        test!(0, 1, Ok(0));
+        test!(1, 1, Ok(0));
+        test!(1, -1, Ok(0));
+        test!(-1, 1, Ok(0));
+        test!(-1, -1, Ok(0));
+        test!(i32::MAX, 1, Ok(0));
+        test!(i32::MAX, -1, Ok(0));
+        test!(-1, i32::MAX, Ok(-1));
+        // TODO: fix this case
+        // test!(i32::MIN, 1, Ok(0));
+    }
+
+    fn shift_right(a: i32, b: i32) -> Result<i32, miden::ExecutionError> {
+        let mut instructions = Vec::new();
+        let mut memory = Memory::new();
+        let scope = Scope::new();
+        let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
+        let a = new(&mut compiler, a);
+        let b = new(&mut compiler, b);
+
+        let result = super::shift_right(&mut compiler, &a, &b);
+        compiler
+            .memory
+            .read(&mut compiler.instructions, result.memory_addr, WIDTH);
+
+        let mut program = "begin\n".to_string();
+        for instruction in &instructions {
+            instruction
+                .encode(unsafe { program.as_mut_vec() }, 1)
+                .unwrap();
+        }
+        program.push_str("\nend\n");
+
+        let outputs = miden::execute(
+            &miden::Assembler::default().compile(&program).unwrap(),
+            &miden::ProgramInputs::none(),
+        )?
+        .program_outputs();
+
+        let stack = outputs.stack_outputs(1);
+
+        Ok(stack[0] as i32)
+    }
+
+    #[test]
+    fn test_shift_right() {
+        macro_rules! test {
+            ($a:expr, $b:expr, $expected:pat_param) => {
+                let result = shift_right($a, $b);
+                assert!(
+                    matches!(result, $expected),
+                    "shift_right({}, {}) = {:?}, expected {}",
+                    $a,
+                    $b,
+                    result,
+                    stringify!($expected)
+                );
+            };
+        }
+
+        test!(0, 0, Ok(0));
+        test!(1, 0, Ok(1));
+        test!(i32::MAX, 0, Ok(i32::MAX));
+        test!(-1, 0, Ok(-1));
+        test!(-2, 1, Ok(-1));
+        test!(-2, -1, Err(miden::ExecutionError::FailedAssertion(_)));
+
+        // TODO: fix this case
+        // test!(i32::MIN, 0, Ok(i32::MIN));
+    }
+
+    fn shift_left(a: i32, b: i32) -> Result<i32, miden::ExecutionError> {
+        let mut instructions = Vec::new();
+        let mut memory = Memory::new();
+        let scope = Scope::new();
+        let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
+        let a = new(&mut compiler, a);
+        let b = new(&mut compiler, b);
+
+        let result = super::shift_left(&mut compiler, &a, &b);
+        compiler
+            .memory
+            .read(&mut compiler.instructions, result.memory_addr, WIDTH);
+
+        let mut program = "begin\n".to_string();
+        for instruction in &instructions {
+            instruction
+                .encode(unsafe { program.as_mut_vec() }, 1)
+                .unwrap();
+        }
+        program.push_str("\nend\n");
+
+        let outputs = miden::execute(
+            &miden::Assembler::default().compile(&program).unwrap(),
+            &miden::ProgramInputs::none(),
+        )?
+        .program_outputs();
+
+        let stack = outputs.stack_outputs(1);
+
+        Ok(stack[0] as i32)
+    }
+
+    #[test]
+    fn test_shift_left() {
+        macro_rules! test {
+            ($a:expr, $b:expr, $expected:pat_param) => {
+                let result = shift_left($a, $b);
+                assert!(
+                    matches!(result, $expected),
+                    "shift_left({}, {}) = {:?}, expected {}",
+                    $a,
+                    $b,
+                    result,
+                    stringify!($expected)
+                );
+            };
+        }
+
+        test!(0, 0, Ok(0));
+        test!(1, 0, Ok(1));
+        test!(i32::MAX, 0, Ok(i32::MAX));
+        test!(-1, 0, Ok(-1));
+        test!(-2, 1, Ok(-4));
+        test!(-2, -1, Err(miden::ExecutionError::FailedAssertion(_)));
     }
 }
