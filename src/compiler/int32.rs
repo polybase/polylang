@@ -677,6 +677,170 @@ pub(crate) fn shift_left(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Sym
     shift(compiler, a, b, false)
 }
 
+/// Turns stack [b, a, b_sign, a_sign] into [a > b]
+pub(crate) fn gt_stack(compiler: &mut Compiler) {
+    // [b, a, b_sign, a_sign]
+
+    compiler
+        .instructions
+        .push(encoder::Instruction::Dup(Some(3)));
+    // [a_sign, b, a, b_sign, a_sign]
+    compiler
+        .instructions
+        .push(encoder::Instruction::Dup(Some(3)));
+    // [b_sign, a_sign, b, a, b_sign, a_sign]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedEq);
+    // [a_sign == b_sign, b, a, b_sign, a_sign]
+    compiler.instructions.push(encoder::Instruction::MovUp(2));
+    // [a, a_sign == b_sign, b, b_sign, a_sign]
+    compiler.instructions.push(encoder::Instruction::MovUp(2));
+    // [b, a, a_sign == b_sign, b_sign, a_sign]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedGT);
+    // [a > b, a_sign == b_sign, b_sign, a_sign]
+    compiler.instructions.push(encoder::Instruction::And);
+    // [a_sign == b_sign && a > b, b_sign, a_sign]
+    compiler.instructions.push(encoder::Instruction::Swap);
+    // [b_sign, a_sign == b_sign && a > b, a_sign]
+    compiler.instructions.push(encoder::Instruction::MovUp(2));
+    // [a_sign, b_sign, a_sign == b_sign && a > b]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedGT);
+    // [b_sign > a_sign, a_sign == b_sign && a > b]
+    compiler.instructions.push(encoder::Instruction::Or);
+    // [(a_sign == b_sign && a > b) || b_sign > a_sign]
+}
+
+pub(crate) fn gt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+
+    prepare_stack_for_arithmetic(compiler, a, b);
+    // [b, a, b_sign, a_sign]
+
+    gt_stack(compiler);
+
+    compiler.memory.write(
+        &mut compiler.instructions,
+        result.memory_addr,
+        &[ValueSource::Stack],
+    );
+
+    result
+}
+
+pub(crate) fn gte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+
+    prepare_stack_for_arithmetic(compiler, a, b);
+    // [b, a, b_sign, a_sign]
+
+    compiler
+        .instructions
+        .push(encoder::Instruction::Dup(Some(1)));
+    // [a, b, a, b_sign, a_sign]
+    compiler
+        .instructions
+        .push(encoder::Instruction::Dup(Some(1)));
+    // [b, a, b, a, b_sign, a_sign]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedEq);
+    // [a == b, b, a, b_sign, a_sign]
+    compiler.instructions.push(encoder::Instruction::MovDown(4));
+    // [b, a, b_sign, a_sign, a == b]
+
+    gt_stack(compiler);
+    // [a > b, a == b]
+
+    compiler.instructions.push(encoder::Instruction::Or);
+    // [a > b || a == b]
+
+    compiler.memory.write(
+        &mut compiler.instructions,
+        result.memory_addr,
+        &[ValueSource::Stack],
+    );
+
+    result
+}
+
+pub(crate) fn lte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+
+    prepare_stack_for_arithmetic(compiler, a, b);
+    // [b, a, b_sign, a_sign]
+
+    gt_stack(compiler);
+    // [a > b]
+
+    compiler.instructions.push(encoder::Instruction::Not);
+    // [a <= b]
+
+    compiler.memory.write(
+        &mut compiler.instructions,
+        result.memory_addr,
+        &[ValueSource::Stack],
+    );
+
+    result
+}
+
+pub(crate) fn lt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+
+    prepare_stack_for_arithmetic(compiler, a, b);
+    // [b, a, b_sign, a_sign]
+
+    compiler
+        .instructions
+        .push(encoder::Instruction::Dup(Some(1)));
+    // [a, b, a, b_sign, a_sign]
+    compiler
+        .instructions
+        .push(encoder::Instruction::Dup(Some(1)));
+    // [b, a, b, a, b_sign, a_sign]
+
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedEq);
+    // [a == b, b, a, b_sign, a_sign]
+
+    compiler.instructions.push(encoder::Instruction::Not);
+    // [a != b, b, a, b_sign, a_sign]
+
+    compiler.instructions.push(encoder::Instruction::MovDown(4));
+    // [b, a, b_sign, a_sign, a != b]
+
+    gt_stack(compiler);
+    // [a > b, a != b]
+
+    compiler.instructions.push(encoder::Instruction::Not);
+    // [a <= b, a != b]
+
+    compiler.instructions.push(encoder::Instruction::And);
+    // [a != b && a <= b]
+
+    compiler.memory.write(
+        &mut compiler.instructions,
+        result.memory_addr,
+        &[ValueSource::Stack],
+    );
+
+    result
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -1289,5 +1453,62 @@ mod test {
         test!(-1, 0, Ok(-1));
         test!(-2, 1, Ok(-4));
         test!(-2, -1, Err(miden::ExecutionError::FailedAssertion(_)));
+    }
+
+    fn gt(a: i32, b: i32) -> Result<bool, miden::ExecutionError> {
+        let mut instructions = Vec::new();
+        let mut memory = Memory::new();
+        let scope = Scope::new();
+        let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
+        let a = new(&mut compiler, a);
+        let b = new(&mut compiler, b);
+
+        let result = super::gt(&mut compiler, &a, &b);
+        compiler
+            .memory
+            .read(&mut compiler.instructions, result.memory_addr, WIDTH);
+
+        let mut program = "begin\n".to_string();
+        for instruction in &instructions {
+            instruction
+                .encode(unsafe { program.as_mut_vec() }, 1)
+                .unwrap();
+        }
+        program.push_str("\nend\n");
+
+        let outputs = miden::execute(
+            &miden::Assembler::default().compile(&program).unwrap(),
+            &miden::ProgramInputs::none(),
+        )?
+        .program_outputs();
+
+        let stack = outputs.stack_outputs(1);
+
+        Ok(stack[0] != 0)
+    }
+
+    #[test]
+    fn test_gt() {
+        macro_rules! test {
+            ($a:expr, $b:expr, $expected:pat_param) => {
+                let result = gt($a, $b);
+                assert!(
+                    matches!(result, $expected),
+                    "gt({}, {}) = {:?}, expected {}",
+                    $a,
+                    $b,
+                    result,
+                    stringify!($expected)
+                );
+            };
+        }
+
+        test!(0, 0, Ok(false));
+        test!(1, 0, Ok(true));
+        test!(i32::MAX, 0, Ok(true));
+        test!(-1, 0, Ok(false));
+        test!(-2, 1, Ok(false));
+        test!(-2, -1, Ok(false));
+        test!(i32::MIN, 0, Ok(false));
     }
 }

@@ -1290,6 +1290,9 @@ fn compile_gte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt64),
         ) => uint64::gte(compiler, a, b),
+        (Type::PrimitiveType(PrimitiveType::Int32), Type::PrimitiveType(PrimitiveType::Int32)) => {
+            int32::gte(compiler, a, b)
+        }
         (
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt32),
@@ -1315,6 +1318,9 @@ fn compile_gt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt64),
         ) => uint64::gt(compiler, a, b),
+        (Type::PrimitiveType(PrimitiveType::Int32), Type::PrimitiveType(PrimitiveType::Int32)) => {
+            int32::gt(compiler, a, b)
+        }
         (
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt32),
@@ -1340,6 +1346,9 @@ fn compile_lte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt64),
         ) => uint64::lte(compiler, a, b),
+        (Type::PrimitiveType(PrimitiveType::Int32), Type::PrimitiveType(PrimitiveType::Int32)) => {
+            int32::lte(compiler, a, b)
+        }
         (
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt32),
@@ -1365,6 +1374,9 @@ fn compile_lt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt64),
         ) => uint64::lt(compiler, a, b),
+        (Type::PrimitiveType(PrimitiveType::Int32), Type::PrimitiveType(PrimitiveType::Int32)) => {
+            int32::lt(compiler, a, b)
+        }
         (
             Type::PrimitiveType(PrimitiveType::UInt64),
             Type::PrimitiveType(PrimitiveType::UInt32),
