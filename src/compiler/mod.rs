@@ -92,7 +92,7 @@ lazy_static::lazy_static! {
 
         builtins.push((
             "dynamicAlloc".to_string(),
-            Function::Builtin(Box::new(&dynamic_alloc)),
+            Function::Builtin(Box::new(&|compiler, scope, args| dynamic_alloc(compiler, args))),
         ));
 
         builtins.push((
@@ -1120,6 +1120,7 @@ fn compile_add(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
             uint64::add(compiler, a, &b_u64)
         }
+        (Type::String, Type::String) => string::concat(compiler, a, b),
         e => unimplemented!("{:?}", e),
     }
 }
@@ -1448,7 +1449,7 @@ fn compile_shift_right(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbo
     }
 }
 
-fn dynamic_alloc(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Symbol {
+fn dynamic_alloc(compiler: &mut Compiler, args: &[Symbol]) -> Symbol {
     let size = &args[0];
     assert_eq!(size.type_, Type::PrimitiveType(PrimitiveType::UInt32));
 
