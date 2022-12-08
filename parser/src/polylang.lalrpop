@@ -131,13 +131,18 @@ pub PrimitiveArgumentList: Vec<Primitive> = {
 pub CompoundStatement: Statement = {
     <i:If> => Statement::If(i),
     <w:While> => Statement::While(w),
-}
+    <f:For> => Statement::For(f),
+};
+
+Let: Let = {
+    "let" <i:Ident> "=" <e:Expression> => Let { identifier: i, expression: e },
+};
 
 pub SmallStatement: Statement = {
     "break" => Statement::Break,
     "return" <e:Expression> => Statement::Return(e),
     "throw" <e:Expression> => Statement::Throw(e),
-    "let" <i:Ident> "=" <e:Expression> => Statement::Let(i, e),
+    <l:Let> => Statement::Let(l),
     <e:Expression> => Statement::Expression(e),
 };
 
@@ -167,6 +172,15 @@ pub While: While = {
     "while" "(" <e:Expression> ")" "{" <s:Statement*> "}" => While {
         condition: e,
         statements: s,
+    },
+};
+
+pub For: For = {
+    "for" "(" <init:Let> ";" <cond:Expression> ";" <post:Expression> ")" "{" <statements:Statement*> "}" => For {
+        initial_statement: init,
+        condition: cond,
+        post_statement: post,
+        statements,
     },
 };
 
