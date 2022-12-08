@@ -992,8 +992,11 @@ fn compile_statement(
                 body: body_instructions,
             })
         }
-        Statement::Let(name, expr) => {
-            let symbol = compile_expression(expr, compiler, scope);
+        Statement::Let(ast::Let {
+            identifier,
+            expression,
+        }) => {
+            let symbol = compile_expression(expression, compiler, scope);
             // we need to copy symbol to a new symbol,
             // because Ident expressions return symbols of variables
             let new_symbol = compiler.memory.allocate_symbol(symbol.type_);
@@ -1008,7 +1011,7 @@ fn compile_statement(
                 &vec![ValueSource::Stack; new_symbol.type_.miden_width() as usize],
             );
 
-            scope.add_symbol(name.to_string(), new_symbol);
+            scope.add_symbol(identifier.to_string(), new_symbol);
         }
         Statement::Expression(expr) => {
             compile_expression(expr, compiler, scope);
