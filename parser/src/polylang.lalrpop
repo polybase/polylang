@@ -177,7 +177,13 @@ pub While: While = {
 
 pub For: For = {
     "for" "(" <init:Let> ";" <cond:Expression> ";" <post:Expression> ")" "{" <statements:Statement*> "}" => For {
-        initial_statement: init,
+        initial_statement: ForInitialStatement::Let(init),
+        condition: cond,
+        post_statement: post,
+        statements,
+    },
+    "for" "(" <init:Expression> ";" <cond:Expression> ";" <post:Expression> ")" "{" <statements:Statement*> "}" => For {
+        initial_statement: ForInitialStatement::Expression(init),
         condition: cond,
         post_statement: post,
         statements,
