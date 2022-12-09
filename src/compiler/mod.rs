@@ -40,9 +40,10 @@ lazy_static::lazy_static! {
             return unsafeToString(length, dataPtr);
         }
     "#).unwrap();
+    // TODO: fix early return, so that we can do `if (length == 0) return '0';`
     static ref UINT32_TO_STRING: ast::Function = crate::polylang::FunctionParser::new().parse(r#"
         function uint32ToString(value: number): string {
-            if (value == 0) return '0';
+            let isZero = value == 0;
 
             let length = 0;
             let i = value;
@@ -50,6 +51,8 @@ lazy_static::lazy_static! {
                 i = i / 10;
                 length = length + 1;
             }
+
+            if (isZero) length = 1;
 
             let dataPtr = dynamicAlloc(length); 
 
@@ -60,18 +63,27 @@ lazy_static::lazy_static! {
                 value = value / 10;
                 writeMemory(dataPtr + offset, digit + 48);
             }
-
+    
+            if (isZero) {
+                writeMemory(dataPtr, 48);
+            }
+            
             return unsafeToString(length, dataPtr);
         }
     "#).unwrap();
     // TODO: rewrite this in raw instructions for better performance
+    // TODO: We shouldn't have to copy the current message into a new string, but we do because `addressOf(message)` is always the same. This error surfaces when we try to log in a for or while loop.
     static ref LOG_STRING: ast::Function = crate::polylang::FunctionParser::new().parse(r#"
         function logString(message: string) {
+            let currentLog = dynamicAlloc(2);
+            writeMemory(currentLog, deref(addressOf(message)));
+            writeMemory(currentLog + 1, deref(addressOf(message) + 1));
+
             let newLog = dynamicAlloc(2);
             writeMemory(newLog, deref(4));
             writeMemory(newLog + 1, deref(5));
             writeMemory(4, newLog);
-            writeMemory(5, addressOf(message));
+            writeMemory(5, currentLog);
         }
     "#).unwrap();
     static ref BUILTINS_SCOPE: &'static Scope<'static, 'static> = {
@@ -161,7 +173,9 @@ lazy_static::lazy_static! {
                 assert_eq!(length.type_, Type::PrimitiveType(PrimitiveType::UInt32));
                 assert_eq!(address_ptr.type_, Type::PrimitiveType(PrimitiveType::UInt32));
 
-                let s = string::new(compiler, "");
+                let two = uint32::new(compiler, 2);
+                let mut s = dynamic_alloc(compiler, &[two]);
+                s.type_ = Type::String;
 
                 compiler.memory.read(
                     &mut compiler.instructions,
@@ -992,32 +1006,92 @@ fn compile_statement(
                 body: body_instructions,
             })
         }
-        Statement::Let(ast::Let {
-            identifier,
-            expression,
+        Statement::For(ast::For {
+            initial_statement,
+            condition,
+            post_statement,
+            statements,
         }) => {
-            let symbol = compile_expression(expression, compiler, scope);
-            // we need to copy symbol to a new symbol,
-            // because Ident expressions return symbols of variables
-            let new_symbol = compiler.memory.allocate_symbol(symbol.type_);
-            compiler.memory.read(
-                &mut compiler.instructions,
-                symbol.memory_addr,
-                new_symbol.type_.miden_width(),
+            // There is no `for` instruction, we have to use `while` instead
+            let mut scope = scope.deeper();
+
+            let mut initial_instructions = vec![];
+            let mut initial_compiler = Compiler::new(
+                &mut initial_instructions,
+                compiler.memory,
+                compiler.root_scope,
             );
-            compiler.memory.write(
-                &mut compiler.instructions,
-                new_symbol.memory_addr,
-                &vec![ValueSource::Stack; new_symbol.type_.miden_width() as usize],
+            compile_let_statement(initial_statement, &mut initial_compiler, &mut scope);
+
+            let mut condition_instructions = vec![];
+            let mut condition_compiler = Compiler::new(
+                &mut condition_instructions,
+                compiler.memory,
+                compiler.root_scope,
+            );
+            let condition_symbol = compile_expression(condition, &mut condition_compiler, &scope);
+            assert_eq!(
+                condition_symbol.type_,
+                Type::PrimitiveType(PrimitiveType::Boolean)
+            );
+            condition_compiler.memory.read(
+                &mut condition_compiler.instructions,
+                condition_symbol.memory_addr,
+                condition_symbol.type_.miden_width(),
             );
 
-            scope.add_symbol(identifier.to_string(), new_symbol);
+            let mut post_instructions = vec![];
+            let mut post_compiler =
+                Compiler::new(&mut post_instructions, compiler.memory, compiler.root_scope);
+            compile_expression(post_statement, &mut post_compiler, &mut scope);
+
+            let mut body_instructions = vec![];
+            let mut body_compiler =
+                Compiler::new(&mut body_instructions, compiler.memory, compiler.root_scope);
+            let mut body_scope = scope.deeper();
+            for statement in statements {
+                compile_statement(
+                    statement,
+                    &mut body_compiler,
+                    &mut body_scope,
+                    return_result,
+                );
+            }
+
+            compiler.instructions.extend(initial_instructions);
+            compiler.instructions.push(encoder::Instruction::While {
+                condition: condition_instructions,
+                body: {
+                    body_instructions.extend(post_instructions);
+                    body_instructions
+                },
+            });
         }
+        Statement::Let(let_statement) => compile_let_statement(let_statement, compiler, scope),
         Statement::Expression(expr) => {
             compile_expression(expr, compiler, scope);
         }
         st => unimplemented!("{:?}", st),
     }
+}
+
+fn compile_let_statement(let_statement: &ast::Let, compiler: &mut Compiler, scope: &mut Scope) {
+    let symbol = compile_expression(&let_statement.expression, compiler, scope);
+    // we need to copy symbol to a new symbol,
+    // because Ident expressions return symbols of variables
+    let new_symbol = compiler.memory.allocate_symbol(symbol.type_);
+    compiler.memory.read(
+        &mut compiler.instructions,
+        symbol.memory_addr,
+        new_symbol.type_.miden_width(),
+    );
+    compiler.memory.write(
+        &mut compiler.instructions,
+        new_symbol.memory_addr,
+        &vec![ValueSource::Stack; new_symbol.type_.miden_width() as usize],
+    );
+
+    scope.add_symbol(let_statement.identifier.to_string(), new_symbol);
 }
 
 fn compile_ast_function_call(
