@@ -1021,7 +1021,14 @@ fn compile_statement(
                 compiler.memory,
                 compiler.root_scope,
             );
-            compile_let_statement(initial_statement, &mut initial_compiler, &mut scope);
+            match initial_statement {
+                ast::ForInitialStatement::Let(l) => {
+                    compile_let_statement(l, &mut initial_compiler, &mut scope)
+                }
+                ast::ForInitialStatement::Expression(e) => {
+                    compile_expression(e, &mut initial_compiler, &mut scope);
+                }
+            };
 
             let mut condition_instructions = vec![];
             let mut condition_compiler = Compiler::new(
