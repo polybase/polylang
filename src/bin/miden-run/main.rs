@@ -1,5 +1,7 @@
 use std::io::Read;
 
+use polylang::compiler::abi::TypeReader;
+
 // Copied from https://github.com/novifinancial/winterfell/blob/1a1815adb51757e57f8f3844c51ff538e6c17a32/math/src/field/f64/mod.rs#L572
 const fn mont_red_cst(x: u128) -> u64 {
     // See reference above for a description of the following implementation.
@@ -15,12 +17,15 @@ const fn mont_red_cst(x: u128) -> u64 {
 
 struct Args {
     advice_tape: Vec<u64>,
+    abi: polylang::compiler::Abi,
 }
 
 impl Args {
     fn parse(args: std::env::Args) -> Result<Self, String> {
         let mut args = args.skip(1);
         let mut advice_tape = Vec::new();
+        let mut abi = polylang::compiler::Abi::default();
+
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--advice-tape" => {
@@ -36,10 +41,19 @@ impl Args {
 
                     advice_tape.extend(values);
                 }
+                "--abi" => {
+                    let abi_json = args
+                        .next()
+                        .ok_or_else(|| format!("missing value for argument {}", arg))?;
+
+                    abi = serde_json::from_str::<polylang::compiler::Abi>(&abi_json)
+                        .map_err(|e| format!("invalid value for argument {}: {}", arg, e))?;
+                }
                 _ => return Err(format!("unknown argument: {}", arg)),
             }
         }
-        Ok(Self { advice_tape })
+
+        Ok(Self { advice_tape, abi })
     }
 }
 
@@ -62,11 +76,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let execution_result = process.execute(&program);
     let (_system, _decoder, stack, _range_checker, chiplets) = process.to_components();
 
-    let get_mem_value = |addr| {
-        chiplets
-            .get_mem_value(0, addr)
-            .map(|word| mont_red_cst(word[0].inner() as _))
+    let get_mem_values = |addr| {
+        chiplets.get_mem_value(0, addr).map(|word| {
+            [
+                mont_red_cst(word[0].inner() as _),
+                mont_red_cst(word[1].inner() as _),
+                mont_red_cst(word[2].inner() as _),
+                mont_red_cst(word[3].inner() as _),
+            ]
+        })
     };
+    let get_mem_value = |addr| get_mem_values(addr).map(|word| word[0]);
     let read_string = |len: u64, data_ptr: u64| {
         let mut str_bytes = Vec::new();
         for i in 0..len {
@@ -101,6 +121,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match execution_result {
         Ok(output) => {
             println!("Output: {:?}", output);
+
+            if let Some(type_) = args.abi.out_this_type {
+                let value = type_.read(&get_mem_values, args.abi.out_this_addr.unwrap() as _);
+                println!("this: {:?}", value);
+            }
+
             Ok(())
         }
         Err(miden::ExecutionError::FailedAssertion(_)) => {

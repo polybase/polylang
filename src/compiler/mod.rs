@@ -1,3 +1,4 @@
+pub mod abi;
 mod boolean;
 mod encoder;
 mod int32;
@@ -7,6 +8,8 @@ mod uint32;
 mod uint64;
 
 use std::{collections::HashMap, ops::Deref};
+
+use serde::{Deserialize, Serialize};
 
 use crate::ast::{self, Expression, Statement};
 
@@ -456,8 +459,8 @@ lazy_static::lazy_static! {
     };
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-enum PrimitiveType {
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum PrimitiveType {
     Boolean,
     UInt32,
     UInt64,
@@ -475,14 +478,14 @@ impl PrimitiveType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-struct Struct {
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Struct {
     name: String,
     fields: Vec<(String, Type)>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-enum Type {
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum Type {
     PrimitiveType(PrimitiveType),
     String,
     Struct(Struct),
@@ -532,7 +535,7 @@ pub(crate) struct Symbol {
 }
 
 #[derive(Debug, Clone)]
-struct Contract<'ast> {
+struct Collection<'ast> {
     name: String,
     fields: Vec<(String, Type)>,
     functions: Vec<(String, &'ast ast::Function)>,
@@ -558,7 +561,7 @@ struct Scope<'ast, 'b> {
     parent: Option<&'b Scope<'ast, 'b>>,
     symbols: Vec<(String, Symbol)>,
     functions: Vec<(String, Function<'ast>)>,
-    contracts: Vec<(String, Contract<'ast>)>,
+    collections: Vec<(String, Collection<'ast>)>,
 }
 
 impl<'ast> Scope<'ast, '_> {
@@ -567,7 +570,7 @@ impl<'ast> Scope<'ast, '_> {
             parent: None,
             symbols: vec![],
             functions: vec![],
-            contracts: vec![],
+            collections: vec![],
         }
     }
 
@@ -576,7 +579,7 @@ impl<'ast> Scope<'ast, '_> {
             parent: Some(self),
             symbols: vec![],
             functions: vec![],
-            contracts: vec![],
+            collections: vec![],
         };
 
         scope
@@ -626,26 +629,26 @@ impl<'ast> Scope<'ast, '_> {
         None
     }
 
-    fn add_contract(&mut self, name: String, contract: Contract<'ast>) {
-        if self.find_contract(&name).is_some() {
-            panic!("Contract {} already exists", name);
+    fn add_collection(&mut self, name: String, collection: Collection<'ast>) {
+        if self.find_collection(&name).is_some() {
+            panic!("Collection {} already exists", name);
         }
 
-        self.contracts.push((name, contract));
+        self.collections.push((name, collection));
     }
 
-    fn find_contract(&self, name: &str) -> Option<&Contract<'ast>> {
-        if let Some(contract) = self
-            .contracts
+    fn find_collection(&self, name: &str) -> Option<&Collection<'ast>> {
+        if let Some(collection) = self
+            .collections
             .iter()
             .rev()
             .find(|(n, _)| n == name)
             .map(|(_, c)| c)
         {
-            return Some(contract);
+            return Some(collection);
         }
 
-        self.parent.and_then(|p| p.find_contract(name))
+        self.parent.and_then(|p| p.find_collection(name))
     }
 }
 
@@ -1640,7 +1643,7 @@ fn read_struct_from_advice_tape(
     }
 }
 
-fn read_contract_inputs(
+fn read_collection_inputs(
     compiler: &mut Compiler,
     this_struct: Struct,
     args: &[Type],
@@ -1694,7 +1697,7 @@ fn prepare_scope(program: &ast::Program) -> Scope {
     for node in &program.nodes {
         match node {
             ast::RootNode::Collection(c) => {
-                let mut contract = Contract {
+                let mut collection = Collection {
                     name: c.name.clone(),
                     functions: vec![],
                     fields: vec![],
@@ -1703,7 +1706,7 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                 for item in &c.items {
                     match item {
                         ast::CollectionItem::Field(f) => {
-                            contract.fields.push((
+                            collection.fields.push((
                                 f.name.clone(),
                                 match f.type_ {
                                     ast::Type::String => Type::String,
@@ -1712,13 +1715,13 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                             ));
                         }
                         ast::CollectionItem::Function(f) => {
-                            contract.functions.push((f.name.clone(), &f));
+                            collection.functions.push((f.name.clone(), &f));
                         }
                         ast::CollectionItem::Index(_) => todo!(),
                     }
                 }
 
-                scope.add_contract(contract.name.clone(), contract);
+                scope.add_collection(collection.name.clone(), collection);
             }
             ast::RootNode::Function(function) => scope
                 .functions
@@ -1734,18 +1737,28 @@ pub enum CompileTimeArg {
     Record(HashMap<String, u32>),
 }
 
-pub fn compile(program: ast::Program, contract_name: Option<&str>, function_name: &str) -> String {
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct Abi {
+    pub out_this_addr: Option<u32>,
+    pub out_this_type: Option<Type>,
+}
+
+pub fn compile(
+    program: ast::Program,
+    collection_name: Option<&str>,
+    function_name: &str,
+) -> (String, Abi) {
     let scope = prepare_scope(&program);
-    let contract = contract_name.map(|name| scope.find_contract(name).unwrap());
-    let contract_struct = contract.map(|contract| Struct {
-        name: contract.name.clone(),
-        fields: contract
+    let collection = collection_name.map(|name| scope.find_collection(name).unwrap());
+    let collection_struct = collection.map(|collection| Struct {
+        name: collection.name.clone(),
+        fields: collection
             .fields
             .iter()
             .map(|(name, field)| (name.clone(), field.clone()))
             .collect(),
     });
-    let function = contract
+    let function = collection
         .and_then(|c| {
             c.functions
                 .iter()
@@ -1761,13 +1774,14 @@ pub fn compile(program: ast::Program, contract_name: Option<&str>, function_name
 
     let mut instructions = vec![];
     let mut memory = Memory::new();
+    let mut this_addr = None;
 
     {
         let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
 
-        let (this_symbol, arg_symbols) = read_contract_inputs(
+        let (this_symbol, arg_symbols) = read_collection_inputs(
             &mut compiler,
-            contract_struct.clone().unwrap_or(Struct {
+            collection_struct.clone().unwrap_or(Struct {
                 name: "empty".to_string(),
                 fields: vec![],
             }),
@@ -1777,11 +1791,12 @@ pub fn compile(program: ast::Program, contract_name: Option<&str>, function_name
                 .map(|p| match p.type_ {
                     ast::ParameterType::String => todo!(),
                     ast::ParameterType::Number => Type::PrimitiveType(PrimitiveType::UInt32),
-                    ast::ParameterType::Record => Type::Struct(contract_struct.clone().unwrap()),
+                    ast::ParameterType::Record => Type::Struct(collection_struct.clone().unwrap()),
                 })
                 .collect::<Vec<_>>(),
         );
 
+        this_addr = Some(this_symbol.memory_addr);
         let result =
             compile_ast_function_call(function, &mut compiler, &arg_symbols, Some(this_symbol));
         compiler.memory.read(
@@ -1830,5 +1845,11 @@ pub fn compile(program: ast::Program, contract_name: Option<&str>, function_name
     }
     miden_code.push_str("end\n");
 
-    miden_code
+    (
+        miden_code,
+        Abi {
+            out_this_addr: this_addr,
+            out_this_type: collection_struct.map(|s| Type::Struct(s)),
+        },
+    )
 }
