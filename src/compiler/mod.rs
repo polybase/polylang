@@ -284,13 +284,16 @@ lazy_static::lazy_static! {
                     encoder::Instruction::U32CheckedSub,
                     // [len - 1, data_ptr, h[3], h[2], h[1], h[0]]
                     encoder::Instruction::MovDown(5),
-                    // [data_ptr, hash, h[3], h[2], h[1], h[0], len - 1]
+                    // [data_ptr, h[3], h[2], h[1], h[0], len - 1]
                     encoder::Instruction::Dup(None),
                     // [data_ptr, data_ptr, h[3], h[2], h[1], h[0], len - 1]
                     encoder::Instruction::MovDown(6),
                     // [data_ptr, h[3], h[2], h[1], h[0], len - 1, data_ptr]
-                    encoder::Instruction::MemLoadW(None),
-                    // [d[3], d[2], d[1], d[0], h[3], h[2], h[1], h[0], len - 1, data_ptr]
+                    encoder::Instruction::Push(0),
+                    encoder::Instruction::Push(0),
+                    encoder::Instruction::Push(0),
+                    encoder::Instruction::MemLoad(None),
+                    // [0, 0, 0, byte, h[3], h[2], h[1], h[0], len - 1, data_ptr]
                     encoder::Instruction::Rphash,
                     // [h[3], h[2], h[1], h[0], len - 1, data_ptr]
                     encoder::Instruction::MovUp(5),
@@ -1984,6 +1987,8 @@ pub fn compile(
             &arg_symbols,
             Some(this_symbol.clone()),
         );
+
+        comment!(compiler, "Reading result from memory");
         compiler.memory.read(
             &mut compiler.instructions,
             result.memory_addr,
