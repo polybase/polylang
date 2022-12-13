@@ -32,7 +32,9 @@ pub(crate) enum Instruction<'a> {
     Exec(&'a str),              // exec.u64::checked_add
     MemStore(Option<u32>),      // mem_store.1234
     MemLoad(Option<u32>),       // mem_load.1234
+    MemLoadW(Option<u32>),      // mem_loadw.1234
     AdvPush(u32),               // adv_push.1234
+    Rphash,                     // rphash
     While {
         condition: Vec<Instruction<'a>>,
         body: Vec<Instruction<'a>>,
@@ -102,6 +104,7 @@ impl Instruction<'_> {
             Instruction::U32WrappingSub => write_indent!(f, "u32wrapping_sub"),
             Instruction::U32WrappingMul => write_indent!(f, "u32wrapping_mul"),
             Instruction::Exec(name) => write_indent!(f, "exec.{}", name),
+            Instruction::Rphash => write_indent!(f, "rphash"),
             Instruction::While { condition, body } => {
                 for instruction in condition {
                     instruction.encode(f, depth)?;
@@ -123,6 +126,8 @@ impl Instruction<'_> {
             Instruction::MemStore(None) => write_indent!(f, "mem_store"),
             Instruction::MemLoad(Some(addr)) => write_indent!(f, "mem_load.{}", addr),
             Instruction::MemLoad(None) => write_indent!(f, "mem_load"),
+            Instruction::MemLoadW(Some(addr)) => write_indent!(f, "mem_loadw.{}", addr),
+            Instruction::MemLoadW(None) => write_indent!(f, "mem_loadw"),
             Instruction::AdvPush(addr) => write_indent!(f, "adv_push.{}", addr),
             Instruction::If {
                 condition,

@@ -238,6 +238,87 @@ lazy_static::lazy_static! {
             result
          }))));
 
+
+        builtins.push(("hashString".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
+            let string = args.get(0).unwrap();
+            assert_eq!(string.type_, Type::String);
+
+            let result = compiler
+                .memory
+                .allocate_symbol(Type::Hash);
+
+            compiler.instructions.extend([
+                encoder::Instruction::Push(0),
+                encoder::Instruction::Push(0),
+                encoder::Instruction::Push(0),
+                encoder::Instruction::Push(0),
+            ]);
+            // [h[3], h[2], h[1], h[0]]
+            compiler.memory.read(
+                &mut compiler.instructions,
+                string::data_ptr(string).memory_addr,
+                string::data_ptr(string).type_.miden_width(),
+            );
+            // [data_ptr, h[3], h[2], h[1], h[0]]
+            compiler.memory.read(
+                &mut compiler.instructions,
+                string::length(string).memory_addr,
+                string::length(string).type_.miden_width(),
+            );
+            // [len, data_ptr, h[3], h[2], h[1], h[0]]
+
+            compiler.instructions.push(encoder::Instruction::While {
+                // len > 0
+                condition: vec![
+                    encoder::Instruction::Dup(None),
+                    // [len, len, data_ptr, h[3], h[2], h[1], h[0]]
+                    encoder::Instruction::Push(0),
+                    // [0, len, len, data_ptr, h[3], h[2], h[1], h[0]]
+                    encoder::Instruction::U32CheckedGT,
+                    // [len > 0, len, data_ptr, h[3], h[2], h[1], h[0]]
+                ],
+                body: vec![
+                    // [len, data_ptr, h[3], h[2], h[1], h[0]]
+                    encoder::Instruction::Push(1),
+                    // [1, len, data_ptr, h[3], h[2], h[1], h[0]]
+                    encoder::Instruction::U32CheckedSub,
+                    // [len - 1, data_ptr, h[3], h[2], h[1], h[0]]
+                    encoder::Instruction::MovDown(5),
+                    // [data_ptr, hash, h[3], h[2], h[1], h[0], len - 1]
+                    encoder::Instruction::Dup(None),
+                    // [data_ptr, data_ptr, h[3], h[2], h[1], h[0], len - 1]
+                    encoder::Instruction::MovDown(6),
+                    // [data_ptr, h[3], h[2], h[1], h[0], len - 1, data_ptr]
+                    encoder::Instruction::MemLoadW(None),
+                    // [d[3], d[2], d[1], d[0], h[3], h[2], h[1], h[0], len - 1, data_ptr]
+                    encoder::Instruction::Rphash,
+                    // [h[3], h[2], h[1], h[0], len - 1, data_ptr]
+                    encoder::Instruction::MovUp(5),
+                    // [data_ptr, h[3], h[2], h[1], h[0], len - 1]
+                    encoder::Instruction::Push(1),
+                    // [1, data_ptr, h[3], h[2], h[1], h[0], len - 1]
+                    encoder::Instruction::U32CheckedAdd,
+                    // [data_ptr + 1, h[3], h[2], h[1], h[0], len - 1]
+                    encoder::Instruction::MovUp(5),
+                    // [len - 1, data_ptr + 1, h[3], h[2], h[1], h[0]]
+                ],
+            });
+
+            // [len, data_ptr, h[3], h[2], h[1], h[0]]
+            compiler.instructions.push(encoder::Instruction::Drop);
+            // [data_ptr, h[3], h[2], h[1], h[0]]
+            compiler.instructions.push(encoder::Instruction::Drop);
+            // [h[3], h[2], h[1], h[0]]
+
+            compiler.memory.write(
+                &mut compiler.instructions,
+                result.memory_addr,
+                &[ValueSource::Stack, ValueSource::Stack, ValueSource::Stack, ValueSource::Stack],
+            );
+
+            result
+         }))));
+
         Box::leak(Box::new(builtins))
     };
     static ref USABLE_BUILTINS: &'static [(String, Function<'static>)] = {
@@ -488,6 +569,8 @@ pub struct Struct {
 pub enum Type {
     PrimitiveType(PrimitiveType),
     String,
+    /// A type that can contain a 4-field wide hash, such as one returned by `rphash`
+    Hash,
     Struct(Struct),
 }
 
@@ -496,6 +579,7 @@ impl Type {
         match self {
             Type::PrimitiveType(pt) => pt.miden_width(),
             Type::String => string::WIDTH,
+            Type::Hash => 4,
             Type::Struct(struct_) => struct_.fields.iter().map(|(_, t)| t.miden_width()).sum(),
         }
     }
@@ -1600,6 +1684,103 @@ fn log(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Symbol {
     }
 }
 
+/// A generic hash function that can hash any symbol by hashing each of it's field elements.
+/// Not useful for hashing strings, or any data structure that uses pointers.
+fn generic_hash(compiler: &mut Compiler, value: &Symbol) -> Symbol {
+    let result = compiler.memory.allocate_symbol(Type::Hash);
+
+    compiler.instructions.extend([
+        encoder::Instruction::Push(0),
+        encoder::Instruction::Push(0),
+        encoder::Instruction::Push(0),
+        encoder::Instruction::Push(0),
+    ]);
+    // [h[3], h[2], h[1], h[0]]
+    for i in 0..value.type_.miden_width() {
+        compiler
+            .memory
+            .read(&mut compiler.instructions, value.memory_addr + i, 1);
+        compiler.instructions.extend([
+            encoder::Instruction::Push(0),
+            encoder::Instruction::Push(0),
+            encoder::Instruction::Push(0),
+        ]);
+        // [0, 0, 0, data, h[3], h[2], h[1], h[0]]
+        compiler.instructions.push(encoder::Instruction::Rphash);
+        // [h[3], h[2], h[1], h[0]]
+    }
+
+    compiler.memory.write(
+        &mut compiler.instructions,
+        result.memory_addr,
+        &[
+            ValueSource::Stack,
+            ValueSource::Stack,
+            ValueSource::Stack,
+            ValueSource::Stack,
+        ],
+    );
+
+    result
+}
+
+fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
+    let result = match &value.type_ {
+        Type::PrimitiveType(_) => generic_hash(compiler, &value),
+        Type::Hash => generic_hash(compiler, &value),
+        Type::String => compile_function_call(
+            compiler,
+            BUILTINS_SCOPE.find_function("hashString").unwrap(),
+            &[value],
+            None,
+        ),
+        Type::Struct(s) => {
+            let mut offset = 0;
+            let struct_hash = compiler.memory.allocate_symbol(Type::Hash);
+            for (_, field_type) in &s.fields {
+                let width = field_type.miden_width();
+                let field = Symbol {
+                    type_: field_type.clone(),
+                    memory_addr: value.memory_addr + offset,
+                };
+                offset += width;
+
+                let field_hash = hash(compiler, field);
+
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    struct_hash.memory_addr,
+                    struct_hash.type_.miden_width(),
+                );
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    field_hash.memory_addr,
+                    field_hash.type_.miden_width(),
+                );
+
+                compiler.instructions.push(encoder::Instruction::Rphash);
+
+                compiler.memory.write(
+                    &mut compiler.instructions,
+                    struct_hash.memory_addr,
+                    &[
+                        ValueSource::Stack,
+                        ValueSource::Stack,
+                        ValueSource::Stack,
+                        ValueSource::Stack,
+                    ],
+                );
+            }
+
+            struct_hash
+        }
+    };
+
+    assert_eq!(result.type_, Type::Hash);
+
+    result
+}
+
 fn read_struct_from_advice_tape(
     compiler: &mut Compiler,
     struct_symbol: &Symbol,
@@ -1797,28 +1978,25 @@ pub fn compile(
         );
 
         this_addr = Some(this_symbol.memory_addr);
-        let result =
-            compile_ast_function_call(function, &mut compiler, &arg_symbols, Some(this_symbol));
+        let result = compile_ast_function_call(
+            function,
+            &mut compiler,
+            &arg_symbols,
+            Some(this_symbol.clone()),
+        );
         compiler.memory.read(
             &mut compiler.instructions,
             result.memory_addr,
             result.type_.miden_width(),
         );
 
-        if let Some(this) = scope.find_symbol("this") {
+        if collection.is_some() {
+            let this_hash = hash(&mut compiler, this_symbol);
             compiler.memory.read(
                 &mut compiler.instructions,
-                this.memory_addr,
-                this.type_.miden_width(),
+                this_hash.memory_addr,
+                this_hash.type_.miden_width(),
             );
-        }
-
-        for symbol in arg_symbols {
-            compiler.memory.read(
-                &mut compiler.instructions,
-                symbol.memory_addr,
-                symbol.type_.miden_width(),
-            )
         }
     }
 

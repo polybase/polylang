@@ -13,6 +13,7 @@ pub enum Value {
     Boolean(bool),
     UInt32(u32),
     UInt64(u64),
+    Hash([u64; 4]),
     Int32(i32),
     String(String),
     StructValue(Vec<(String, Value)>),
@@ -60,6 +61,7 @@ impl TypeReader for Type {
         match self {
             Type::PrimitiveType(pt) => pt.read(reader, addr),
             Type::Struct(s) => s.read(reader, addr),
+            Type::Hash => Ok(reader(addr).ok_or("invalid address").map(Value::Hash)?),
             Type::String => {
                 let mut bytes = vec![];
 
