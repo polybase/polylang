@@ -13,6 +13,7 @@ pub(crate) enum Instruction<'a> {
     And,                        // and
     Or,                         // or
     Not,                        // not
+    Eq,                         // Eq
     U32CheckedAdd,              // u32checked_add
     U32CheckedSub,              // u32checked_sub
     U32CheckedMod,              // u32checked_mod
@@ -85,6 +86,7 @@ impl Instruction<'_> {
             Instruction::And => write_indent!(f, "and"),
             Instruction::Or => write_indent!(f, "or"),
             Instruction::Not => write_indent!(f, "not"),
+            Instruction::Eq => write_indent!(f, "eq"),
             Instruction::U32CheckedAdd => write_indent!(f, "u32checked_add"),
             Instruction::U32CheckedSub => write_indent!(f, "u32checked_sub"),
             Instruction::U32CheckedMod => write_indent!(f, "u32checked_mod"),

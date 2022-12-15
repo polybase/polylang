@@ -11,7 +11,10 @@ use std::{collections::HashMap, ops::Deref};
 
 use serde::{Deserialize, Serialize};
 
-use crate::ast::{self, Expression, Statement};
+use crate::{
+    ast::{self, Expression, Statement},
+    validation::Value,
+};
 
 macro_rules! comment {
     ($compiler:expr, $($arg:tt)*) => {
@@ -289,10 +292,11 @@ lazy_static::lazy_static! {
                     // [data_ptr, data_ptr, h[3], h[2], h[1], h[0], len - 1]
                     encoder::Instruction::MovDown(6),
                     // [data_ptr, h[3], h[2], h[1], h[0], len - 1, data_ptr]
-                    encoder::Instruction::Push(0),
-                    encoder::Instruction::Push(0),
-                    encoder::Instruction::Push(0),
                     encoder::Instruction::MemLoad(None),
+                    // [byte, h[3], h[2], h[1], h[0], len - 1, data_ptr]
+                    encoder::Instruction::Push(0),
+                    encoder::Instruction::Push(0),
+                    encoder::Instruction::Push(0),
                     // [0, 0, 0, byte, h[3], h[2], h[1], h[0], len - 1, data_ptr]
                     encoder::Instruction::Rphash,
                     // [h[3], h[2], h[1], h[0], len - 1, data_ptr]
@@ -564,8 +568,8 @@ impl PrimitiveType {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Struct {
-    name: String,
-    fields: Vec<(String, Type)>,
+    pub name: String,
+    pub fields: Vec<(String, Type)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1432,6 +1436,31 @@ fn compile_eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
             uint64::eq(compiler, a, &b_u64)
         }
+        (Type::Hash, Type::Hash) => {
+            let result = compiler
+                .memory
+                .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+
+            compiler
+                .instructions
+                .push(encoder::Instruction::Push(true as _));
+            for i in 0..a.type_.miden_width() {
+                compiler
+                    .memory
+                    .read(compiler.instructions, a.memory_addr + i, 1);
+                compiler
+                    .memory
+                    .read(compiler.instructions, b.memory_addr + i, 1);
+                compiler.instructions.push(encoder::Instruction::Eq);
+                compiler.instructions.push(encoder::Instruction::And);
+            }
+            compiler.memory.write(
+                compiler.instructions,
+                result.memory_addr,
+                &[ValueSource::Stack],
+            );
+            result
+        }
         e => unimplemented!("{:?}", e),
     }
 }
@@ -1829,17 +1858,21 @@ fn read_struct_from_advice_tape(
 
 fn read_collection_inputs(
     compiler: &mut Compiler,
-    this_struct: Struct,
+    this_struct: Option<Struct>,
     args: &[Type],
-) -> (Symbol, Vec<Symbol>) {
-    let this = compiler.memory.allocate_symbol(Type::Struct(this_struct));
-    let this_struct = if let Type::Struct(s) = &this.type_ {
-        s
-    } else {
-        unreachable!();
-    };
+) -> (Option<Symbol>, Vec<Symbol>) {
+    let this = this_struct.map(|ts| compiler.memory.allocate_symbol(Type::Struct(ts)));
+    let this_struct = this.as_ref().map(|ref t| {
+        if let Type::Struct(s) = &t.type_ {
+            s
+        } else {
+            unreachable!();
+        }
+    });
 
-    read_struct_from_advice_tape(compiler, &this, this_struct);
+    if let Some(this_struct) = this_struct {
+        read_struct_from_advice_tape(compiler, this.as_ref().unwrap(), this_struct);
+    }
 
     let mut args_symbols = Vec::new();
     for arg in args {
@@ -1862,7 +1895,7 @@ fn read_collection_inputs(
                 read_struct_from_advice_tape(compiler, &symbol, struct_);
                 symbol
             }
-            _ => unimplemented!(),
+            x => unimplemented!("{:?}", x),
         };
 
         args_symbols.push(symbol);
@@ -1958,17 +1991,24 @@ pub fn compile(
 
     let mut instructions = vec![];
     let mut memory = Memory::new();
-    let mut this_addr = None;
+    let this_addr;
 
     {
         let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
 
+        let expected_hash = collection_struct.as_ref().map(|_| {
+            let hash = compiler.memory.allocate_symbol(Type::Hash);
+            compiler.memory.write(
+                &mut compiler.instructions,
+                hash.memory_addr,
+                &vec![ValueSource::Stack; hash.type_.miden_width() as _],
+            );
+            hash
+        });
+
         let (this_symbol, arg_symbols) = read_collection_inputs(
             &mut compiler,
-            collection_struct.clone().unwrap_or(Struct {
-                name: "empty".to_string(),
-                fields: vec![],
-            }),
+            collection_struct.clone(),
             &function
                 .parameters
                 .iter()
@@ -1980,13 +2020,21 @@ pub fn compile(
                 .collect::<Vec<_>>(),
         );
 
-        this_addr = Some(this_symbol.memory_addr);
-        let result = compile_ast_function_call(
-            function,
-            &mut compiler,
-            &arg_symbols,
-            Some(this_symbol.clone()),
-        );
+        this_addr = this_symbol.as_ref().map(|ts| ts.memory_addr);
+
+        if let Some(this_symbol) = &this_symbol {
+            let this_hash = hash(&mut compiler, this_symbol.clone());
+            let is_eq = compile_eq(&mut compiler, &this_hash, expected_hash.as_ref().unwrap());
+            let assert_fn = compiler.root_scope.find_function("assert").unwrap();
+            let error_str = string::new(
+                &mut compiler,
+                "Hash of this does not match the expected hash",
+            );
+            compile_function_call(&mut compiler, assert_fn, &[is_eq, error_str], None);
+        }
+
+        let result =
+            compile_ast_function_call(function, &mut compiler, &arg_symbols, this_symbol.clone());
 
         comment!(compiler, "Reading result from memory");
         compiler.memory.read(
@@ -1995,7 +2043,7 @@ pub fn compile(
             result.type_.miden_width(),
         );
 
-        if collection.is_some() {
+        if let Some(this_symbol) = this_symbol {
             let this_hash = hash(&mut compiler, this_symbol);
             compiler.memory.read(
                 &mut compiler.instructions,
@@ -2019,7 +2067,7 @@ pub fn compile(
     miden_code.push_str("begin\n");
     miden_code.push_str("  push.");
     miden_code.push_str(&memory.static_alloc_ptr.to_string());
-    miden_code.push_str("\n  mem_store.3\n  drop\n"); // dynamic allocation pointer
+    miden_code.push_str("\n  mem_store.3\n"); // dynamic allocation pointer
     for instruction in instructions {
         instruction
             .encode(unsafe { miden_code.as_mut_vec() }, 1)
@@ -2035,4 +2083,52 @@ pub fn compile(
             out_this_type: collection_struct.map(|s| Type::Struct(s)),
         },
     )
+}
+
+/// A function that takes in a struct type and generates a program that hashes a value of that type and returns the hash on the stack.
+pub fn compile_struct_hasher(struct_: Struct) -> String {
+    let mut instructions = vec![];
+    let mut memory = Memory::new();
+    let empty_program = ast::Program { nodes: vec![] };
+    let scope = prepare_scope(&empty_program);
+
+    {
+        let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
+
+        let (this_symbol, _) = read_collection_inputs(&mut compiler, Some(struct_), &[]);
+
+        let hash = hash(&mut compiler, this_symbol.unwrap());
+
+        comment!(compiler, "Reading result from memory");
+        compiler.memory.read(
+            &mut compiler.instructions,
+            hash.memory_addr,
+            hash.type_.miden_width(),
+        );
+    }
+
+    let instructions = encoder::unabstract(
+        instructions,
+        &mut |size| memory.allocate(size),
+        &mut None,
+        &mut None,
+        &mut false,
+        false,
+    );
+
+    let mut miden_code = String::new();
+    miden_code.push_str("use.std::math::u64\n");
+    miden_code.push_str("begin\n");
+    miden_code.push_str("  push.");
+    miden_code.push_str(&memory.static_alloc_ptr.to_string());
+    miden_code.push_str("\n  mem_store.3\n"); // dynamic allocation pointer
+    for instruction in instructions {
+        instruction
+            .encode(unsafe { miden_code.as_mut_vec() }, 1)
+            .unwrap();
+        miden_code.push_str("\n");
+    }
+    miden_code.push_str("end\n");
+
+    miden_code
 }

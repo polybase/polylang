@@ -1,6 +1,6 @@
-use std::io::Read;
+use std::{collections::HashMap, io::Read};
 
-use polylang::compiler::abi::TypeReader;
+use polylang::compiler::abi::{self, Parser, TypeReader};
 
 // Copied from https://github.com/novifinancial/winterfell/blob/1a1815adb51757e57f8f3844c51ff538e6c17a32/math/src/field/f64/mod.rs#L572
 const fn mont_red_cst(x: u128) -> u64 {
@@ -17,6 +17,7 @@ const fn mont_red_cst(x: u128) -> u64 {
 
 struct Args {
     advice_tape: Vec<u64>,
+    this_values: HashMap<String, String>,
     abi: polylang::compiler::Abi,
 }
 
@@ -25,6 +26,7 @@ impl Args {
         let mut args = args.skip(1);
         let mut advice_tape = Vec::new();
         let mut abi = polylang::compiler::Abi::default();
+        let mut this_values = HashMap::new();
 
         while let Some(arg) = args.next() {
             match arg.as_str() {
@@ -49,16 +51,98 @@ impl Args {
                     abi = serde_json::from_str::<polylang::compiler::Abi>(&abi_json)
                         .map_err(|e| format!("invalid value for argument {}: {}", arg, e))?;
                 }
+                this_param if this_param.starts_with("--this.") => {
+                    let field = this_param
+                        .strip_prefix("--this.")
+                        .ok_or_else(|| format!("invalid argument: {}", arg))?;
+
+                    // TODO: store these values in something, hash them (and pass the hash), serialize and send them over the advice tape
+                    let value = args
+                        .next()
+                        .ok_or_else(|| format!("missing value for argument {}", arg))?;
+
+                    this_values.insert(field.to_string(), value);
+                }
                 _ => return Err(format!("unknown argument: {}", arg)),
             }
         }
 
-        Ok(Self { advice_tape, abi })
+        Ok(Self {
+            advice_tape,
+            abi,
+            this_values,
+        })
     }
+
+    fn this_value(&self) -> Result<abi::Value, Box<dyn std::error::Error>> {
+        let this_type = self
+            .abi
+            .out_this_type
+            .as_ref()
+            .ok_or_else(|| "ABI does not specify a `this` type")?;
+        let polylang::compiler::Type::Struct(struct_) = this_type else {
+            return Err("This type is not a struct".into());
+        };
+
+        let mut struct_values = Vec::new();
+
+        for (field_name, field_type) in &struct_.fields {
+            let value_str = self.this_values.get(field_name).ok_or_else(|| {
+                format!(
+                    "missing value for field `{}` of type `{:?}`",
+                    field_name, field_type
+                )
+            })?;
+
+            let field_value = Parser::parse(field_type, value_str)?;
+
+            struct_values.push((field_name.clone(), field_value));
+        }
+
+        Ok(abi::Value::StructValue(struct_values))
+    }
+}
+
+fn hash(struct_type: polylang::compiler::Struct, value: &abi::Value) -> Vec<u64> {
+    let hasher_program = polylang::compiler::compile_struct_hasher(struct_type);
+
+    let assembler =
+        miden::Assembler::new().with_module_provider(miden_stdlib::StdLibrary::default());
+    let program = assembler
+        .compile(hasher_program)
+        .expect("Failed to compile miden assembly");
+
+    let mut process = miden_processor::Process::new_debug(
+        assembler.kernel(),
+        miden::ProgramInputs::new(&[], &value.serialize(), vec![]).unwrap(),
+    );
+    let execution_result = process
+        .execute(&program)
+        .expect("Failed to execute program");
+
+    execution_result.stack_outputs(4).to_vec()
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse(std::env::args())?;
+    let mut advice_tape = vec![];
+    let mut stack = Vec::<u64>::new();
+
+    if let Some(this_type) = &args.abi.out_this_type {
+        let this_value = args.this_value()?;
+        advice_tape.extend(this_value.serialize());
+        let this_hash = hash(
+            match this_type {
+                polylang::compiler::Type::Struct(s) => s.clone(),
+                _ => Err("This type is not a struct")?,
+            },
+            &this_value,
+        );
+        eprintln!("Hash of input this: {:?}", this_hash);
+
+        stack.extend(this_hash.iter().rev());
+    }
+    advice_tape.extend(args.advice_tape);
 
     let mut masm_code = String::new();
     std::io::stdin().read_to_string(&mut masm_code)?;
@@ -71,7 +155,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut process = miden_processor::Process::new_debug(
         assembler.kernel(),
-        miden::ProgramInputs::new(&[], &args.advice_tape, vec![]).unwrap(),
+        miden::ProgramInputs::new(&stack, &advice_tape, vec![]).unwrap(),
     );
     let execution_result = process.execute(&program);
     let (_system, _decoder, stack, _range_checker, chiplets) = process.to_components();
@@ -145,7 +229,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     error_str_bytes.push(c);
                 }
 
-                let error_str = String::from_utf8(error_str_bytes).unwrap();
                 Err(format!("Assertion failed: {}", read_string(str_len, str_data_ptr)).into())
             }
         }
