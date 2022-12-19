@@ -37,16 +37,18 @@ pub struct FieldDecorator {
     pub arguments: Vec<Primitive>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Type {
     String,
     Number,
+    Array(Box<Type>),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ParameterType {
     String,
     Number,
+    Array(Type),
     Record,
 }
 

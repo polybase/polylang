@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::{collections::HashMap};
+use std::{collections::HashMap, ops::Deref};
 
 use crate::ast;
 
@@ -8,6 +8,7 @@ use crate::ast;
 pub(crate) enum Value {
     String(String),
     Number(f64),
+    Array(Vec<Value>),
 }
 
 pub(crate) fn validate_set(
@@ -44,6 +45,39 @@ pub(crate) fn validate_set(
                         return Err(format!("Invalid type for field: {}", field.name).into());
                     }
                 }
+                Value::Array(t) => {
+                    if let ast::Type::Array(at) = &field.type_ {
+                        for item in t {
+                            match item {
+                                Value::String(_) => {
+                                    if at.deref() != &ast::Type::String {
+                                        return Err(format!(
+                                            "Invalid type for field: {}",
+                                            field.name
+                                        )
+                                        .into());
+                                    }
+                                }
+                                Value::Number(_) => {
+                                    if at.deref() != &ast::Type::Number {
+                                        return Err(format!(
+                                            "Invalid type for field: {}",
+                                            field.name
+                                        )
+                                        .into());
+                                    }
+                                }
+                                Value::Array(_) => {
+                                    return Err(
+                                        format!("Invalid type for field: {}", field.name).into()
+                                    );
+                                }
+                            }
+                        }
+                    } else {
+                        return Err(format!("Invalid type for field: {}", field.name).into());
+                    }
+                }
             }
         }
     }
@@ -56,8 +90,6 @@ pub(crate) fn validate_set(
 
     Ok(())
 }
-
-
 
 #[cfg(test)]
 mod tests {

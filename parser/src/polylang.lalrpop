@@ -13,11 +13,16 @@ pub Ident: String = {
 pub Type: Type = {
     "string" => Type::String,
     "number" => Type::Number,
+    "string" "[" "]" => Type::Array(Box::new(Type::String)),
+    "number" "[" "]" => Type::Array(Box::new(Type::Number)),
 };
 
 pub ParameterType: ParameterType = {
-    "string" => ParameterType::String,
-    "number" => ParameterType::Number,
+    <t:Type> => match t {
+        Type::String => ParameterType::String,
+        Type::Number => ParameterType::Number,
+        Type::Array(t) => ParameterType::Array(*t),
+    },
     "record" => ParameterType::Record,
 };
 

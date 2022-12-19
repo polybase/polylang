@@ -117,9 +117,10 @@ fn validate_set_out_json(collection_ast_json: &str, data_json: &str) -> String {
 }
 
 fn generate_collection_function(collection_ast: &str) -> Result<js::JSCollection, Error> {
-    let collection_ast: ast::Collection = serde_json::from_str(collection_ast).map_err(|e| Error {
-        message: e.to_string(),
-    })?;
+    let collection_ast: ast::Collection =
+        serde_json::from_str(collection_ast).map_err(|e| Error {
+            message: e.to_string(),
+        })?;
 
     Ok(js::generate_js_collection(&collection_ast))
 }
@@ -540,5 +541,53 @@ function x() {
 name: object;
       ^^^^^^"#,
         );
+    }
+
+    #[test]
+    fn test_array_field() {
+        let cases = [
+            (
+                "collection test { numbers: number[]; }",
+                vec![ast::Field {
+                    name: "numbers".to_string(),
+                    type_: ast::Type::Array(Box::new(ast::Type::Number)),
+                    required: true,
+                }],
+            ),
+            (
+                "collection test { strings: string[]; }",
+                vec![ast::Field {
+                    name: "strings".to_string(),
+                    type_: ast::Type::Array(Box::new(ast::Type::String)),
+                    required: true,
+                }],
+            ),
+        ];
+
+        for (code, expected) in cases.iter() {
+            let program = parse(code).unwrap();
+            assert_eq!(program.nodes.len(), 1);
+            let collection = match &program.nodes[0] {
+                ast::RootNode::Collection(c) => c,
+                _ => panic!("expected collection"),
+            };
+            assert_eq!(collection.items.len(), expected.len());
+
+            for (i, item) in expected.iter().enumerate() {
+                assert!(
+                    matches!(
+                        &collection.items[i],
+                        ast::CollectionItem::Field(ast::Field {
+                            name,
+                            type_,
+                            required,
+                        }) if name == &item.name && type_ == &item.type_ && required == &item.required
+                    ),
+                    "expected: {:?}, got: {:?}",
+                    item,
+                    collection.items[i]
+                );
+            }
+        }
     }
 }
