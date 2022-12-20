@@ -537,14 +537,14 @@ function x() {
         eprintln!("{}", collection.as_ref().unwrap_err().message);
         assert_eq!(
             collection.unwrap_err().message,
-            r#"Error found at line 3, column 22: Unrecognized token "object". Expected one of: "number", "string"
+            r#"Error found at line 3, column 22: Unrecognized token "object". Expected one of: "map", "number", "string"
 name: object;
       ^^^^^^"#,
         );
     }
 
     #[test]
-    fn test_array_field() {
+    fn test_array_map_field() {
         let cases = [
             (
                 "collection test { numbers: number[]; }",
@@ -559,6 +559,22 @@ name: object;
                 vec![ast::Field {
                     name: "strings".to_string(),
                     type_: ast::Type::Array(Box::new(ast::Type::String)),
+                    required: true,
+                }],
+            ),
+            (
+                "collection test { numToStr: map<number, string>; }",
+                vec![ast::Field {
+                    name: "numToStr".to_string(),
+                    type_: ast::Type::Map(Box::new(ast::Type::Number), Box::new(ast::Type::String)),
+                    required: true,
+                }],
+            ),
+            (
+                "collection test { strToNum: map<string, number>; }",
+                vec![ast::Field {
+                    name: "strToNum".to_string(),
+                    type_: ast::Type::Map(Box::new(ast::Type::String), Box::new(ast::Type::Number)),
                     required: true,
                 }],
             ),

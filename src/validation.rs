@@ -9,6 +9,7 @@ pub(crate) enum Value {
     String(String),
     Number(f64),
     Array(Vec<Value>),
+    Map(HashMap<String, Value>),
 }
 
 pub(crate) fn validate_set(
@@ -67,7 +68,58 @@ pub(crate) fn validate_set(
                                         .into());
                                     }
                                 }
-                                Value::Array(_) => {
+                                Value::Array(_) | Value::Map(_) => {
+                                    return Err(
+                                        format!("Invalid type for field: {}", field.name).into()
+                                    );
+                                }
+                            }
+                        }
+                    } else {
+                        return Err(format!("Invalid type for field: {}", field.name).into());
+                    }
+                }
+                Value::Map(map) => {
+                    if let ast::Type::Map(kt, vt) = &field.type_ {
+                        for (key, value) in map {
+                            match kt.deref() {
+                                ast::Type::String => {}
+                                ast::Type::Number => {
+                                    if let Err(_) = key.parse::<f64>() {
+                                        return Err(format!(
+                                            "Invalid type for field: {}",
+                                            field.name
+                                        )
+                                        .into());
+                                    }
+                                }
+                                ast::Type::Array(_) | ast::Type::Map(..) => {
+                                    return Err(
+                                        format!("Invalid type for field: {}", field.name).into()
+                                    );
+                                }
+                            }
+
+                            match value {
+                                Value::String(_) => {
+                                    if vt.deref() != &ast::Type::String {
+                                        return Err(format!(
+                                            "Invalid type for field: {}",
+                                            field.name
+                                        )
+                                        .into());
+                                    }
+                                }
+                                Value::Number(_) => {
+                                    if vt.deref() != &ast::Type::Number {
+                                        return Err(format!(
+                                            "Invalid type for field: {}",
+                                            field.name
+                                        )
+                                        .into());
+                                    }
+                                }
+                                Value::Array(_) | Value::Map(_) => {
                                     return Err(
                                         format!("Invalid type for field: {}", field.name).into()
                                     );
@@ -119,6 +171,135 @@ mod tests {
         ]);
 
         assert!(validate_set(collection, data).is_ok());
+    }
+
+    #[test]
+    fn test_validate_set_array() {
+        let collection = ast::Collection {
+            name: "users".to_string(),
+            items: vec![ast::CollectionItem::Field(ast::Field {
+                name: "tags".to_string(),
+                type_: ast::Type::Array(Box::new(ast::Type::String)),
+                required: false,
+            })],
+        };
+
+        let data = HashMap::from([(
+            "tags".to_string(),
+            Value::Array(vec![
+                Value::String("tag1".to_string()),
+                Value::String("tag2".to_string()),
+            ]),
+        )]);
+
+        assert!(validate_set(collection, data).is_ok());
+    }
+
+    #[test]
+    fn test_validate_set_array_invalid_array_value() {
+        let collection = ast::Collection {
+            name: "users".to_string(),
+            items: vec![ast::CollectionItem::Field(ast::Field {
+                name: "tags".to_string(),
+                type_: ast::Type::Array(Box::new(ast::Type::String)),
+                required: false,
+            })],
+        };
+
+        let data = HashMap::from([(
+            "tags".to_string(),
+            Value::Array(vec![Value::String("tag1".to_string()), Value::Number(2.0)]),
+        )]);
+
+        assert!(validate_set(collection, data).is_err());
+    }
+
+    #[test]
+    fn test_validate_map() {
+        let collection = ast::Collection {
+            name: "users".to_string(),
+            items: vec![ast::CollectionItem::Field(ast::Field {
+                name: "tags".to_string(),
+                type_: ast::Type::Map(Box::new(ast::Type::String), Box::new(ast::Type::Number)),
+                required: false,
+            })],
+        };
+
+        let data = HashMap::from([(
+            "tags".to_string(),
+            Value::Map(HashMap::from([
+                ("tag1".to_string(), Value::Number(1.0)),
+                ("tag2".to_string(), Value::Number(2.0)),
+            ])),
+        )]);
+
+        assert!(validate_set(collection, data).is_ok());
+    }
+
+    #[test]
+    fn test_validate_map_number_key() {
+        let collection = ast::Collection {
+            name: "users".to_string(),
+            items: vec![ast::CollectionItem::Field(ast::Field {
+                name: "tags".to_string(),
+                type_: ast::Type::Map(Box::new(ast::Type::Number), Box::new(ast::Type::Number)),
+                required: false,
+            })],
+        };
+
+        let data = HashMap::from([(
+            "tags".to_string(),
+            Value::Map(HashMap::from([
+                ("1".to_string(), Value::Number(1.0)),
+                ("2.3".to_string(), Value::Number(2.0)),
+            ])),
+        )]);
+
+        assert!(validate_set(collection, data).is_ok());
+    }
+
+    #[test]
+    fn test_validate_map_number_key_invalid() {
+        let collection = ast::Collection {
+            name: "users".to_string(),
+            items: vec![ast::CollectionItem::Field(ast::Field {
+                name: "tags".to_string(),
+                type_: ast::Type::Map(Box::new(ast::Type::Number), Box::new(ast::Type::Number)),
+                required: false,
+            })],
+        };
+
+        let data = HashMap::from([(
+            "tags".to_string(),
+            Value::Map(HashMap::from([
+                ("1".to_string(), Value::Number(1.0)),
+                ("str".to_string(), Value::Number(2.0)),
+            ])),
+        )]);
+
+        assert!(validate_set(collection, data).is_err());
+    }
+
+    #[test]
+    fn test_validate_map_invalid_key() {
+        let collection = ast::Collection {
+            name: "users".to_string(),
+            items: vec![ast::CollectionItem::Field(ast::Field {
+                name: "tags".to_string(),
+                type_: ast::Type::Map(Box::new(ast::Type::Number), Box::new(ast::Type::Number)),
+                required: false,
+            })],
+        };
+
+        let data = HashMap::from([(
+            "tags".to_string(),
+            Value::Map(HashMap::from([
+                ("tag1".to_string(), Value::Number(1.0)),
+                ("tag2".to_string(), Value::Number(2.0)),
+            ])),
+        )]);
+
+        assert!(validate_set(collection, data).is_err());
     }
 
     #[test]

@@ -10,11 +10,15 @@ pub Ident: String = {
     "asc" => "asc".to_string(),
 };
 
-pub Type: Type = {
+StringOrNumberType: Type = {
     "string" => Type::String,
     "number" => Type::Number,
-    "string" "[" "]" => Type::Array(Box::new(Type::String)),
-    "number" "[" "]" => Type::Array(Box::new(Type::Number)),
+};
+
+pub Type: Type = {
+    StringOrNumberType,
+    <t:StringOrNumberType> "[" "]" => Type::Array(Box::new(t)),
+    "map" "<" <kt:StringOrNumberType> "," <vt:StringOrNumberType> ">" => Type::Map(Box::new(kt), Box::new(vt)),
 };
 
 pub ParameterType: ParameterType = {
@@ -22,6 +26,7 @@ pub ParameterType: ParameterType = {
         Type::String => ParameterType::String,
         Type::Number => ParameterType::Number,
         Type::Array(t) => ParameterType::Array(*t),
+        Type::Map(kt, vt) => ParameterType::Map(*kt, *vt),
     },
     "record" => ParameterType::Record,
 };
