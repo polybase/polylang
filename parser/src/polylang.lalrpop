@@ -146,13 +146,18 @@ pub PrimitiveArgumentList: Vec<Primitive> = {
 pub CompoundStatement: Statement = {
     <i:If> => Statement::If(i),
     <w:While> => Statement::While(w),
-}
+    <f:For> => Statement::For(f),
+};
+
+Let: Let = {
+    "let" <i:Ident> "=" <e:Expression> => Let { identifier: i, expression: e },
+};
 
 pub SmallStatement: Statement = {
     "break" => Statement::Break,
     "return" <e:Expression> => Statement::Return(e),
     "throw" <e:Expression> => Statement::Throw(e),
-    "let" <i:Ident> "=" <e:Expression> => Statement::Let(i, e),
+    <l:Let> => Statement::Let(l),
     <e:Expression> => Statement::Expression(e),
 };
 
@@ -185,6 +190,21 @@ pub While: While = {
     },
 };
 
+pub For: For = {
+    "for" "(" <init:Let> ";" <cond:Expression> ";" <post:Expression> ")" "{" <statements:Statement*> "}" => For {
+        initial_statement: ForInitialStatement::Let(init),
+        condition: cond,
+        post_statement: post,
+        statements,
+    },
+    "for" "(" <init:Expression> ";" <cond:Expression> ";" <post:Expression> ")" "{" <statements:Statement*> "}" => For {
+        initial_statement: ForInitialStatement::Expression(init),
+        condition: cond,
+        post_statement: post,
+        statements,
+    },
+};
+
 pub ParameterList: Vec<Parameter> = {
     <p:Parameter> <rest:("," Parameter)*> => {
         let mut params = vec![p];
@@ -210,24 +230,27 @@ pub Parameter: Parameter = {
 };
 
 pub RootFunction: Function = {
-    "function" <i: Ident> "(" <pl:ParameterList> ")" "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+    "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
         parameters: pl,
+        return_type: return_type.map(|(_, t)| t),
         statements: s,
         statements_code: input[l..r].to_string(),
     }
 };
 
 pub Function: Function = {
-    "function" <i: Ident> "(" <pl:ParameterList> ")" "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+    "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
         parameters: pl,
+        return_type: return_type.map(|(_, t)| t),
         statements: s,
         statements_code: input[l..r].to_string(),
     },
-    <i: Ident> "(" <pl:ParameterList> ")" "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+    <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
         parameters: pl,
+        return_type: return_type.map(|(_, t)| t),
         statements: s,
         statements_code: input[l..r].to_string(),
     },

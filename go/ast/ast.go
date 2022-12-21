@@ -51,6 +51,7 @@ type FieldDecorator struct {
 type Function struct {
 	Name           string        `json:"name"`
 	Parameters     []Parameter   `json:"parameters"`
+	ReturnType     *Type         `json:"return_type"`
 	Statements     []interface{} `json:"statements"`
 	StatementsCode string        `json:"statements_code"`
 }

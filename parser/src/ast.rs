@@ -67,6 +67,7 @@ pub struct Parameter {
 pub struct Function {
     pub name: String,
     pub parameters: Vec<Parameter>,
+    pub return_type: Option<Type>,
     pub statements: Vec<Statement>,
     pub statements_code: String,
 }
@@ -94,10 +95,11 @@ pub enum Statement {
     Break,
     If(If),
     While(While),
+    For(For),
     Return(Expression),
     Expression(Expression),
     Throw(Expression),
-    Let(String, Expression),
+    Let(Let),
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -136,6 +138,12 @@ pub enum Expression {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct Let {
+    pub identifier: String,
+    pub expression: Expression,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct If {
     pub condition: Expression,
     pub then_statements: Vec<Statement>,
@@ -146,6 +154,20 @@ pub struct If {
 pub struct While {
     pub condition: Expression,
     pub statements: Vec<Statement>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct For {
+    pub initial_statement: ForInitialStatement,
+    pub condition: Expression,
+    pub post_statement: Expression,
+    pub statements: Vec<Statement>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ForInitialStatement {
+    Let(Let),
+    Expression(Expression),
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
