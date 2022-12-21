@@ -210,27 +210,24 @@ pub Parameter: Parameter = {
 };
 
 pub RootFunction: Function = {
-    "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+    "function" <i: Ident> "(" <pl:ParameterList> ")" "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
         parameters: pl,
-        return_type: return_type.map(|(_, t)| t),
         statements: s,
         statements_code: input[l..r].to_string(),
     }
 };
 
 pub Function: Function = {
-    "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+    "function" <i: Ident> "(" <pl:ParameterList> ")" "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
         parameters: pl,
-        return_type: return_type.map(|(_, t)| t),
         statements: s,
         statements_code: input[l..r].to_string(),
     },
-    <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+    <i: Ident> "(" <pl:ParameterList> ")" "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
         parameters: pl,
-        return_type: return_type.map(|(_, t)| t),
         statements: s,
         statements_code: input[l..r].to_string(),
     },
