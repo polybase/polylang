@@ -15,13 +15,13 @@ StringOrNumberType: Type = {
     "number" => Type::Number,
 };
 
-pub Type: Type = {
+Type: Type = {
     StringOrNumberType,
     <t:StringOrNumberType> "[" "]" => Type::Array(Box::new(t)),
     "map" "<" <kt:StringOrNumberType> "," <vt:StringOrNumberType> ">" => Type::Map(Box::new(kt), Box::new(vt)),
 };
 
-pub ParameterType: ParameterType = {
+ParameterType: ParameterType = {
     <t:Type> => match t {
         Type::String => ParameterType::String,
         Type::Number => ParameterType::Number,
