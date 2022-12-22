@@ -12,6 +12,61 @@ pub(crate) enum Value {
     Map(HashMap<String, Value>),
 }
 
+pub(crate) fn validate_value(value: &Value, expected_type: &ast::Type) -> bool {
+    let matches = match expected_type {
+        ast::Type::String => {
+            if let Value::String(_) = value {
+                true
+            } else {
+                false
+            }
+        }
+        ast::Type::Number => {
+            if let Value::Number(_) = value {
+                true
+            } else {
+                false
+            }
+        }
+        ast::Type::Array(el) => {
+            if let Value::Array(arr) = value {
+                for item in arr {
+                    if !validate_value(item, el.deref()) {
+                        return false;
+                    }
+                }
+                true
+            } else {
+                false
+            }
+        }
+        ast::Type::Map(kt, vt) => {
+            if let Value::Map(map) = value {
+                for (key, value) in map {
+                    match kt.deref() {
+                        ast::Type::String => return true,
+                        ast::Type::Number => {
+                            if key.parse::<f64>().is_err() {
+                                return false;
+                            }
+                        }
+                        _ => return false,
+                    }
+                    if !validate_value(value, vt.deref()) {
+                        return false;
+                    }
+                }
+
+                true
+            } else {
+                false
+            }
+        }
+    };
+
+    matches
+}
+
 pub(crate) fn validate_set(
     collection: ast::Collection,
     data: HashMap<String, Value>,
@@ -35,101 +90,12 @@ pub(crate) fn validate_set(
         }
 
         if let Some(value) = data.get(&field.name) {
-            match value {
-                Value::String(_) => {
-                    if field.type_ != ast::Type::String {
-                        return Err(format!("Invalid type for field: {}", field.name).into());
-                    }
-                }
-                Value::Number(_) => {
-                    if field.type_ != ast::Type::Number {
-                        return Err(format!("Invalid type for field: {}", field.name).into());
-                    }
-                }
-                Value::Array(t) => {
-                    if let ast::Type::Array(at) = &field.type_ {
-                        for item in t {
-                            match item {
-                                Value::String(_) => {
-                                    if at.deref() != &ast::Type::String {
-                                        return Err(format!(
-                                            "Invalid type for field: {}",
-                                            field.name
-                                        )
-                                        .into());
-                                    }
-                                }
-                                Value::Number(_) => {
-                                    if at.deref() != &ast::Type::Number {
-                                        return Err(format!(
-                                            "Invalid type for field: {}",
-                                            field.name
-                                        )
-                                        .into());
-                                    }
-                                }
-                                Value::Array(_) | Value::Map(_) => {
-                                    return Err(
-                                        format!("Invalid type for field: {}", field.name).into()
-                                    );
-                                }
-                            }
-                        }
-                    } else {
-                        return Err(format!("Invalid type for field: {}", field.name).into());
-                    }
-                }
-                Value::Map(map) => {
-                    if let ast::Type::Map(kt, vt) = &field.type_ {
-                        for (key, value) in map {
-                            match kt.deref() {
-                                ast::Type::String => {}
-                                ast::Type::Number => {
-                                    if let Err(_) = key.parse::<f64>() {
-                                        return Err(format!(
-                                            "Invalid type for field: {}",
-                                            field.name
-                                        )
-                                        .into());
-                                    }
-                                }
-                                ast::Type::Array(_) | ast::Type::Map(..) => {
-                                    return Err(
-                                        format!("Invalid type for field: {}", field.name).into()
-                                    );
-                                }
-                            }
-
-                            match value {
-                                Value::String(_) => {
-                                    if vt.deref() != &ast::Type::String {
-                                        return Err(format!(
-                                            "Invalid type for field: {}",
-                                            field.name
-                                        )
-                                        .into());
-                                    }
-                                }
-                                Value::Number(_) => {
-                                    if vt.deref() != &ast::Type::Number {
-                                        return Err(format!(
-                                            "Invalid type for field: {}",
-                                            field.name
-                                        )
-                                        .into());
-                                    }
-                                }
-                                Value::Array(_) | Value::Map(_) => {
-                                    return Err(
-                                        format!("Invalid type for field: {}", field.name).into()
-                                    );
-                                }
-                            }
-                        }
-                    } else {
-                        return Err(format!("Invalid type for field: {}", field.name).into());
-                    }
-                }
+            if !validate_value(value, &field.type_) {
+                return Err(format!(
+                    "Invalid type for field {}, expected type {:?}",
+                    field.name, &field.type_
+                )
+                .into());
             }
         }
     }
@@ -230,6 +196,46 @@ mod tests {
             Value::Map(HashMap::from([
                 ("tag1".to_string(), Value::Number(1.0)),
                 ("tag2".to_string(), Value::Number(2.0)),
+            ])),
+        )]);
+
+        assert!(validate_set(collection, data).is_ok());
+    }
+
+    #[test]
+    fn test_validate_nested_map() {
+        let collection = ast::Collection {
+            name: "users".to_string(),
+            items: vec![ast::CollectionItem::Field(ast::Field {
+                name: "tags".to_string(),
+                type_: ast::Type::Map(
+                    Box::new(ast::Type::String),
+                    Box::new(ast::Type::Map(
+                        Box::new(ast::Type::String),
+                        Box::new(ast::Type::Number),
+                    )),
+                ),
+                required: false,
+            })],
+        };
+
+        let data = HashMap::from([(
+            "tags".to_string(),
+            Value::Map(HashMap::from([
+                (
+                    "tag1".to_string(),
+                    Value::Map(HashMap::from([
+                        ("tag1.1".to_string(), Value::Number(1.0)),
+                        ("tag1.2".to_string(), Value::Number(2.0)),
+                    ])),
+                ),
+                (
+                    "tag2".to_string(),
+                    Value::Map(HashMap::from([
+                        ("tag2.1".to_string(), Value::Number(1.0)),
+                        ("tag2.2".to_string(), Value::Number(2.0)),
+                    ])),
+                ),
             ])),
         )]);
 
