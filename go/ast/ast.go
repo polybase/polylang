@@ -26,12 +26,26 @@ type Field struct {
 	Required bool   `json:"required"`
 }
 
-type Type string
+type Type struct {
+	Tag     string      `json:"tag"`
+	Content interface{} `json:"content,omitempty"`
+}
 
-const (
-	String Type = "String"
-	Number Type = "Number"
-)
+func (t *Type) IsString() bool {
+	return t.Tag == "String"
+}
+
+func (t *Type) IsNumber() bool {
+	return t.Tag == "Number"
+}
+
+func (t *Type) IsArray() bool {
+	return t.Tag == "Array"
+}
+
+func (t *Type) IsMap() bool {
+	return t.Tag == "Map"
+}
 
 type FieldDecorator struct {
 	Name      string      `json:"name"`
@@ -46,13 +60,30 @@ type Function struct {
 	StatementsCode string        `json:"statements_code"`
 }
 
-type FunctionType string
+type FunctionType struct {
+	Tag     string      `json:"tag"`
+	Content interface{} `json:"content,omitempty"`
+}
 
-const (
-	FunctionTypeString FunctionType = "String"
-	FunctionTypeNumber FunctionType = "Number"
-	FunctionTypeRecord FunctionType = "Record"
-)
+func (ft *FunctionType) IsString() bool {
+	return ft.Tag == "String"
+}
+
+func (ft *FunctionType) IsNumber() bool {
+	return ft.Tag == "Number"
+}
+
+func (ft *FunctionType) IsRecord() bool {
+	return ft.Tag == "Record"
+}
+
+func (ft *FunctionType) IsArray() bool {
+	return ft.Tag == "Array"
+}
+
+func (ft *FunctionType) IsMap() bool {
+	return ft.Tag == "Map"
+}
 
 type Parameter struct {
 	Name     string       `json:"name"`

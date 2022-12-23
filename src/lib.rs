@@ -537,9 +537,73 @@ function x() {
         eprintln!("{}", collection.as_ref().unwrap_err().message);
         assert_eq!(
             collection.unwrap_err().message,
-            r#"Error found at line 3, column 22: Unrecognized token "object". Expected one of: "number", "string"
+            r#"Error found at line 3, column 22: Unrecognized token "object". Expected one of: "map", "number", "string"
 name: object;
       ^^^^^^"#,
         );
+    }
+
+    #[test]
+    fn test_array_map_field() {
+        let cases = [
+            (
+                "collection test { numbers: number[]; }",
+                vec![ast::Field {
+                    name: "numbers".to_string(),
+                    type_: ast::Type::Array(Box::new(ast::Type::Number)),
+                    required: true,
+                }],
+            ),
+            (
+                "collection test { strings: string[]; }",
+                vec![ast::Field {
+                    name: "strings".to_string(),
+                    type_: ast::Type::Array(Box::new(ast::Type::String)),
+                    required: true,
+                }],
+            ),
+            (
+                "collection test { numToStr: map<number, string>; }",
+                vec![ast::Field {
+                    name: "numToStr".to_string(),
+                    type_: ast::Type::Map(Box::new(ast::Type::Number), Box::new(ast::Type::String)),
+                    required: true,
+                }],
+            ),
+            (
+                "collection test { strToNum: map<string, number>; }",
+                vec![ast::Field {
+                    name: "strToNum".to_string(),
+                    type_: ast::Type::Map(Box::new(ast::Type::String), Box::new(ast::Type::Number)),
+                    required: true,
+                }],
+            ),
+        ];
+
+        for (code, expected) in cases.iter() {
+            let program = parse(code).unwrap();
+            assert_eq!(program.nodes.len(), 1);
+            let collection = match &program.nodes[0] {
+                ast::RootNode::Collection(c) => c,
+                _ => panic!("expected collection"),
+            };
+            assert_eq!(collection.items.len(), expected.len());
+
+            for (i, item) in expected.iter().enumerate() {
+                assert!(
+                    matches!(
+                        &collection.items[i],
+                        ast::CollectionItem::Field(ast::Field {
+                            name,
+                            type_,
+                            required,
+                        }) if name == &item.name && type_ == &item.type_ && required == &item.required
+                    ),
+                    "expected: {:?}, got: {:?}",
+                    item,
+                    collection.items[i]
+                );
+            }
+        }
     }
 }

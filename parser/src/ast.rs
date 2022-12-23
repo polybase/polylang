@@ -37,16 +37,22 @@ pub struct FieldDecorator {
     pub arguments: Vec<Primitive>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "tag", content = "content")]
 pub enum Type {
     String,
     Number,
+    Array(Box<Type>),
+    Map(Box<Type>, Box<Type>),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "tag", content = "content")]
 pub enum ParameterType {
     String,
     Number,
+    Array(Type),
+    Map(Type, Type),
     Record,
 }
 

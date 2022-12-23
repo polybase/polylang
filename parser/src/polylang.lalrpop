@@ -10,14 +10,24 @@ pub Ident: String = {
     "asc" => "asc".to_string(),
 };
 
-pub Type: Type = {
+StringOrNumberType: Type = {
     "string" => Type::String,
     "number" => Type::Number,
 };
 
-pub ParameterType: ParameterType = {
-    "string" => ParameterType::String,
-    "number" => ParameterType::Number,
+Type: Type = {
+    StringOrNumberType,
+    <t:StringOrNumberType> "[" "]" => Type::Array(Box::new(t)),
+    "map" "<" <kt:StringOrNumberType> "," <vt:Type> ">" => Type::Map(Box::new(kt), Box::new(vt)),
+};
+
+ParameterType: ParameterType = {
+    <t:Type> => match t {
+        Type::String => ParameterType::String,
+        Type::Number => ParameterType::Number,
+        Type::Array(t) => ParameterType::Array(*t),
+        Type::Map(kt, vt) => ParameterType::Map(*kt, *vt),
+    },
     "record" => ParameterType::Record,
 };
 
@@ -78,19 +88,21 @@ pub Expression: Expression = {
     #[precedence(level="5")] #[assoc(side="left")]
     <l:Expression> "-" <r:Expression> => Expression::Subtract(Box::new(l), Box::new(r)),
     #[precedence(level="6")] #[assoc(side="left")]
-    <l:Expression> "<<" <r:Expression> => Expression::ShiftLeft(Box::new(l), Box::new(r)),
+    <l:Expression> "<" <second:("<")?> <r:Expression> => match second {
+        None => Expression::LessThan(Box::new(l), Box::new(r)),
+        Some(_) => Expression::ShiftLeft(Box::new(l), Box::new(r)),
+    },
     #[precedence(level="6")] #[assoc(side="left")]
-    <l:Expression> ">>" <r:Expression> => Expression::ShiftRight(Box::new(l), Box::new(r)),
+    <l:Expression> ">" <second:(">")?> <r:Expression> => match second {
+        None => Expression::GreaterThan(Box::new(l), Box::new(r)),
+        Some(_) => Expression::ShiftRight(Box::new(l), Box::new(r)),
+    },
     #[precedence(level="7")] #[assoc(side="left")]
     <l:Expression> "&" <r:Expression> => Expression::BitAnd(Box::new(l), Box::new(r)),
     #[precedence(level="8")] #[assoc(side="left")]
     <l:Expression> "^" <r:Expression> => Expression::BitXor(Box::new(l), Box::new(r)),
     #[precedence(level="9")] #[assoc(side="left")]
     <l:Expression> "|" <r:Expression> => Expression::BitOr(Box::new(l), Box::new(r)),
-    #[precedence(level="10")] #[assoc(side="none")]
-    <l:Expression> "<" <r:Expression> => Expression::LessThan(Box::new(l), Box::new(r)),
-    #[precedence(level="10")] #[assoc(side="none")]
-    <l:Expression> ">" <r:Expression> => Expression::GreaterThan(Box::new(l), Box::new(r)),
     #[precedence(level="10")] #[assoc(side="none")]
     <l:Expression> "<=" <r:Expression> => Expression::LessThanOrEqual(Box::new(l), Box::new(r)),
     #[precedence(level="10")] #[assoc(side="none")]
