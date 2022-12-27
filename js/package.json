@@ -7,6 +7,7 @@
   "license": "MIT",
   "files": [
     "pkg/*",
+    "pkg-thin/*",
     "dist/*"
   ],
   "scripts": {

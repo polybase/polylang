@@ -16,6 +16,7 @@ pub extern "C" fn init() {
 }
 
 #[cfg(target_arch = "wasm32")]
+#[cfg(feature = "parser")]
 #[wasm_bindgen]
 pub fn parse(input: &str) -> String {
     crate::parse_out_json(input)
@@ -34,6 +35,7 @@ pub fn generate_js_collection(collection_ast_json: &str) -> String {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "parser")]
 #[no_mangle]
 pub extern "C" fn parse(input: *const c_char) -> *mut c_char {
     let input = unsafe { std::ffi::CStr::from_ptr(input) };
