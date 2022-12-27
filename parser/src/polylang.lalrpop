@@ -29,6 +29,9 @@ ParameterType: ParameterType = {
         Type::Map(kt, vt) => ParameterType::Map(*kt, *vt),
     },
     "record" => ParameterType::Record,
+    <i:Ident> => ParameterType::ForeignRecord {
+        collection: i,
+    },
 };
 
 pub Number: f64 = {
