@@ -54,6 +54,7 @@ pub enum ParameterType {
     Array(Type),
     Map(Type, Type),
     Record,
+    ForeignRecord { collection: String },
 }
 
 #[derive(Debug, Serialize, Deserialize)]

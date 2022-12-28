@@ -1,5 +1,7 @@
 package ast
 
+import "encoding/json"
+
 type Program struct {
 	Nodes []RootNode `json:"nodes"`
 }
@@ -61,8 +63,8 @@ type Function struct {
 }
 
 type FunctionType struct {
-	Tag     string      `json:"tag"`
-	Content interface{} `json:"content,omitempty"`
+	Tag     string          `json:"tag"`
+	Content json.RawMessage `json:"content,omitempty"`
 }
 
 func (ft *FunctionType) IsString() bool {
@@ -83,6 +85,24 @@ func (ft *FunctionType) IsArray() bool {
 
 func (ft *FunctionType) IsMap() bool {
 	return ft.Tag == "Map"
+}
+
+func (ft *FunctionType) IsForeignRecord() bool {
+	return ft.Tag == "ForeignRecord"
+}
+
+func (ft *FunctionType) ForeignRecord() *ForeignRecord {
+	var foreignRecord ForeignRecord
+	if err := json.Unmarshal(ft.Content, &foreignRecord); err != nil {
+		// This should never happen
+		panic(err)
+	}
+
+	return &foreignRecord
+}
+
+type ForeignRecord struct {
+	Collection string `json:"collection"`
 }
 
 type Parameter struct {
