@@ -107,7 +107,7 @@ fn validate_set(collection_ast_json: &str, data_json: &str) -> Result<(), Error>
         }
     };
 
-    validation::validate_set(collection_ast, data).map_err(|e| Error {
+    validation::validate_set(&collection_ast, &data).map_err(|e| Error {
         message: e.to_string(),
     })
 }
@@ -537,7 +537,7 @@ function x() {
         eprintln!("{}", collection.as_ref().unwrap_err().message);
         assert_eq!(
             collection.unwrap_err().message,
-            r#"Error found at line 3, column 22: Unrecognized token "object". Expected one of: "map", "number", "string"
+            r#"Error found at line 3, column 22: Unrecognized token "object". Expected one of: "map", "number", "string", "{"
 name: object;
       ^^^^^^"#,
         );
@@ -575,6 +575,85 @@ name: object;
                 vec![ast::Field {
                     name: "strToNum".to_string(),
                     type_: ast::Type::Map(Box::new(ast::Type::String), Box::new(ast::Type::Number)),
+                    required: true,
+                }],
+            ),
+        ];
+
+        for (code, expected) in cases.iter() {
+            let program = parse(code).unwrap();
+            assert_eq!(program.nodes.len(), 1);
+            let collection = match &program.nodes[0] {
+                ast::RootNode::Collection(c) => c,
+                _ => panic!("expected collection"),
+            };
+            assert_eq!(collection.items.len(), expected.len());
+
+            for (i, item) in expected.iter().enumerate() {
+                assert!(
+                    matches!(
+                        &collection.items[i],
+                        ast::CollectionItem::Field(ast::Field {
+                            name,
+                            type_,
+                            required,
+                        }) if name == &item.name && type_ == &item.type_ && required == &item.required
+                    ),
+                    "expected: {:?}, got: {:?}",
+                    item,
+                    collection.items[i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_object_field() {
+        let cases = [
+            (
+                "collection test { person: { name: string; age: number; }; }",
+                vec![ast::Field {
+                    name: "person".to_string(),
+                    type_: ast::Type::Object(vec![
+                        ast::Field {
+                            name: "name".to_string(),
+                            type_: ast::Type::String,
+                            required: true,
+                        },
+                        ast::Field {
+                            name: "age".to_string(),
+                            type_: ast::Type::Number,
+                            required: true,
+                        },
+                    ]),
+                    required: true,
+                }],
+            ),
+            (
+                "collection test { person: { name?: string; }; }",
+                vec![ast::Field {
+                    name: "person".to_string(),
+                    type_: ast::Type::Object(vec![ast::Field {
+                        name: "name".to_string(),
+                        type_: ast::Type::String,
+                        required: false,
+                    }]),
+                    required: true,
+                }],
+            ),
+            (
+                "collection test { person: { info: { name: string; }; }; }",
+                vec![ast::Field {
+                    name: "person".to_string(),
+                    type_: ast::Type::Object(vec![ast::Field {
+                        name: "info".to_string(),
+                        type_: ast::Type::Object(vec![ast::Field {
+                            name: "name".to_string(),
+                            type_: ast::Type::String,
+                            required: true,
+                        }]),
+                        required: true,
+                    }]),
                     required: true,
                 }],
             ),
