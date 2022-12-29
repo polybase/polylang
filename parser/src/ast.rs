@@ -24,7 +24,7 @@ pub enum CollectionItem {
     Index(Index),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Field {
     pub name: String,
     pub type_: Type,
@@ -44,6 +44,7 @@ pub enum Type {
     Number,
     Array(Box<Type>),
     Map(Box<Type>, Box<Type>),
+    Object(Vec<Field>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -53,6 +54,7 @@ pub enum ParameterType {
     Number,
     Array(Type),
     Map(Type, Type),
+    Object(Vec<(String, Type)>),
     Record,
     ForeignRecord { collection: String },
 }
@@ -108,6 +110,7 @@ pub enum Expression {
     Primitive(Primitive),
     Ident(String),
     Boolean(bool),
+    Object(Object),
     Assign(Box<Expression>, Box<Expression>),
     AssignSub(Box<Expression>, Box<Expression>),
     AssignAdd(Box<Expression>, Box<Expression>),
@@ -176,4 +179,9 @@ pub enum Primitive {
     Number(f64),
     String(String),
     Regex(String),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Object {
+    pub fields: Vec<(String, Expression)>,
 }

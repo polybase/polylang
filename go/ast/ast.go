@@ -49,6 +49,10 @@ func (t *Type) IsMap() bool {
 	return t.Tag == "Map"
 }
 
+func (t *Type) IsObject() bool {
+	return t.Tag == "Object"
+}
+
 type FieldDecorator struct {
 	Name      string      `json:"name"`
 	Arguments []Primitive `json:"arguments"`

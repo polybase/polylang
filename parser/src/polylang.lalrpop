@@ -19,14 +19,18 @@ Type: Type = {
     StringOrNumberType,
     <t:StringOrNumberType> "[" "]" => Type::Array(Box::new(t)),
     "map" "<" <kt:StringOrNumberType> "," <vt:Type> ">" => Type::Map(Box::new(kt), Box::new(vt)),
+    "{" <fields:(Field ";")*> "}" => Type::Object(fields.into_iter().map(|(f, _)| f).collect()),
 };
 
 ParameterType: ParameterType = {
-    <t:Type> => match t {
-        Type::String => ParameterType::String,
-        Type::Number => ParameterType::Number,
-        Type::Array(t) => ParameterType::Array(*t),
-        Type::Map(kt, vt) => ParameterType::Map(*kt, *vt),
+    <t:Type> =>? match t {
+        Type::String => Ok(ParameterType::String),
+        Type::Number => Ok(ParameterType::Number),
+        Type::Array(t) => Ok(ParameterType::Array(*t)),
+        Type::Map(kt, vt) => Ok(ParameterType::Map(*kt, *vt)),
+        Type::Object(fields) => Err(ParseError::User {
+            error: "object type not allowed for parameter",
+        }),
     },
     "record" => ParameterType::Record,
     <i:Ident> => ParameterType::ForeignRecord {
@@ -59,6 +63,15 @@ pub Primitive: Primitive = {
     <r:Regex> => Primitive::Regex(r),
 };
 
+ObjectFieldValues: Vec<(String, Expression)> = {
+    <id:Ident> ":" <e:Expression> => vec![(id, e)],
+    <id:Ident> ":" <e:Expression> "," <fs:ObjectFieldValues> => {
+        let mut fs = fs;
+        fs.insert(0, (id, e));
+        fs
+    },
+};
+
 pub Expression: Expression = {
     #[precedence(level="0")]
     <p:Primitive> => Expression::Primitive(p),
@@ -66,6 +79,8 @@ pub Expression: Expression = {
     <b:Boolean> => Expression::Boolean(b),
     #[precedence(level="0")]
     <id:Ident> => Expression::Ident(id),
+    #[precedence(level="0")]
+    "{" <fields:ObjectFieldValues> "}" => Expression::Object(Object { fields }),
     #[precedence(level="1")]
     <l:Expression> "[" <r:Expression> "]" => Expression::Index(Box::new(l), Box::new(r)),
     #[precedence(level="1")]
