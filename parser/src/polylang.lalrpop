@@ -1,11 +1,77 @@
 use crate::ast::*;
+use crate::lexer;
 use std::str::FromStr;
 use lalrpop_util::ParseError;
 
-grammar;
+grammar<'input>(input: &'input str);
+
+extern {
+    type Location = usize;
+    type Error = lexer::LexicalError;
+
+    enum lexer::Tok<'input> {
+        identifier => lexer::Tok::Identifier(<&'input str>),
+        number => lexer::Tok::NumberLiteral(<f64>),
+        string => lexer::Tok::StringLiteral(<&'input str>),
+        "desc" => lexer::Tok::Desc,
+        "asc" => lexer::Tok::Asc,
+        "true" => lexer::Tok::True,
+        "false" => lexer::Tok::False,
+        "string" => lexer::Tok::String,
+        "number" => lexer::Tok::Number,
+        "map" => lexer::Tok::Map,
+        "record" => lexer::Tok::Record,
+        "let" => lexer::Tok::Let,
+        "break" => lexer::Tok::Break,
+        "return" => lexer::Tok::Return,
+        "throw" => lexer::Tok::Throw,
+        "if" => lexer::Tok::If,
+        "else" => lexer::Tok::Else,
+        "while" => lexer::Tok::While,
+        "for" => lexer::Tok::For,
+        "function" => lexer::Tok::Function,
+        "index" => lexer::Tok::Index,
+        "unique" => lexer::Tok::Unique,
+        "collection" => lexer::Tok::Collection,
+        "{" => lexer::Tok::LBrace,
+        "}" => lexer::Tok::RBrace,
+        "[" => lexer::Tok::LBracket,
+        "]" => lexer::Tok::RBracket,
+        "(" => lexer::Tok::LParen,
+        ")" => lexer::Tok::RParen,
+        "<" => lexer::Tok::ArrowLeft,
+        ">" => lexer::Tok::ArrowRight,
+        ":" => lexer::Tok::Colon,
+        ";" => lexer::Tok::Semicolon,
+        "," => lexer::Tok::Comma,
+        "." => lexer::Tok::Dot,
+        "!" => lexer::Tok::Bang,
+        "?" => lexer::Tok::Question,
+        "~" => lexer::Tok::Tilde,
+        "*" => lexer::Tok::Star,
+        "/" => lexer::Tok::Slash,
+        "%" => lexer::Tok::Percent,
+        "+" => lexer::Tok::Plus,
+        "-" => lexer::Tok::Minus,
+        "&" => lexer::Tok::Ampersand,
+        "**" => lexer::Tok::StarStar,
+        "&&" => lexer::Tok::AmpersandAmpersand,
+        "@" => lexer::Tok::At,
+        "^" => lexer::Tok::Caret,
+        "|" => lexer::Tok::Pipe,
+        "||" => lexer::Tok::PipePipe,
+        "<=" => lexer::Tok::Lte,
+        ">=" => lexer::Tok::Gte,
+        "=" => lexer::Tok::Equal,
+        "==" => lexer::Tok::EqualEqual,
+        "!=" => lexer::Tok::BangEqual,
+        "-=" => lexer::Tok::MinusEqual,
+        "+=" => lexer::Tok::PlusEqual,
+    }
+}
 
 pub Ident: String = {
-    <s:r"[a-zA-Z_\$][a-zA-Z0-9_]*"> => s.to_string(),
+    <i:identifier> => i.to_string(),
     "desc" => "desc".to_string(),
     "asc" => "asc".to_string(),
 };
@@ -23,13 +89,17 @@ Type: Type = {
 };
 
 ParameterType: ParameterType = {
-    <t:Type> =>? match t {
+    <l:@L> <t:Type> =>? match t {
         Type::String => Ok(ParameterType::String),
         Type::Number => Ok(ParameterType::Number),
         Type::Array(t) => Ok(ParameterType::Array(*t)),
         Type::Map(kt, vt) => Ok(ParameterType::Map(*kt, *vt)),
         Type::Object(fields) => Err(ParseError::User {
-            error: "object type not allowed for parameter",
+            error: lexer::LexicalError::UserError {
+                start: l,
+                end: l,
+                message: "object type not allowed for parameter".to_string(),
+            }
         }),
     },
     "record" => ParameterType::Record,
@@ -39,13 +109,11 @@ ParameterType: ParameterType = {
 };
 
 pub Number: f64 = {
-    <s:r"-?[0-9]+(\.[0-9]+)?"> =>? f64::from_str(s).map_err(|_| ParseError::User {
-        error: "invalid number",
-    }),
+    <n:number> => n,
 };
 
 pub String: String = {
-    <s:r#"'[^']*'"#> => s[1..s.len()-1].to_string(),
+    <s:string> => s[1..s.len()-1].to_string(),
 };
 
 pub Boolean: bool = {
@@ -53,14 +121,9 @@ pub Boolean: bool = {
     "false" => false,
 };
 
-pub Regex: String = {
-    <s:r#"/[^/]*/"#> => s[1..s.len()-1].to_string(),
-};
-
 pub Primitive: Primitive = {
     <n:Number> => Primitive::Number(n),
     <s:String> => Primitive::String(s),
-    <r:Regex> => Primitive::Regex(r),
 };
 
 ObjectFieldValues: Vec<(String, Expression)> = {
@@ -90,9 +153,9 @@ pub Expression: Expression = {
     #[precedence(level="1")]
     "(" <e:Expression> ")" => e,
     #[precedence(level="2")]
-    <l:Expression> "!" => Expression::Not(Box::new(l)),
+    "!" <l:Expression> => Expression::Not(Box::new(l)),
     #[precedence(level="2")]
-    <l:Expression> "~" => Expression::BitNot(Box::new(l)),
+    "~" <l:Expression> => Expression::BitNot(Box::new(l)),
     #[precedence(level="3")] #[assoc(side="left")]
     <l:Expression> "**" <r:Expression> => Expression::Exponent(Box::new(l), Box::new(r)),
     #[precedence(level="4")] #[assoc(side="left")]
@@ -306,11 +369,11 @@ pub Order: Order = {
 };
 
 pub Index: Index = {
-    "@index" "(" <fields:IndexFields> ")"  => Index{
+    "@" "index" "(" <fields:IndexFields> ")"  => Index{
         unique: false,
         fields: fields,
     },
-    "@unique" "(" <fields:IndexFields> ")"  => Index{
+    "@" "unique" "(" <fields:IndexFields> ")"  => Index{
         unique: true,
         fields: fields,
     },
