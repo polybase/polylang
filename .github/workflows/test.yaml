@@ -10,6 +10,16 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - uses: actions-rs/cargo@v1
+      - name: Pull testnet collections
+        continue-on-error: true
+        run: |
+          ./pull-collections.sh
+      - name: Test the main crate
+        uses: actions-rs/cargo@v1
         with:
           command: test
+      - name: Test the parser
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --manifest-path parser/Cargo.toml

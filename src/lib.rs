@@ -2,7 +2,7 @@ mod bindings;
 mod js;
 mod validation;
 
-use polylang_parser::{ast, polylang, ParseError};
+use polylang_parser::{ast, LexicalError, ParseError};
 use serde::Serialize;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -11,10 +11,9 @@ struct Error {
     message: String,
 }
 
-fn parse_error_to_error<T, E>(input: &str, error: ParseError<usize, T, E>) -> Error
+fn parse_error_to_error<T>(input: &str, error: ParseError<usize, T, LexicalError>) -> Error
 where
     T: std::fmt::Display + std::fmt::Debug,
-    E: std::fmt::Display + std::fmt::Debug,
 {
     let get_line_start = |start_byte| input[..start_byte].rfind('\n').map(|i| i + 1).unwrap_or(0);
     let get_line_end = |end_byte| {
@@ -72,16 +71,28 @@ where
         ParseError::ExtraToken {
             token: (start_byte, token, end_byte),
         } => make_err(start_byte, end_byte, &format!("Extra token \"{}\"", token)),
-        ParseError::User { error } => Error {
-            message: format!("{:?}", error),
+        ParseError::User { error } => match error {
+            LexicalError::NumberParseError { start, end } => {
+                make_err(start, end, "Failed to parse number")
+            }
+            LexicalError::InvalidToken { start, end } => make_err(start, end, "Invalid token"),
+            LexicalError::UnterminatedComment { start, end } => {
+                make_err(start, end, "Unterminated comment")
+            }
+            LexicalError::UnterminatedString { start, end } => {
+                make_err(start, end, "Unterminated string")
+            }
+            LexicalError::UserError {
+                start,
+                end,
+                message,
+            } => make_err(start, end, &message),
         },
     }
 }
 
 fn parse(input: &str) -> Result<ast::Program, Error> {
-    polylang::ProgramParser::new()
-        .parse(input)
-        .map_err(|e| parse_error_to_error(input, e))
+    polylang_parser::parse(input).map_err(|e| parse_error_to_error(input, e))
 }
 
 fn parse_out_json(input: &str) -> String {
@@ -144,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_collection() {
-        let program = polylang::ProgramParser::new().parse("collection Test {}");
+        let program = parse("collection Test {}");
 
         let program = program.unwrap();
         assert_eq!(program.nodes.len(), 1);
@@ -155,7 +166,7 @@ mod tests {
 
     #[test]
     fn test_collection_with_fields() {
-        let program = polylang::ProgramParser::new().parse(
+        let program = parse(
             "
             collection Test {
                 name: string;
@@ -185,7 +196,7 @@ mod tests {
 
     #[test]
     fn test_collection_with_asc_desc_fields() {
-        let program = polylang::ProgramParser::new().parse(
+        let program = parse(
             "
             collection Test {
                 asc: string;
@@ -215,7 +226,7 @@ mod tests {
 
     #[test]
     fn test_collection_with_functions() {
-        let program = polylang::ProgramParser::new().parse(
+        let program = parse(
             "
             collection Test {
                 function get_age(a: number, b?: string) {
@@ -258,23 +269,29 @@ mod tests {
 
     #[test]
     fn test_number() {
-        let number = polylang::NumberParser::new().parse("42");
+        let number = polylang_parser::parse_expression("42");
 
         assert!(number.is_ok());
-        assert_eq!(number.unwrap(), 42.0);
+        assert_eq!(
+            number.unwrap(),
+            ast::Expression::Primitive(ast::Primitive::Number(42.0))
+        );
     }
 
     #[test]
     fn test_string() {
-        let string = polylang::StringParser::new().parse("'hello world'");
+        let string = polylang_parser::parse_expression("'hello world'");
 
         assert!(string.is_ok());
-        assert_eq!(string.unwrap(), "hello world");
+        assert_eq!(
+            string.unwrap(),
+            ast::Expression::Primitive(ast::Primitive::String("hello world".to_string()))
+        );
     }
 
     #[test]
     fn test_comparison() {
-        let comparison = polylang::ExpressionParser::new().parse("1 > 2");
+        let comparison = polylang_parser::parse_expression("1 > 2");
 
         assert!(matches!(
             comparison.unwrap(),
@@ -285,17 +302,33 @@ mod tests {
 
     #[test]
     fn test_if() {
-        let if_ = polylang::IfParser::new().parse(
+        let program = parse(
             "
-            if (1 == 1) {
-                return 42;
-            } else {
-                return 0;
+            function x() {
+                if (1 == 1) {
+                    return 42;
+                } else {
+                    return 0;
+                }
             }
             ",
         );
 
-        let if_ = if_.unwrap();
+        let mut program = program.unwrap();
+        assert_eq!(program.nodes.len(), 1);
+
+        let mut function = match program.nodes.pop().unwrap() {
+            ast::RootNode::Function(function) => function,
+            _ => panic!("Expected function"),
+        };
+
+        assert_eq!(function.statements.len(), 1);
+
+        let if_ = match function.statements.pop().unwrap() {
+            ast::Statement::If(if_) => if_,
+            _ => panic!("Expected if"),
+        };
+
         assert!(
             matches!(if_.condition, ast::Expression::Equal(n, m) if *n == ast::Expression::Primitive(ast::Primitive::Number(1.0)) && *m == ast::Expression::Primitive(ast::Primitive::Number(1.0)))
         );
@@ -305,7 +338,7 @@ mod tests {
 
     #[test]
     fn test_call() {
-        let call = polylang::ExpressionParser::new().parse("get_age(a, b, c)");
+        let call = polylang_parser::parse_expression("get_age(a, b, c)");
 
         assert!(matches!(
             call.unwrap(),
@@ -315,7 +348,7 @@ mod tests {
 
     #[test]
     fn test_dot() {
-        let dot = polylang::ExpressionParser::new().parse("a.b").unwrap();
+        let dot = polylang_parser::parse_expression("a.b").unwrap();
 
         assert!(matches!(
             dot,
@@ -325,7 +358,7 @@ mod tests {
 
     #[test]
     fn test_assign_sub() {
-        let dot = polylang::ExpressionParser::new().parse("a -= b").unwrap();
+        let dot = polylang_parser::parse_expression("a -= b").unwrap();
 
         assert!(matches!(
             dot,
@@ -353,7 +386,15 @@ mod tests {
             }
         ";
 
-        let collection = polylang::CollectionParser::new().parse(code).unwrap();
+        let program = parse(code).unwrap();
+
+        assert_eq!(program.nodes.len(), 1);
+
+        let collection = match &program.nodes[0] {
+            ast::RootNode::Collection(collection) => collection,
+            _ => panic!("Expected collection"),
+        };
+
         assert_eq!(collection.name, "Account");
         assert_eq!(collection.items.len(), 6);
 
@@ -683,6 +724,53 @@ name: object;
                     collection.items[i]
                 );
             }
+        }
+    }
+
+    #[test]
+    fn test_comments() {
+        let code = "
+            collection test {
+                // This is a comment
+                name: string;
+
+                /*
+                    This is a multiline comment
+                */
+                function test() {
+                    return 1;
+                }
+            }
+        ";
+
+        assert!(parse(code).is_ok());
+    }
+
+    /// Tests that collections from the filesystem directory 'test-collections' parse without an error
+    #[test]
+    fn test_fs_collections() {
+        use std::path::Path;
+
+        let dir = Path::new("test-collections");
+        let entries = match std::fs::read_dir(dir) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+            Err(e) => panic!("Error reading directory: {}", e),
+        };
+        for entry in entries {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.is_dir() {
+                continue;
+            }
+
+            let code = std::fs::read_to_string(&path).unwrap();
+            let collection = parse(&code);
+            if collection.is_err() {
+                eprintln!("Error parsing collection: {}", path.display());
+                eprintln!("{}", collection.as_ref().unwrap_err().message);
+            }
+            assert!(collection.is_ok());
         }
     }
 }

@@ -1,13 +1,80 @@
 use crate::ast::*;
+use crate::lexer;
 use std::str::FromStr;
 use lalrpop_util::ParseError;
 
-grammar;
+grammar<'input>(input: &'input str);
 
-pub Ident: String = {
-    <s:r"[a-zA-Z_\$][a-zA-Z0-9_]*"> => s.to_string(),
+extern {
+    type Location = usize;
+    type Error = lexer::LexicalError;
+
+    enum lexer::Tok<'input> {
+        identifier => lexer::Tok::Identifier(<&'input str>),
+        number => lexer::Tok::NumberLiteral(<f64>),
+        string => lexer::Tok::StringLiteral(<&'input str>),
+        "desc" => lexer::Tok::Desc,
+        "asc" => lexer::Tok::Asc,
+        "true" => lexer::Tok::True,
+        "false" => lexer::Tok::False,
+        "string" => lexer::Tok::String,
+        "number" => lexer::Tok::Number,
+        "map" => lexer::Tok::Map,
+        "record" => lexer::Tok::Record,
+        "let" => lexer::Tok::Let,
+        "break" => lexer::Tok::Break,
+        "return" => lexer::Tok::Return,
+        "throw" => lexer::Tok::Throw,
+        "if" => lexer::Tok::If,
+        "else" => lexer::Tok::Else,
+        "while" => lexer::Tok::While,
+        "for" => lexer::Tok::For,
+        "function" => lexer::Tok::Function,
+        "index" => lexer::Tok::Index,
+        "unique" => lexer::Tok::Unique,
+        "collection" => lexer::Tok::Collection,
+        "{" => lexer::Tok::LBrace,
+        "}" => lexer::Tok::RBrace,
+        "[" => lexer::Tok::LBracket,
+        "]" => lexer::Tok::RBracket,
+        "(" => lexer::Tok::LParen,
+        ")" => lexer::Tok::RParen,
+        "<" => lexer::Tok::ArrowLeft,
+        ">" => lexer::Tok::ArrowRight,
+        ":" => lexer::Tok::Colon,
+        ";" => lexer::Tok::Semicolon,
+        "," => lexer::Tok::Comma,
+        "." => lexer::Tok::Dot,
+        "!" => lexer::Tok::Bang,
+        "?" => lexer::Tok::Question,
+        "~" => lexer::Tok::Tilde,
+        "*" => lexer::Tok::Star,
+        "/" => lexer::Tok::Slash,
+        "%" => lexer::Tok::Percent,
+        "+" => lexer::Tok::Plus,
+        "-" => lexer::Tok::Minus,
+        "&" => lexer::Tok::Ampersand,
+        "**" => lexer::Tok::StarStar,
+        "&&" => lexer::Tok::AmpersandAmpersand,
+        "@" => lexer::Tok::At,
+        "^" => lexer::Tok::Caret,
+        "|" => lexer::Tok::Pipe,
+        "||" => lexer::Tok::PipePipe,
+        "<=" => lexer::Tok::Lte,
+        ">=" => lexer::Tok::Gte,
+        "=" => lexer::Tok::Equal,
+        "==" => lexer::Tok::EqualEqual,
+        "!=" => lexer::Tok::BangEqual,
+        "-=" => lexer::Tok::MinusEqual,
+        "+=" => lexer::Tok::PlusEqual,
+    }
+}
+
+Ident: String = {
+    <i:identifier> => i.to_string(),
     "desc" => "desc".to_string(),
     "asc" => "asc".to_string(),
+    "index" => "index".to_string(),
 };
 
 StringOrNumberType: Type = {
@@ -23,13 +90,17 @@ Type: Type = {
 };
 
 ParameterType: ParameterType = {
-    <t:Type> =>? match t {
+    <l:@L> <t:Type> =>? match t {
         Type::String => Ok(ParameterType::String),
         Type::Number => Ok(ParameterType::Number),
         Type::Array(t) => Ok(ParameterType::Array(*t)),
         Type::Map(kt, vt) => Ok(ParameterType::Map(*kt, *vt)),
         Type::Object(fields) => Err(ParseError::User {
-            error: "object type not allowed for parameter",
+            error: lexer::LexicalError::UserError {
+                start: l,
+                end: l,
+                message: "object type not allowed for parameter".to_string(),
+            }
         }),
     },
     "record" => ParameterType::Record,
@@ -38,29 +109,22 @@ ParameterType: ParameterType = {
     },
 };
 
-pub Number: f64 = {
-    <s:r"-?[0-9]+(\.[0-9]+)?"> =>? f64::from_str(s).map_err(|_| ParseError::User {
-        error: "invalid number",
-    }),
+Number: f64 = {
+    <n:number> => n,
 };
 
-pub String: String = {
-    <s:r#"'[^']*'"#> => s[1..s.len()-1].to_string(),
+String: String = {
+    <s:string> => s[1..s.len()-1].to_string(),
 };
 
-pub Boolean: bool = {
+Boolean: bool = {
     "true" => true,
     "false" => false,
 };
 
-pub Regex: String = {
-    <s:r#"/[^/]*/"#> => s[1..s.len()-1].to_string(),
-};
-
-pub Primitive: Primitive = {
+Primitive: Primitive = {
     <n:Number> => Primitive::Number(n),
     <s:String> => Primitive::String(s),
-    <r:Regex> => Primitive::Regex(r),
 };
 
 ObjectFieldValues: Vec<(String, Expression)> = {
@@ -90,9 +154,9 @@ pub Expression: Expression = {
     #[precedence(level="1")]
     "(" <e:Expression> ")" => e,
     #[precedence(level="2")]
-    <l:Expression> "!" => Expression::Not(Box::new(l)),
+    "!" <l:Expression> => Expression::Not(Box::new(l)),
     #[precedence(level="2")]
-    <l:Expression> "~" => Expression::BitNot(Box::new(l)),
+    "~" <l:Expression> => Expression::BitNot(Box::new(l)),
     #[precedence(level="3")] #[assoc(side="left")]
     <l:Expression> "**" <r:Expression> => Expression::Exponent(Box::new(l), Box::new(r)),
     #[precedence(level="4")] #[assoc(side="left")]
@@ -141,7 +205,7 @@ pub Expression: Expression = {
     <l:Expression> "=" <r:Expression> => Expression::Assign(Box::new(l), Box::new(r)),
 };
 
-pub ArgumentList: Vec<Expression> = {
+ArgumentList: Vec<Expression> = {
     <e:Expression> <rest:("," Expression)*> => {
         let mut args = vec![e];
         for (_, e) in rest {
@@ -152,7 +216,7 @@ pub ArgumentList: Vec<Expression> = {
     => vec![],
 };
 
-pub PrimitiveArgumentList: Vec<Primitive> = {
+PrimitiveArgumentList: Vec<Primitive> = {
     <p:Primitive> <rest:("," Primitive)*> => {
         let mut args = vec![p];
         for (_, p) in rest {
@@ -163,7 +227,7 @@ pub PrimitiveArgumentList: Vec<Primitive> = {
     => vec![],
 };
 
-pub CompoundStatement: Statement = {
+CompoundStatement: Statement = {
     <i:If> => Statement::If(i),
     <w:While> => Statement::While(w),
     <f:For> => Statement::For(f),
@@ -173,7 +237,7 @@ Let: Let = {
     "let" <i:Ident> "=" <e:Expression> => Let { identifier: i, expression: e },
 };
 
-pub SmallStatement: Statement = {
+SmallStatement: Statement = {
     "break" => Statement::Break,
     "return" <e:Expression> => Statement::Return(e),
     "throw" <e:Expression> => Statement::Throw(e),
@@ -181,21 +245,21 @@ pub SmallStatement: Statement = {
     <e:Expression> => Statement::Expression(e),
 };
 
-pub SimpleStatement: Statement = {
+SimpleStatement: Statement = {
     <s:SmallStatement> ";" => s,
 };
 
-pub Statement: Statement = {
+Statement: Statement = {
     SimpleStatement,
     CompoundStatement,
 };
 
-pub StatementsOrSimpleStatement: Vec<Statement> = {
+StatementsOrSimpleStatement: Vec<Statement> = {
     "{" <s:Statement*> "}" => s,
     <s:SimpleStatement> => vec![s],
 };
 
-pub If: If = {
+If: If = {
     "if" "(" <e:Expression> ")" <s:StatementsOrSimpleStatement> <s2:("else" StatementsOrSimpleStatement)?> => If {
         condition: e,
         then_statements: s,
@@ -203,14 +267,14 @@ pub If: If = {
     },
 };
 
-pub While: While = {
+While: While = {
     "while" "(" <e:Expression> ")" "{" <s:Statement*> "}" => While {
         condition: e,
         statements: s,
     },
 };
 
-pub For: For = {
+For: For = {
     "for" "(" <init:Let> ";" <cond:Expression> ";" <post:Expression> ")" "{" <statements:Statement*> "}" => For {
         initial_statement: ForInitialStatement::Let(init),
         condition: cond,
@@ -225,7 +289,7 @@ pub For: For = {
     },
 };
 
-pub ParameterList: Vec<Parameter> = {
+ParameterList: Vec<Parameter> = {
     <p:Parameter> <rest:("," Parameter)*> => {
         let mut params = vec![p];
         for (_, p) in rest {
@@ -236,7 +300,7 @@ pub ParameterList: Vec<Parameter> = {
     => vec![],
 };
 
-pub Parameter: Parameter = {
+Parameter: Parameter = {
     <name:Ident> ":" <type_:ParameterType> => Parameter {
         name,
         type_,
@@ -249,7 +313,7 @@ pub Parameter: Parameter = {
     },
 };
 
-pub RootFunction: Function = {
+RootFunction: Function = {
     "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
         parameters: pl,
@@ -259,7 +323,7 @@ pub RootFunction: Function = {
     }
 };
 
-pub Function: Function = {
+Function: Function = {
     "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
         parameters: pl,
@@ -276,7 +340,7 @@ pub Function: Function = {
     },
 };
 
-pub Field: Field = {
+Field: Field = {
     <name:Ident> "?" ":" <type_:Type> => Field{
         name,
         type_,
@@ -289,7 +353,7 @@ pub Field: Field = {
     },
 };
 
-pub IndexField: IndexField = {
+IndexField: IndexField = {
     "[" <name:Ident> "," <order:Order> "]" => IndexField{
         name,
         order,
@@ -300,23 +364,23 @@ pub IndexField: IndexField = {
     },
 };
 
-pub Order: Order = {
+Order: Order = {
     "asc" => Order::Asc,
     "desc" => Order::Desc,
 };
 
-pub Index: Index = {
-    "@index" "(" <fields:IndexFields> ")"  => Index{
+Index: Index = {
+    "@" "index" "(" <fields:IndexFields> ")"  => Index{
         unique: false,
         fields: fields,
     },
-    "@unique" "(" <fields:IndexFields> ")"  => Index{
+    "@" "unique" "(" <fields:IndexFields> ")"  => Index{
         unique: true,
         fields: fields,
     },
 };
 
-pub IndexFields: Vec<IndexField> = {
+IndexFields: Vec<IndexField> = {
     <f:IndexField> <rest:("," IndexField)*> => {
         let mut fields = vec![f];
         for (_, f) in rest {
@@ -327,20 +391,20 @@ pub IndexFields: Vec<IndexField> = {
     => vec![],
 };
 
-pub CollectionItem: CollectionItem = {
+CollectionItem: CollectionItem = {
     <f:Field> ";" => CollectionItem::Field(f),
     <i:Index> ";" => CollectionItem::Index(i),
     <f:Function> => CollectionItem::Function(f),
 };
 
-pub Collection: Collection = {
+Collection: Collection = {
     "collection" <name:Ident> "{" <items:CollectionItem*> "}" => Collection {
         name: name,
         items: items,
     },
 };
 
-pub RootNode: RootNode = {
+RootNode: RootNode = {
     <c:Collection> => RootNode::Collection(c),
     <f:RootFunction> => RootNode::Function(f),
 };
