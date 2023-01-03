@@ -72,7 +72,9 @@ where
             token: (start_byte, token, end_byte),
         } => make_err(start_byte, end_byte, &format!("Extra token \"{}\"", token)),
         ParseError::User { error } => match error {
-            LexicalError::NumberParseError { start, end } => make_err(start, end, "Failed to parse number"),
+            LexicalError::NumberParseError { start, end } => {
+                make_err(start, end, "Failed to parse number")
+            }
             LexicalError::InvalidToken { start, end } => make_err(start, end, "Invalid token"),
             LexicalError::UnterminatedComment { start, end } => {
                 make_err(start, end, "Unterminated comment")
@@ -80,7 +82,11 @@ where
             LexicalError::UnterminatedString { start, end } => {
                 make_err(start, end, "Unterminated string")
             }
-            LexicalError::UserError { start, end, message } => make_err(start, end, &message),
+            LexicalError::UserError {
+                start,
+                end,
+                message,
+            } => make_err(start, end, &message),
         },
     }
 }
@@ -738,5 +744,33 @@ name: object;
         ";
 
         assert!(parse(code).is_ok());
+    }
+
+    /// Tests that collections from the filesystem directory 'test-collections' parse without an error
+    #[test]
+    fn test_fs_collections() {
+        use std::path::Path;
+
+        let dir = Path::new("test-collections");
+        let entries = match std::fs::read_dir(dir) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+            Err(e) => panic!("Error reading directory: {}", e),
+        };
+        for entry in entries {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.is_dir() {
+                continue;
+            }
+
+            let code = std::fs::read_to_string(&path).unwrap();
+            let collection = parse(&code);
+            if collection.is_err() {
+                eprintln!("Error parsing collection: {}", path.display());
+                eprintln!("{}", collection.as_ref().unwrap_err().message);
+            }
+            assert!(collection.is_ok());
+        }
     }
 }
