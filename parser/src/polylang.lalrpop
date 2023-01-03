@@ -74,6 +74,7 @@ pub Ident: String = {
     <i:identifier> => i.to_string(),
     "desc" => "desc".to_string(),
     "asc" => "asc".to_string(),
+    "index" => "index".to_string(),
 };
 
 StringOrNumberType: Type = {
