@@ -42,6 +42,7 @@ pub struct FieldDecorator {
 pub enum Type {
     String,
     Number,
+    Boolean,
     Array(Box<Type>),
     Map(Box<Type>, Box<Type>),
     Object(Vec<Field>),
@@ -52,6 +53,7 @@ pub enum Type {
 pub enum ParameterType {
     String,
     Number,
+    Boolean,
     Array(Type),
     Map(Type, Type),
     Object(Vec<(String, Type)>),
