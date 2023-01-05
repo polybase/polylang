@@ -77,7 +77,6 @@ pub struct Function {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Index {
-    pub unique: bool,
     pub fields: Vec<IndexField>,
 }
 

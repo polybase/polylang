@@ -116,7 +116,6 @@ type Parameter struct {
 }
 
 type Index struct {
-	Unique bool         `json:"unique"`
 	Fields []IndexField `json:"fields"`
 }
 

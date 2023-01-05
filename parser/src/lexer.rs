@@ -25,7 +25,6 @@ pub enum Tok<'input> {
     For,
     Function,
     Index,
-    Unique,
     Collection,
     LBrace,
     RBrace,
@@ -87,7 +86,6 @@ impl std::fmt::Display for Tok<'_> {
             Tok::For => write!(f, "for"),
             Tok::Function => write!(f, "function"),
             Tok::Index => write!(f, "index"),
-            Tok::Unique => write!(f, "unique"),
             Tok::Collection => write!(f, "collection"),
             Tok::LBrace => write!(f, "{{"),
             Tok::RBrace => write!(f, "}}"),
@@ -179,7 +177,6 @@ const KEYWORDS: &[(Tok, &str)] = &[
     (Tok::For, "for"),
     (Tok::Function, "function"),
     (Tok::Index, "index"),
-    (Tok::Unique, "unique"),
     (Tok::Collection, "collection"),
 ];
 
