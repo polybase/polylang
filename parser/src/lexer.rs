@@ -13,6 +13,7 @@ pub enum Tok<'input> {
     False,
     Number,
     String,
+    Boolean,
     Map,
     Record,
     Let,
@@ -75,6 +76,7 @@ impl std::fmt::Display for Tok<'_> {
             Tok::False => write!(f, "false"),
             Tok::Number => write!(f, "number"),
             Tok::String => write!(f, "string"),
+            Tok::Boolean => write!(f, "boolean"),
             Tok::Map => write!(f, "map"),
             Tok::Record => write!(f, "record"),
             Tok::Let => write!(f, "let"),
@@ -129,11 +131,27 @@ impl std::fmt::Display for Tok<'_> {
 
 #[derive(Debug, PartialEq)]
 pub enum LexicalError {
-    NumberParseError { start: usize, end: usize },
-    InvalidToken { start: usize, end: usize },
-    UnterminatedComment { start: usize, end: usize },
-    UnterminatedString { start: usize, end: usize },
-    UserError { start: usize, end: usize, message: String },
+    NumberParseError {
+        start: usize,
+        end: usize,
+    },
+    InvalidToken {
+        start: usize,
+        end: usize,
+    },
+    UnterminatedComment {
+        start: usize,
+        end: usize,
+    },
+    UnterminatedString {
+        start: usize,
+        end: usize,
+    },
+    UserError {
+        start: usize,
+        end: usize,
+        message: String,
+    },
 }
 
 impl std::fmt::Display for LexicalError {
@@ -151,7 +169,11 @@ impl std::fmt::Display for LexicalError {
             LexicalError::UnterminatedString { start, end } => {
                 write!(f, "Unterminated string at {}-{}", start, end)
             }
-            LexicalError::UserError { start, end, message } => {
+            LexicalError::UserError {
+                start,
+                end,
+                message,
+            } => {
                 write!(f, "Error at {}-{}: {}", start, end, message)
             }
         }
@@ -167,6 +189,7 @@ const KEYWORDS: &[(Tok, &str)] = &[
     (Tok::False, "false"),
     (Tok::Number, "number"),
     (Tok::String, "string"),
+    (Tok::Boolean, "boolean"),
     (Tok::Map, "map"),
     (Tok::Record, "record"),
     (Tok::Let, "let"),

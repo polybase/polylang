@@ -41,6 +41,10 @@ func (t *Type) IsNumber() bool {
 	return t.Tag == "Number"
 }
 
+func (t *Type) IsBoolean() bool {
+	return t.Tag == "Boolean"
+}
+
 func (t *Type) IsArray() bool {
 	return t.Tag == "Array"
 }
@@ -77,6 +81,10 @@ func (ft *FunctionType) IsString() bool {
 
 func (ft *FunctionType) IsNumber() bool {
 	return ft.Tag == "Number"
+}
+
+func (ft *FunctionType) IsBoolean() bool {
+	return ft.Tag == "Boolean"
 }
 
 func (ft *FunctionType) IsRecord() bool {

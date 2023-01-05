@@ -87,6 +87,7 @@ impl std::error::Error for ValidationError<'_> {}
 pub(crate) enum Value {
     String(String),
     Number(f64),
+    Boolean(bool),
     Array(Vec<Value>),
     Map(HashMap<String, Value>),
 }
@@ -109,6 +110,16 @@ pub(crate) fn validate_value<'a>(
         }
         ast::Type::Number => {
             if let Value::Number(_) = value {
+                Ok(())
+            } else {
+                Err(ValidationError::InvalidType {
+                    path: path.clone(),
+                    expected: expected_type.clone(),
+                })
+            }
+        }
+        ast::Type::Boolean => {
+            if let Value::Boolean(_) = value {
                 Ok(())
             } else {
                 Err(ValidationError::InvalidType {
@@ -697,6 +708,41 @@ mod tests {
             ValidationError::ExtraField {
                 path: PathParts(vec![PathPart::Field("extra")]),
             },
+        );
+    }
+
+    #[test]
+    fn test_validate_boolean() {
+        let collection = ast::Collection {
+            name: "users".to_string(),
+            items: vec![ast::CollectionItem::Field(ast::Field {
+                name: "is_admin".to_string(),
+                type_: ast::Type::Boolean,
+                required: true,
+            })],
+        };
+
+        assert!(validate_set(
+            &collection,
+            &HashMap::from([("is_admin".to_string(), Value::Boolean(true))])
+        )
+        .is_ok());
+
+        assert!(validate_set(
+            &collection,
+            &HashMap::from([("is_admin".to_string(), Value::Boolean(false))])
+        )
+        .is_ok());
+
+        assert_eq!(
+            validate_set(
+                &collection,
+                &HashMap::from([("is_admin".to_string(), Value::Number(1.0))])
+            ),
+            Err(ValidationError::InvalidType {
+                path: PathParts(vec![PathPart::Field("is_admin")]),
+                expected: ast::Type::Boolean,
+            })
         );
     }
 }
