@@ -32,7 +32,6 @@ extern {
         "for" => lexer::Tok::For,
         "function" => lexer::Tok::Function,
         "index" => lexer::Tok::Index,
-        "unique" => lexer::Tok::Unique,
         "collection" => lexer::Tok::Collection,
         "{" => lexer::Tok::LBrace,
         "}" => lexer::Tok::RBrace,
@@ -374,11 +373,6 @@ Order: Order = {
 
 Index: Index = {
     "@" "index" "(" <fields:IndexFields> ")"  => Index{
-        unique: false,
-        fields: fields,
-    },
-    "@" "unique" "(" <fields:IndexFields> ")"  => Index{
-        unique: true,
         fields: fields,
     },
 };
