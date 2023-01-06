@@ -426,8 +426,8 @@ mod tests {
             &collection.items[4],
             ast::CollectionItem::Index(ast::Index {
                 fields,
-            }) if fields[0].name == "field" && fields[0].order == ast::Order::Asc
-                && fields[1].name == "field2" && fields[1].order == ast::Order::Asc
+            }) if fields[0].path == ["field"] && fields[0].order == ast::Order::Asc
+                && fields[1].path == ["field2"] && fields[1].order == ast::Order::Asc
         ));
 
         let function = match &collection.items[5] {
@@ -743,6 +743,40 @@ name: object;
         ";
 
         assert!(parse(code).is_ok());
+    }
+
+    #[test]
+    fn test_index_subfield() {
+        let code = "
+            collection test {
+                person: {
+                    name: string;
+                };
+
+                @index(person.name);
+            }
+        ";
+
+        let program = parse(code).unwrap();
+        assert_eq!(program.nodes.len(), 1);
+
+        let collection = match &program.nodes[0] {
+            ast::RootNode::Collection(c) => c,
+            _ => panic!("expected collection"),
+        };
+        assert_eq!(collection.items.len(), 2);
+
+        assert!(
+            matches!(
+                &collection.items[1],
+                ast::CollectionItem::Index(ast::Index {
+                    fields,
+                }) if fields == &[ast::IndexField { path: vec!["person".to_string(), "name".to_string()], order: ast::Order::Asc }]
+            ),
+            "expected: {:?}, got: {:?}",
+            &collection.items[1],
+            &collection.items[1]
+        );
     }
 
     /// Tests that collections from the filesystem directory 'test-collections' parse without an error
