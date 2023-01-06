@@ -82,9 +82,9 @@ pub struct Index {
     pub fields: Vec<IndexField>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct IndexField {
-    pub name: String,
+    pub path: Vec<String>,
     pub order: Order,
 }
 

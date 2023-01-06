@@ -29,8 +29,8 @@ type Field struct {
 }
 
 type Type struct {
-	Tag     string      `json:"tag"`
-	Content interface{} `json:"content,omitempty"`
+	Tag     string          `json:"tag"`
+	Content json.RawMessage `json:"content,omitempty"`
 }
 
 func (t *Type) IsString() bool {
@@ -55,6 +55,16 @@ func (t *Type) IsMap() bool {
 
 func (t *Type) IsObject() bool {
 	return t.Tag == "Object"
+}
+
+func (t *Type) Object() ([]Field, error) {
+	var fields []Field
+
+	if err := json.Unmarshal(t.Content, &fields); err != nil {
+		return nil, err
+	}
+
+	return fields, nil
 }
 
 type FieldDecorator struct {
@@ -128,8 +138,8 @@ type Index struct {
 }
 
 type IndexField struct {
-	Name  string `json:"name"`
-	Order Order  `json:"order"`
+	Path  []string `json:"path"`
+	Order Order    `json:"order"`
 }
 
 type Order string

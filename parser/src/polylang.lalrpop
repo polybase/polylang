@@ -356,13 +356,23 @@ Field: Field = {
 };
 
 IndexField: IndexField = {
-    "[" <name:Ident> "," <order:Order> "]" => IndexField{
-        name,
+    "[" <path:FieldPath> "," <order:Order> "]" => IndexField{
+        path,
         order,
     },
-    <name:Ident> => IndexField{
-        name,
+    <path:FieldPath> => IndexField{
+        path,
         order: Order::Asc,
+    },
+};
+
+FieldPath: Vec<String> = {
+    <name:Ident> <rest:("." Ident)*> => {
+        let mut path = vec![name];
+        for (_, name) in rest {
+            path.push(name);
+        }
+        path
     },
 };
 
