@@ -201,7 +201,7 @@ const KEYWORDS: &[(Tok, &str)] = &[
     (Tok::While, "while"),
     (Tok::For, "for"),
     (Tok::Function, "function"),
-    (Tok::Index, "index"),
+    (Tok::Index, "@index"),
     (Tok::Collection, "collection"),
     (Tok::PublicKey, "PublicKey"),
 ];
@@ -350,6 +350,35 @@ impl<'input> Lexer<'input> {
             .map(|(tok, _)| Ok::<_, LexicalError>((start, tok.clone(), end + c.len_utf8())))
     }
 
+    fn lex_at_index(&mut self) -> Option<LexerItem<'input>> {
+        match (
+            self.peek_char(),
+            self.peek_char_nth(1),
+            self.peek_char_nth(2),
+            self.peek_char_nth(3),
+            self.peek_char_nth(4),
+            self.peek_char_nth(5),
+        ) {
+            (
+                Some((start, '@')),
+                Some((_, 'i')),
+                Some((_, 'n')),
+                Some((_, 'd')),
+                Some((_, 'e')),
+                Some((end, 'x')),
+            ) => {
+                self.next_char();
+                self.next_char();
+                self.next_char();
+                self.next_char();
+                self.next_char();
+                self.next_char();
+                Some(Ok((start, Tok::Index, end + 'x'.len_utf8())))
+            }
+            _ => None,
+        }
+    }
+
     fn lex_number(&mut self) -> Option<LexerItem<'input>> {
         let (start, c) = self.peek_char()?;
         if !c.is_numeric() {
@@ -468,6 +497,7 @@ impl<'input> Iterator for Lexer<'input> {
 
         let result = self
             .reset_if_none(Self::lex_keyword)
+            .or_else(|| self.reset_if_none(Self::lex_at_index))
             .or_else(|| self.reset_if_none(Self::lex_number))
             .or_else(|| self.reset_if_none(Self::lex_string))
             .or_else(|| self.reset_if_none(Self::lex_identifier))

@@ -147,7 +147,8 @@ mod tests {
     #[test]
     fn test_parse() {
         let input = "collection Test {}";
-        let expected_output = r#"{"Ok":{"nodes":[{"Collection":{"name":"Test","items":[]}}]}}"#;
+        let expected_output =
+            r#"{"Ok":{"nodes":[{"Collection":{"name":"Test","decorators":[],"items":[]}}]}}"#;
 
         let output = parse_out_json(input);
         assert_eq!(output, expected_output);
@@ -160,7 +161,7 @@ mod tests {
         let program = program.unwrap();
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, items }) if name == "Test" && items.len() == 0)
+            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.is_empty())
         );
     }
 
@@ -178,7 +179,7 @@ mod tests {
         let program = program.unwrap();
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, items }) if name == "Test" && items.len() == 2)
+            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 2)
         );
 
         let collection = match &program.nodes[0] {
@@ -187,10 +188,10 @@ mod tests {
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: true }) if name == "name" && *type_ == ast::Type::String)
+            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "name" && *type_ == ast::Type::String && decorators.is_empty())
         );
         assert!(
-            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: true }) if name == "age" && *type_ == ast::Type::Number)
+            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "age" && *type_ == ast::Type::Number && decorators.is_empty())
         );
     }
 
@@ -208,7 +209,7 @@ mod tests {
         let program = program.unwrap();
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, items }) if name == "Test" && items.len() == 2)
+            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 2)
         );
 
         let collection = match &program.nodes[0] {
@@ -217,10 +218,10 @@ mod tests {
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: true }) if name == "asc" && *type_ == ast::Type::String),
+            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "asc" && *type_ == ast::Type::String && decorators.is_empty()),
         );
         assert!(
-            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: true }) if name == "desc" && *type_ == ast::Type::String),
+            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "desc" && *type_ == ast::Type::String && decorators.is_empty()),
         );
     }
 
@@ -239,7 +240,7 @@ mod tests {
         let program = program.unwrap();
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, items }) if name == "Test" && items.len() == 1)
+            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 1)
         );
 
         let collection = match &program.nodes[0] {
@@ -248,7 +249,14 @@ mod tests {
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Function(ast::Function { name, parameters, statements, statements_code, return_type }) if name == "get_age" && parameters.len() == 2 && statements.len() == 1 && statements_code == "return 42;" && return_type == &None)
+            matches!(&collection.items[0], ast::CollectionItem::Function(ast::Function {
+                name,
+                decorators,
+                parameters,
+                statements,
+                statements_code,
+                return_type,
+            }) if name == "get_age" && decorators.is_empty() && parameters.len() == 2 && statements.len() == 1 && statements_code == "return 42;" && return_type == &None)
         );
 
         let function = match &collection.items[0] {
@@ -400,26 +408,26 @@ mod tests {
 
         assert!(matches!(
             &collection.items[0],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: true })
-            if name == "name" && *type_ == ast::Type::String
+            ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators })
+            if name == "name" && *type_ == ast::Type::String && decorators.is_empty()
         ));
 
         assert!(matches!(
             &collection.items[1],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: false })
-            if name == "age" && *type_ == ast::Type::Number
+            ast::CollectionItem::Field(ast::Field { name, type_, required: false, decorators })
+            if name == "age" && *type_ == ast::Type::Number && decorators.is_empty()
         ));
 
         assert!(matches!(
             &collection.items[2],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: true })
-            if name == "balance" && *type_ == ast::Type::Number
+            ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators })
+            if name == "balance" && *type_ == ast::Type::Number && decorators.is_empty()
         ));
 
         assert!(matches!(
             &collection.items[3],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: true })
-            if name == "publicKey" && *type_ == ast::Type::String
+            ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators })
+            if name == "publicKey" && *type_ == ast::Type::String && decorators.is_empty()
         ));
 
         assert!(matches!(
@@ -592,6 +600,7 @@ name: object;
                     name: "numbers".to_string(),
                     type_: ast::Type::Array(Box::new(ast::Type::Number)),
                     required: true,
+                    decorators: vec![],
                 }],
             ),
             (
@@ -600,6 +609,7 @@ name: object;
                     name: "strings".to_string(),
                     type_: ast::Type::Array(Box::new(ast::Type::String)),
                     required: true,
+                    decorators: vec![],
                 }],
             ),
             (
@@ -608,6 +618,7 @@ name: object;
                     name: "numToStr".to_string(),
                     type_: ast::Type::Map(Box::new(ast::Type::Number), Box::new(ast::Type::String)),
                     required: true,
+                    decorators: vec![],
                 }],
             ),
             (
@@ -616,6 +627,7 @@ name: object;
                     name: "strToNum".to_string(),
                     type_: ast::Type::Map(Box::new(ast::Type::String), Box::new(ast::Type::Number)),
                     required: true,
+                    decorators: vec![],
                 }],
             ),
         ];
@@ -637,7 +649,8 @@ name: object;
                             name,
                             type_,
                             required,
-                        }) if name == &item.name && type_ == &item.type_ && required == &item.required
+                            decorators,
+                        }) if name == &item.name && type_ == &item.type_ && required == &item.required && decorators == &item.decorators
                     ),
                     "expected: {:?}, got: {:?}",
                     item,
@@ -659,14 +672,17 @@ name: object;
                             name: "name".to_string(),
                             type_: ast::Type::String,
                             required: true,
+                            decorators: vec![],
                         },
                         ast::Field {
                             name: "age".to_string(),
                             type_: ast::Type::Number,
                             required: true,
+                            decorators: vec![],
                         },
                     ]),
                     required: true,
+                    decorators: vec![],
                 }],
             ),
             (
@@ -677,8 +693,10 @@ name: object;
                         name: "name".to_string(),
                         type_: ast::Type::String,
                         required: false,
+                        decorators: vec![],
                     }]),
                     required: true,
+                    decorators: vec![],
                 }],
             ),
             (
@@ -691,10 +709,13 @@ name: object;
                             name: "name".to_string(),
                             type_: ast::Type::String,
                             required: true,
+                            decorators: vec![],
                         }]),
                         required: true,
+                        decorators: vec![],
                     }]),
                     required: true,
+                    decorators: vec![],
                 }],
             ),
         ];
@@ -716,6 +737,7 @@ name: object;
                             name,
                             type_,
                             required,
+                            decorators,
                         }) if name == &item.name && type_ == &item.type_ && required == &item.required
                     ),
                     "expected: {:?}, got: {:?}",
@@ -777,6 +799,51 @@ name: object;
             &collection.items[1],
             &collection.items[1]
         );
+    }
+
+    #[test]
+    fn test_decorators() {
+        let code = "
+            @public
+            collection Account {
+                @read
+                owner: PublicKey;
+
+                @call(owner)
+                function noop() {}
+            }
+        ";
+
+        let program = parse(code).unwrap();
+        assert_eq!(program.nodes.len(), 1);
+
+        let collection = match &program.nodes[0] {
+            ast::RootNode::Collection(c) => c,
+            _ => panic!("expected collection"),
+        };
+
+        assert_eq!(collection.decorators.len(), 1);
+        assert_eq!(collection.decorators[0].name, "public");
+
+        assert_eq!(collection.items.len(), 2);
+
+        let field = match &collection.items[0] {
+            ast::CollectionItem::Field(f) => f,
+            _ => panic!("expected field"),
+        };
+
+        assert_eq!(field.decorators.len(), 1);
+        assert_eq!(field.decorators[0].name, "read");
+
+        let function = match &collection.items[1] {
+            ast::CollectionItem::Function(f) => f,
+            _ => panic!("expected function"),
+        };
+
+        assert_eq!(function.decorators.len(), 1);
+        assert_eq!(function.decorators[0].name, "call");
+        assert_eq!(function.decorators[0].arguments.len(), 1);
+        assert_eq!(function.decorators[0].arguments[0], "owner");
     }
 
     /// Tests that collections from the filesystem directory 'test-collections' parse without an error

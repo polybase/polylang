@@ -65,6 +65,7 @@ mod tests {
     fn test_generate_js_function() {
         let func_ast = ast::Function {
             name: "HelloWorld".to_string(),
+            decorators: vec![],
             parameters: vec![
                 ast::Parameter {
                     name: "a".to_string(),
@@ -95,14 +96,17 @@ mod tests {
     fn test_generate_collection_function() {
         let collection_ast = ast::Collection {
             name: "CollectionName".to_string(),
+            decorators: vec![],
             items: vec![
                 ast::CollectionItem::Field(ast::Field {
                     name: "abc".to_string(),
                     type_: ast::Type::String,
                     required: true,
+                    decorators: vec![],
                 }),
                 ast::CollectionItem::Function(ast::Function {
                     name: "Hello".to_string(),
+                    decorators: vec![],
                     parameters: vec![
                         ast::Parameter {
                             name: "a".to_string(),
@@ -121,6 +125,7 @@ mod tests {
                 }),
                 ast::CollectionItem::Function(ast::Function {
                     name: "World".to_string(),
+                    decorators: vec![],
                     parameters: vec![
                         ast::Parameter {
                             name: "c".to_string(),

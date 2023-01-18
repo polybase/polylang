@@ -32,7 +32,7 @@ extern {
         "while" => lexer::Tok::While,
         "for" => lexer::Tok::For,
         "function" => lexer::Tok::Function,
-        "index" => lexer::Tok::Index,
+        "@index" => lexer::Tok::Index,
         "collection" => lexer::Tok::Collection,
         "{" => lexer::Tok::LBrace,
         "}" => lexer::Tok::RBrace,
@@ -75,7 +75,6 @@ Ident: String = {
     <i:identifier> => i.to_string(),
     "desc" => "desc".to_string(),
     "asc" => "asc".to_string(),
-    "index" => "index".to_string(),
 };
 
 BasicType: Type = {
@@ -321,6 +320,7 @@ Parameter: Parameter = {
 RootFunction: Function = {
     "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
+        decorators: vec![],
         parameters: pl,
         return_type: return_type.map(|(_, t)| t),
         statements: s,
@@ -329,15 +329,17 @@ RootFunction: Function = {
 };
 
 Function: Function = {
-    "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+    <decs:Decorator*> "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
+        decorators: decs,
         parameters: pl,
         return_type: return_type.map(|(_, t)| t),
         statements: s,
         statements_code: input[l..r].to_string(),
     },
-    <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+    <decs:Decorator*> <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
+        decorators: decs,
         parameters: pl,
         return_type: return_type.map(|(_, t)| t),
         statements: s,
@@ -346,15 +348,17 @@ Function: Function = {
 };
 
 Field: Field = {
-    <name:Ident> "?" ":" <type_:Type> => Field{
+    <decs:Decorator*> <name:Ident> "?" ":" <type_:Type> => Field{
         name,
         type_,
         required: false,
+        decorators: decs,
     },
-    <name:Ident> ":" <type_:Type> => Field{
+    <decs:Decorator*> <name:Ident> ":" <type_:Type> => Field{
         name,
         type_,
         required: true,
+        decorators: decs,
     },
 };
 
@@ -385,8 +389,34 @@ Order: Order = {
 };
 
 Index: Index = {
-    "@" "index" "(" <fields:IndexFields> ")"  => Index{
+    "@index" "(" <fields:IndexFields> ")"  => Index{
         fields: fields,
+    },
+};
+
+DecoratorName: String = {
+    <l:@L> <name:Ident> =>? match name.as_str() {
+        "public" => Ok(name),
+        "read" => Ok(name),
+        "call" => Ok(name),
+        _ => Err(ParseError::User {
+            error: lexer::LexicalError::UserError {
+                start: l,
+                end: l,
+                message: format!("Unknown decorator: {}", name),
+            },
+        }),
+    }
+}
+
+Decorator: Decorator = {
+    "@" <name:DecoratorName> "(" <arguments:Ident*> ")" => Decorator{
+        name,
+        arguments,
+    },
+    "@" <name:DecoratorName> => Decorator{
+        name,
+        arguments: vec![],
     },
 };
 
@@ -408,8 +438,9 @@ CollectionItem: CollectionItem = {
 };
 
 Collection: Collection = {
-    "collection" <name:Ident> "{" <items:CollectionItem*> "}" => Collection {
+    <decorators:Decorator*> "collection" <name:Ident> "{" <items:CollectionItem*> "}" => Collection {
         name: name,
+        decorators: decorators,
         items: items,
     },
 };

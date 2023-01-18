@@ -14,6 +14,7 @@ pub enum RootNode {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Collection {
     pub name: String,
+    pub decorators: Vec<Decorator>,
     pub items: Vec<CollectionItem>,
 }
 
@@ -29,12 +30,13 @@ pub struct Field {
     pub name: String,
     pub type_: Type,
     pub required: bool,
+    pub decorators: Vec<Decorator>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct FieldDecorator {
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Decorator {
     pub name: String,
-    pub arguments: Vec<Primitive>,
+    pub arguments: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -73,6 +75,7 @@ pub struct Parameter {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Function {
     pub name: String,
+    pub decorators: Vec<Decorator>,
     pub parameters: Vec<Parameter>,
     pub return_type: Option<Type>,
     pub statements: Vec<Statement>,

@@ -443,16 +443,19 @@ mod tests {
     fn test_validate_set() {
         let collection = ast::Collection {
             name: "users".to_string(),
+            decorators: vec![],
             items: vec![
                 ast::CollectionItem::Field(ast::Field {
                     name: "name".to_string(),
                     type_: ast::Type::String,
                     required: true,
+                    decorators: vec![],
                 }),
                 ast::CollectionItem::Field(ast::Field {
                     name: "age".to_string(),
                     type_: ast::Type::Number,
                     required: false,
+                    decorators: vec![],
                 }),
             ],
         };
@@ -469,10 +472,12 @@ mod tests {
     fn test_validate_set_array() {
         let collection = ast::Collection {
             name: "users".to_string(),
+            decorators: vec![],
             items: vec![ast::CollectionItem::Field(ast::Field {
                 name: "tags".to_string(),
                 type_: ast::Type::Array(Box::new(ast::Type::String)),
                 required: false,
+                decorators: vec![],
             })],
         };
 
@@ -491,10 +496,12 @@ mod tests {
     fn test_validate_set_array_invalid_array_value() {
         let collection = ast::Collection {
             name: "users".to_string(),
+            decorators: vec![],
             items: vec![ast::CollectionItem::Field(ast::Field {
                 name: "tags".to_string(),
                 type_: ast::Type::Array(Box::new(ast::Type::String)),
                 required: false,
+                decorators: vec![],
             })],
         };
 
@@ -519,10 +526,12 @@ mod tests {
     fn test_validate_map() {
         let collection = ast::Collection {
             name: "users".to_string(),
+            decorators: vec![],
             items: vec![ast::CollectionItem::Field(ast::Field {
                 name: "tags".to_string(),
                 type_: ast::Type::Map(Box::new(ast::Type::String), Box::new(ast::Type::Number)),
                 required: false,
+                decorators: vec![],
             })],
         };
 
@@ -541,6 +550,7 @@ mod tests {
     fn test_validate_nested_map() {
         let collection = ast::Collection {
             name: "users".to_string(),
+            decorators: vec![],
             items: vec![ast::CollectionItem::Field(ast::Field {
                 name: "tags".to_string(),
                 type_: ast::Type::Map(
@@ -551,6 +561,7 @@ mod tests {
                     )),
                 ),
                 required: false,
+                decorators: vec![],
             })],
         };
 
@@ -581,10 +592,12 @@ mod tests {
     fn test_validate_map_number_key() {
         let collection = ast::Collection {
             name: "users".to_string(),
+            decorators: vec![],
             items: vec![ast::CollectionItem::Field(ast::Field {
                 name: "tags".to_string(),
                 type_: ast::Type::Map(Box::new(ast::Type::Number), Box::new(ast::Type::Number)),
                 required: false,
+                decorators: vec![],
             })],
         };
 
@@ -603,10 +616,12 @@ mod tests {
     fn test_validate_map_number_key_invalid() {
         let collection = ast::Collection {
             name: "users".to_string(),
+            decorators: vec![],
             items: vec![ast::CollectionItem::Field(ast::Field {
                 name: "tags".to_string(),
                 type_: ast::Type::Map(Box::new(ast::Type::Number), Box::new(ast::Type::Number)),
                 required: false,
+                decorators: vec![],
             })],
         };
 
@@ -634,10 +649,12 @@ mod tests {
     fn test_validate_map_invalid_key() {
         let collection = ast::Collection {
             name: "users".to_string(),
+            decorators: vec![],
             items: vec![ast::CollectionItem::Field(ast::Field {
                 name: "tags".to_string(),
                 type_: ast::Type::Map(Box::new(ast::Type::Number), Box::new(ast::Type::Number)),
                 required: false,
+                decorators: vec![],
             })],
         };
 
@@ -667,14 +684,17 @@ mod tests {
             (
                 ast::Collection {
                     name: "users".to_string(),
+                    decorators: vec![],
                     items: vec![ast::CollectionItem::Field(ast::Field {
                         name: "info".to_string(),
                         type_: ast::Type::Object(vec![ast::Field {
                             name: "name".to_string(),
                             type_: ast::Type::String,
                             required: true,
+                            decorators: vec![],
                         }]),
                         required: true,
+                        decorators: vec![],
                     })],
                 },
                 HashMap::from([(
@@ -688,14 +708,17 @@ mod tests {
             (
                 ast::Collection {
                     name: "users".to_string(),
+                    decorators: vec![],
                     items: vec![ast::CollectionItem::Field(ast::Field {
                         name: "info".to_string(),
                         type_: ast::Type::Object(vec![ast::Field {
                             name: "name".to_string(),
                             type_: ast::Type::String,
                             required: false,
+                            decorators: vec![],
                         }]),
                         required: true,
+                        decorators: vec![],
                     })],
                 },
                 HashMap::from([("info".to_string(), Value::Map(HashMap::from([])))]),
@@ -703,14 +726,17 @@ mod tests {
             (
                 ast::Collection {
                     name: "users".to_string(),
+                    decorators: vec![],
                     items: vec![ast::CollectionItem::Field(ast::Field {
                         name: "info".to_string(),
                         type_: ast::Type::Object(vec![ast::Field {
                             name: "name".to_string(),
                             type_: ast::Type::String,
                             required: true,
+                            decorators: vec![],
                         }]),
                         required: false,
+                        decorators: vec![],
                     })],
                 },
                 HashMap::from([]),
@@ -730,14 +756,17 @@ mod tests {
     fn test_validate_object_missing_field() {
         let collection = ast::Collection {
             name: "users".to_string(),
+            decorators: vec![],
             items: vec![ast::CollectionItem::Field(ast::Field {
                 name: "info".to_string(),
                 type_: ast::Type::Object(vec![ast::Field {
                     name: "name".to_string(),
                     type_: ast::Type::String,
                     required: true,
+                    decorators: vec![],
                 }]),
                 required: true,
+                decorators: vec![],
             })],
         };
 
@@ -758,14 +787,17 @@ mod tests {
     fn test_validate_object_extra_field() {
         let collection = ast::Collection {
             name: "users".to_string(),
+            decorators: vec![],
             items: vec![ast::CollectionItem::Field(ast::Field {
                 name: "info".to_string(),
                 type_: ast::Type::Object(vec![ast::Field {
                     name: "name".to_string(),
                     type_: ast::Type::String,
                     required: true,
+                    decorators: vec![],
                 }]),
                 required: true,
+                decorators: vec![],
             })],
         };
 
@@ -793,16 +825,19 @@ mod tests {
     fn test_validate_set_missing_required_field() {
         let collection = ast::Collection {
             name: "users".to_string(),
+            decorators: vec![],
             items: vec![
                 ast::CollectionItem::Field(ast::Field {
                     name: "name".to_string(),
                     type_: ast::Type::String,
                     required: true,
+                    decorators: vec![],
                 }),
                 ast::CollectionItem::Field(ast::Field {
                     name: "age".to_string(),
                     type_: ast::Type::Number,
                     required: false,
+                    decorators: vec![],
                 }),
             ],
         };
@@ -825,16 +860,19 @@ mod tests {
     fn test_validate_set_invalid_type() {
         let collection = ast::Collection {
             name: "users".to_string(),
+            decorators: vec![],
             items: vec![
                 ast::CollectionItem::Field(ast::Field {
                     name: "name".to_string(),
                     type_: ast::Type::String,
                     required: true,
+                    decorators: vec![],
                 }),
                 ast::CollectionItem::Field(ast::Field {
                     name: "age".to_string(),
                     type_: ast::Type::Number,
                     required: false,
+                    decorators: vec![],
                 }),
             ],
         };
@@ -861,16 +899,19 @@ mod tests {
     fn test_validate_set_extra_field() {
         let collection = ast::Collection {
             name: "users".to_string(),
+            decorators: vec![],
             items: vec![
                 ast::CollectionItem::Field(ast::Field {
                     name: "name".to_string(),
                     type_: ast::Type::String,
                     required: true,
+                    decorators: vec![],
                 }),
                 ast::CollectionItem::Field(ast::Field {
                     name: "age".to_string(),
                     type_: ast::Type::Number,
                     required: false,
+                    decorators: vec![],
                 }),
             ],
         };
@@ -897,10 +938,12 @@ mod tests {
     fn test_validate_boolean() {
         let collection = ast::Collection {
             name: "users".to_string(),
+            decorators: vec![],
             items: vec![ast::CollectionItem::Field(ast::Field {
                 name: "is_admin".to_string(),
                 type_: ast::Type::Boolean,
                 required: true,
+                decorators: vec![],
             })],
         };
 
@@ -934,10 +977,12 @@ mod tests {
             fn $name() {
                 let collection = ast::Collection {
                     name: "users".to_string(),
+                    decorators: vec![],
                     items: vec![ast::CollectionItem::Field(ast::Field {
                         name: "public_key".to_string(),
                         type_: ast::Type::PublicKey,
                         required: true,
+                        decorators: vec![],
                     })],
                 };
                 let data = $data;
@@ -1166,10 +1211,12 @@ mod tests {
     fn test_validate_public_key_optional() {
         let collection = ast::Collection {
             name: "Collection".to_string(),
+            decorators: vec![],
             items: vec![ast::CollectionItem::Field(ast::Field {
                 name: "public_key".to_string(),
                 type_: ast::Type::PublicKey,
                 required: false,
+                decorators: vec![],
             })],
         };
 
