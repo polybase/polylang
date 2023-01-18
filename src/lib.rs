@@ -573,21 +573,33 @@ function x() {
     }
 
     #[test]
-    fn test_error_field_invalid_type() {
+    fn test_foreign_record_field() {
         let code = "
             collection test {
-                name: object;
+                account: Account;
             }
         ";
 
-        let collection = parse(code);
-        assert!(collection.is_err());
-        eprintln!("{}", collection.as_ref().unwrap_err().message);
+        let program = parse(code).unwrap();
+
+        let collection = match &program.nodes[0] {
+            ast::RootNode::Collection(c) => c,
+            _ => panic!("expected collection"),
+        };
+
+        assert_eq!(collection.items.len(), 1);
+
+        let field = match &collection.items[0] {
+            ast::CollectionItem::Field(f) => f,
+            _ => panic!("expected field"),
+        };
+
+        assert_eq!(field.name, "account");
         assert_eq!(
-            collection.unwrap_err().message,
-            r#"Error found at line 3, column 22: Unrecognized token "object". Expected one of: "PublicKey", "boolean", "map", "number", "string", "{"
-name: object;
-      ^^^^^^"#,
+            field.type_,
+            ast::Type::ForeignRecord {
+                collection: "Account".to_string(),
+            }
         );
     }
 

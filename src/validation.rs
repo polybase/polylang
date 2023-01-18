@@ -388,6 +388,37 @@ pub(crate) fn validate_value<'a>(
                 })
             }
         }
+        ast::Type::ForeignRecord { collection } => {
+            if let Value::Map(map) = value {
+                if let Some(extra_field) = map.keys().filter(|k| *k != "id").nth(0) {
+                    let mut path = path.clone();
+                    path.0.push(PathPart::Field(extra_field));
+                    return Err(ValidationError::ExtraField { path });
+                }
+
+                if let Some(id) = map.get("id") {
+                    if let Value::String(_) = id {
+                        Ok(())
+                    } else {
+                        let mut path = path.clone();
+                        path.0.push(PathPart::Field("id"));
+                        Err(ValidationError::InvalidType {
+                            path,
+                            expected: ast::Type::String,
+                        })
+                    }
+                } else {
+                    let mut path = path.clone();
+                    path.0.push(PathPart::Field("id"));
+                    Err(ValidationError::MissingField { path })
+                }
+            } else {
+                Err(ValidationError::InvalidType {
+                    path: path.clone(),
+                    expected: expected_type.clone(),
+                })
+            }
+        }
     }
 }
 
@@ -1215,6 +1246,91 @@ mod tests {
             items: vec![ast::CollectionItem::Field(ast::Field {
                 name: "public_key".to_string(),
                 type_: ast::Type::PublicKey,
+                required: false,
+                decorators: vec![],
+            })],
+        };
+
+        let data = HashMap::new();
+
+        let result = validate_set(&collection, &data);
+        assert_eq!(result, Ok(()));
+    }
+
+    macro_rules! test_validate_foreign_record {
+        ($name:ident, $data:expr, $expected:expr) => {
+            #[test]
+            fn $name() {
+                let collection = ast::Collection {
+                    name: "Collection".to_string(),
+                    decorators: vec![],
+                    items: vec![ast::CollectionItem::Field(ast::Field {
+                        name: "foreign_record".to_string(),
+                        type_: ast::Type::ForeignRecord {
+                            collection: "ForeignCollection".to_string(),
+                        },
+                        required: true,
+                        decorators: vec![],
+                    })],
+                };
+
+                let data = $data;
+                let result = validate_set(&collection, &data);
+                assert_eq!(result, $expected);
+            }
+        };
+    }
+
+    test_validate_foreign_record!(
+        test_validate_foreign_record,
+        HashMap::from([(
+            "foreign_record".to_string(),
+            Value::Map(HashMap::from([(
+                "id".to_string(),
+                Value::String("id".to_string())
+            )])),
+        )]),
+        Ok(())
+    );
+
+    test_validate_foreign_record!(
+        test_validate_foreign_record_missing_id,
+        HashMap::from([("foreign_record".to_string(), Value::Map(HashMap::from([])))]),
+        Err(ValidationError::MissingField {
+            path: PathParts(vec![
+                PathPart::Field("foreign_record"),
+                PathPart::Field("id")
+            ]),
+        })
+    );
+
+    test_validate_foreign_record!(
+        test_validate_foreign_record_extra_field,
+        HashMap::from([(
+            "foreign_record".to_string(),
+            Value::Map(HashMap::from([
+                ("id".to_string(), Value::String("id".to_string())),
+                ("extra".to_string(), Value::String("extra".to_string()))
+            ])),
+        )]),
+        Err(ValidationError::ExtraField {
+            path: PathParts(vec![
+                PathPart::Field("foreign_record"),
+                PathPart::Field("extra")
+            ]),
+        })
+    );
+
+    #[test]
+    fn test_validate_foreign_record_optional() {
+        let collection = ast::Collection {
+            name: "Collection".to_string(),
+            decorators: vec![],
+            items: vec![ast::CollectionItem::Field(ast::Field {
+                name: "foreign_record".to_string(),
+                type_: ast::Type::ForeignRecord {
+                    collection: "ForeignCollection".to_string(),
+                },
                 required: false,
                 decorators: vec![],
             })],

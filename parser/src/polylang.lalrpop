@@ -89,6 +89,9 @@ Type: Type = {
     "map" "<" <kt:BasicType> "," <vt:Type> ">" => Type::Map(Box::new(kt), Box::new(vt)),
     "{" <fields:(Field ";")*> "}" => Type::Object(fields.into_iter().map(|(f, _)| f).collect()),
     "PublicKey" => Type::PublicKey,
+    <i:Ident> => Type::ForeignRecord {
+        collection: i,
+    },
 };
 
 ParameterType: ParameterType = {
@@ -106,11 +109,9 @@ ParameterType: ParameterType = {
             }
         }),
         Type::PublicKey => Ok(ParameterType::PublicKey),
+        Type::ForeignRecord { collection } => Ok(ParameterType::ForeignRecord { collection }),
     },
     "record" => ParameterType::Record,
-    <i:Ident> => ParameterType::ForeignRecord {
-        collection: i,
-    },
 };
 
 Number: f64 = {

@@ -49,6 +49,7 @@ pub enum Type {
     Map(Box<Type>, Box<Type>),
     Object(Vec<Field>),
     PublicKey,
+    ForeignRecord { collection: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
