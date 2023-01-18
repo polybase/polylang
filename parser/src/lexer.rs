@@ -16,6 +16,7 @@ pub enum Tok<'input> {
     Boolean,
     Map,
     Record,
+    PublicKey,
     Let,
     Break,
     Return,
@@ -78,6 +79,7 @@ impl std::fmt::Display for Tok<'_> {
             Tok::Boolean => write!(f, "boolean"),
             Tok::Map => write!(f, "map"),
             Tok::Record => write!(f, "record"),
+            Tok::PublicKey => write!(f, "PublicKey"),
             Tok::Let => write!(f, "let"),
             Tok::Break => write!(f, "break"),
             Tok::Return => write!(f, "return"),
@@ -201,6 +203,7 @@ const KEYWORDS: &[(Tok, &str)] = &[
     (Tok::Function, "function"),
     (Tok::Index, "index"),
     (Tok::Collection, "collection"),
+    (Tok::PublicKey, "PublicKey"),
 ];
 
 pub struct Lexer<'input> {

@@ -22,6 +22,7 @@ extern {
         "boolean" => lexer::Tok::Boolean,
         "map" => lexer::Tok::Map,
         "record" => lexer::Tok::Record,
+        "PublicKey" => lexer::Tok::PublicKey,
         "let" => lexer::Tok::Let,
         "break" => lexer::Tok::Break,
         "return" => lexer::Tok::Return,
@@ -88,6 +89,7 @@ Type: Type = {
     <t:BasicType> "[" "]" => Type::Array(Box::new(t)),
     "map" "<" <kt:BasicType> "," <vt:Type> ">" => Type::Map(Box::new(kt), Box::new(vt)),
     "{" <fields:(Field ";")*> "}" => Type::Object(fields.into_iter().map(|(f, _)| f).collect()),
+    "PublicKey" => Type::PublicKey,
 };
 
 ParameterType: ParameterType = {
@@ -104,6 +106,7 @@ ParameterType: ParameterType = {
                 message: "object type not allowed for parameter".to_string(),
             }
         }),
+        Type::PublicKey => Ok(ParameterType::PublicKey),
     },
     "record" => ParameterType::Record,
     <i:Ident> => ParameterType::ForeignRecord {

@@ -1,3 +1,4 @@
+use base64::Engine;
 use serde::Deserialize;
 use std::{collections::HashMap, ops::Deref};
 
@@ -58,6 +59,14 @@ pub enum ValidationError<'a> {
     ExtraField {
         path: PathParts<'a>,
     },
+    Base64DecodeError {
+        path: PathParts<'a>,
+        error: base64::DecodeError,
+    },
+    Other {
+        path: PathParts<'a>,
+        message: String,
+    },
 }
 
 impl std::fmt::Display for ValidationError<'_> {
@@ -75,6 +84,12 @@ impl std::fmt::Display for ValidationError<'_> {
             }
             ValidationError::ExtraField { path } => {
                 write!(f, "Extra field at path {}", path)
+            }
+            ValidationError::Base64DecodeError { path, error } => {
+                write!(f, "Base64 decode error at path {}: {}", path, error)
+            }
+            ValidationError::Other { path, message } => {
+                write!(f, "Error at path {}: {}", path, message)
             }
         }
     }
@@ -204,6 +219,173 @@ pub(crate) fn validate_value<'a>(
                     path: path.clone(),
                     expected: expected_type.clone(),
                 });
+            }
+        }
+        ast::Type::PublicKey => {
+            if let Value::Map(map) = value {
+                match (
+                    map.get("kty"),
+                    map.get("crv"),
+                    map.get("alg"),
+                    map.get("use"),
+                    map.get("x"),
+                    map.get("y"),
+                ) {
+                    (Some(kty), Some(crv), Some(alg), Some(use_), Some(x), Some(y)) => {
+                        if let Some(extra_field) = map.iter().find(|(k, _)| {
+                            !matches!(k.as_str(), "kty" | "crv" | "alg" | "use" | "x" | "y")
+                        }) {
+                            let mut path = path.clone();
+                            path.0.push(PathPart::Field(extra_field.0));
+                            return Err(ValidationError::ExtraField { path });
+                        }
+
+                        match kty {
+                            Value::String(s) if s == "EC" => {}
+                            _ => {
+                                let mut path = path.clone();
+                                path.0.push(PathPart::Field("kty"));
+                                return Err(ValidationError::Other {
+                                    path,
+                                    message: "Invalid kty, should be EC".to_string(),
+                                });
+                            }
+                        }
+
+                        match crv {
+                            Value::String(s) if s == "secp256k1" => {}
+                            _ => {
+                                let mut path = path.clone();
+                                path.0.push(PathPart::Field("crv"));
+                                return Err(ValidationError::Other {
+                                    path,
+                                    message: "Invalid crv, should be secp256k1".to_string(),
+                                });
+                            }
+                        }
+
+                        match alg {
+                            Value::String(s) if s == "ES256K" => {}
+                            _ => {
+                                let mut path = path.clone();
+                                path.0.push(PathPart::Field("alg"));
+                                return Err(ValidationError::Other {
+                                    path,
+                                    message: "Invalid alg, should be ES256K".to_string(),
+                                });
+                            }
+                        }
+
+                        match use_ {
+                            Value::String(s) if s == "sig" => {}
+                            _ => {
+                                let mut path = path.clone();
+                                path.0.push(PathPart::Field("use"));
+                                return Err(ValidationError::Other {
+                                    path,
+                                    message: "Invalid use, should be sig".to_string(),
+                                });
+                            }
+                        }
+
+                        let x = match x {
+                            Value::String(s) => base64::engine::general_purpose::URL_SAFE
+                                .decode(s.as_bytes())
+                                .map_err(|err| {
+                                    let mut path = path.clone();
+                                    path.0.push(PathPart::Field("x"));
+                                    ValidationError::Base64DecodeError { path, error: err }
+                                })?,
+                            _ => {
+                                let mut path = path.clone();
+                                path.0.push(PathPart::Field("x"));
+                                return Err(ValidationError::InvalidType {
+                                    path,
+                                    expected: ast::Type::String,
+                                });
+                            }
+                        };
+
+                        let y = match y {
+                            Value::String(s) => base64::engine::general_purpose::URL_SAFE
+                                .decode(s.as_bytes())
+                                .map_err(|err| {
+                                    let mut path = path.clone();
+                                    path.0.push(PathPart::Field("y"));
+                                    ValidationError::Base64DecodeError { path, error: err }
+                                })?,
+                            _ => {
+                                let mut path = path.clone();
+                                path.0.push(PathPart::Field("y"));
+                                return Err(ValidationError::InvalidType {
+                                    path,
+                                    expected: ast::Type::String,
+                                });
+                            }
+                        };
+
+                        if x.len() != 32 {
+                            let mut path = path.clone();
+                            path.0.push(PathPart::Field("x"));
+                            return Err(ValidationError::Other {
+                                path,
+                                message: "Invalid length, expected 32 bytes".to_string(),
+                            });
+                        }
+
+                        if y.len() != 32 {
+                            let mut path = path.clone();
+                            path.0.push(PathPart::Field("y"));
+                            return Err(ValidationError::Other {
+                                path,
+                                message: "Invalid length, expected 32 bytes".to_string(),
+                            });
+                        }
+
+                        Ok(())
+                    }
+                    (None, _, _, _, _, _) => {
+                        let mut path = path.clone();
+                        path.0.push(PathPart::Field("kty"));
+
+                        Err(ValidationError::MissingField { path })
+                    }
+                    (_, None, _, _, _, _) => {
+                        let mut path = path.clone();
+                        path.0.push(PathPart::Field("crv"));
+
+                        Err(ValidationError::MissingField { path })
+                    }
+                    (_, _, None, _, _, _) => {
+                        let mut path = path.clone();
+                        path.0.push(PathPart::Field("alg"));
+
+                        Err(ValidationError::MissingField { path })
+                    }
+                    (_, _, _, None, _, _) => {
+                        let mut path = path.clone();
+                        path.0.push(PathPart::Field("use"));
+
+                        Err(ValidationError::MissingField { path })
+                    }
+                    (_, _, _, _, None, _) => {
+                        let mut path = path.clone();
+                        path.0.push(PathPart::Field("x"));
+
+                        Err(ValidationError::MissingField { path })
+                    }
+                    (_, _, _, _, _, None) => {
+                        let mut path = path.clone();
+                        path.0.push(PathPart::Field("y"));
+
+                        Err(ValidationError::MissingField { path })
+                    }
+                }
+            } else {
+                Err(ValidationError::InvalidType {
+                    path: path.clone(),
+                    expected: expected_type.clone(),
+                })
             }
         }
     }
@@ -744,5 +926,256 @@ mod tests {
                 expected: ast::Type::Boolean,
             })
         );
+    }
+
+    macro_rules! test_validate_public_key {
+        ($name:ident, $data:expr, $expected:expr) => {
+            #[test]
+            fn $name() {
+                let collection = ast::Collection {
+                    name: "users".to_string(),
+                    items: vec![ast::CollectionItem::Field(ast::Field {
+                        name: "public_key".to_string(),
+                        type_: ast::Type::PublicKey,
+                        required: true,
+                    })],
+                };
+                let data = $data;
+                let result = validate_set(&collection, &data);
+
+                assert_eq!(result, $expected, "{:?}", result);
+            }
+        };
+    }
+
+    test_validate_public_key!(
+        test_validate_public_key_correct,
+        HashMap::from([(
+            "public_key".to_string(),
+            Value::Map(HashMap::from([
+                ("kty".to_string(), Value::String("EC".to_string())),
+                ("crv".to_string(), Value::String("secp256k1".to_string())),
+                ("alg".to_string(), Value::String("ES256K".to_string())),
+                ("use".to_string(), Value::String("sig".to_string())),
+                (
+                    "x".to_string(),
+                    Value::String(
+                        base64::engine::general_purpose::URL_SAFE
+                            .encode(&rand::random::<[u8; 32]>())
+                    )
+                ),
+                (
+                    "y".to_string(),
+                    Value::String(
+                        base64::engine::general_purpose::URL_SAFE
+                            .encode(&rand::random::<[u8; 32]>())
+                    )
+                ),
+            ])),
+        )]),
+        Ok(())
+    );
+
+    test_validate_public_key!(
+        test_validate_public_key_invalid_x,
+        HashMap::from([(
+            "public_key".to_string(),
+            Value::Map(HashMap::from([
+                ("kty".to_string(), Value::String("EC".to_string())),
+                ("crv".to_string(), Value::String("secp256k1".to_string())),
+                ("alg".to_string(), Value::String("ES256K".to_string())),
+                ("use".to_string(), Value::String("sig".to_string())),
+                (
+                    "x".to_string(),
+                    Value::String(
+                        base64::engine::general_purpose::URL_SAFE
+                            .encode(&rand::random::<[u8; 16]>())
+                    )
+                ),
+                (
+                    "y".to_string(),
+                    Value::String(
+                        base64::engine::general_purpose::URL_SAFE
+                            .encode(&rand::random::<[u8; 32]>())
+                    )
+                ),
+            ])),
+        )]),
+        Err(ValidationError::Other {
+            path: PathParts(vec![PathPart::Field("public_key"), PathPart::Field("x")]),
+            message: "Invalid length, expected 32 bytes".to_string(),
+        })
+    );
+
+    test_validate_public_key!(
+        test_validate_public_key_invalid_y,
+        HashMap::from([(
+            "public_key".to_string(),
+            Value::Map(HashMap::from([
+                ("kty".to_string(), Value::String("EC".to_string())),
+                ("crv".to_string(), Value::String("secp256k1".to_string())),
+                ("alg".to_string(), Value::String("ES256K".to_string())),
+                ("use".to_string(), Value::String("sig".to_string())),
+                (
+                    "x".to_string(),
+                    Value::String(
+                        base64::engine::general_purpose::URL_SAFE
+                            .encode(&rand::random::<[u8; 32]>())
+                    )
+                ),
+                (
+                    "y".to_string(),
+                    Value::String(
+                        base64::engine::general_purpose::URL_SAFE
+                            .encode(&rand::random::<[u8; 16]>())
+                    )
+                ),
+            ])),
+        )]),
+        Err(ValidationError::Other {
+            path: PathParts(vec![PathPart::Field("public_key"), PathPart::Field("y")]),
+            message: "Invalid length, expected 32 bytes".to_string(),
+        })
+    );
+
+    test_validate_public_key!(
+        test_validate_public_key_missing_kty,
+        HashMap::from([("public_key".to_string(), Value::Map(HashMap::from([])),)]),
+        Err(ValidationError::MissingField {
+            path: PathParts(vec![PathPart::Field("public_key"), PathPart::Field("kty")]),
+        })
+    );
+
+    test_validate_public_key!(
+        test_validate_public_key_missing_crv,
+        HashMap::from([(
+            "public_key".to_string(),
+            Value::Map(HashMap::from([(
+                "kty".to_string(),
+                Value::String("EC".to_string())
+            ),])),
+        )]),
+        Err(ValidationError::MissingField {
+            path: PathParts(vec![PathPart::Field("public_key"), PathPart::Field("crv")]),
+        })
+    );
+
+    test_validate_public_key!(
+        test_validate_public_key_missing_alg,
+        HashMap::from([(
+            "public_key".to_string(),
+            Value::Map(HashMap::from([
+                ("kty".to_string(), Value::String("EC".to_string())),
+                ("crv".to_string(), Value::String("secp256k1".to_string()))
+            ])),
+        )]),
+        Err(ValidationError::MissingField {
+            path: PathParts(vec![PathPart::Field("public_key"), PathPart::Field("alg")]),
+        })
+    );
+
+    test_validate_public_key!(
+        test_validate_public_key_missing_use,
+        HashMap::from([(
+            "public_key".to_string(),
+            Value::Map(HashMap::from([
+                ("kty".to_string(), Value::String("EC".to_string())),
+                ("crv".to_string(), Value::String("secp256k1".to_string())),
+                ("alg".to_string(), Value::String("ES256K".to_string()))
+            ])),
+        )]),
+        Err(ValidationError::MissingField {
+            path: PathParts(vec![PathPart::Field("public_key"), PathPart::Field("use")]),
+        })
+    );
+
+    test_validate_public_key!(
+        test_validate_public_key_missing_x,
+        HashMap::from([(
+            "public_key".to_string(),
+            Value::Map(HashMap::from([
+                ("kty".to_string(), Value::String("EC".to_string())),
+                ("crv".to_string(), Value::String("secp256k1".to_string())),
+                ("alg".to_string(), Value::String("ES256K".to_string())),
+                ("use".to_string(), Value::String("sig".to_string()))
+            ])),
+        )]),
+        Err(ValidationError::MissingField {
+            path: PathParts(vec![PathPart::Field("public_key"), PathPart::Field("x")]),
+        })
+    );
+
+    test_validate_public_key!(
+        test_validate_public_key_missing_y,
+        HashMap::from([(
+            "public_key".to_string(),
+            Value::Map(HashMap::from([
+                ("kty".to_string(), Value::String("EC".to_string())),
+                ("crv".to_string(), Value::String("secp256k1".to_string())),
+                ("alg".to_string(), Value::String("ES256K".to_string())),
+                ("use".to_string(), Value::String("sig".to_string())),
+                (
+                    "x".to_string(),
+                    Value::String(
+                        base64::engine::general_purpose::URL_SAFE
+                            .encode(&rand::random::<[u8; 32]>())
+                    )
+                )
+            ])),
+        )]),
+        Err(ValidationError::MissingField {
+            path: PathParts(vec![PathPart::Field("public_key"), PathPart::Field("y")]),
+        })
+    );
+
+    test_validate_public_key!(
+        test_validate_public_key_extra_field,
+        HashMap::from([(
+            "public_key".to_string(),
+            Value::Map(HashMap::from([
+                ("kty".to_string(), Value::String("RSA".to_string())),
+                ("crv".to_string(), Value::String("secp256k1".to_string())),
+                ("alg".to_string(), Value::String("ES256K".to_string())),
+                ("use".to_string(), Value::String("sig".to_string())),
+                (
+                    "x".to_string(),
+                    Value::String(
+                        base64::engine::general_purpose::URL_SAFE
+                            .encode(&rand::random::<[u8; 32]>())
+                    )
+                ),
+                (
+                    "y".to_string(),
+                    Value::String(
+                        base64::engine::general_purpose::URL_SAFE
+                            .encode(&rand::random::<[u8; 32]>())
+                    )
+                ),
+                ("extra".to_string(), Value::String("extra".to_string()))
+            ])),
+        )]),
+        Err(ValidationError::ExtraField {
+            path: PathParts(vec![
+                PathPart::Field("public_key"),
+                PathPart::Field("extra")
+            ]),
+        })
+    );
+
+    #[test]
+    fn test_validate_public_key_optional() {
+        let collection = ast::Collection {
+            name: "Collection".to_string(),
+            items: vec![ast::CollectionItem::Field(ast::Field {
+                name: "public_key".to_string(),
+                type_: ast::Type::PublicKey,
+                required: false,
+            })],
+        };
+
+        let data = HashMap::new();
+
+        let result = validate_set(&collection, &data);
+        assert_eq!(result, Ok(()));
     }
 }

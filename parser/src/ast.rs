@@ -46,6 +46,7 @@ pub enum Type {
     Array(Box<Type>),
     Map(Box<Type>, Box<Type>),
     Object(Vec<Field>),
+    PublicKey,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -59,6 +60,7 @@ pub enum ParameterType {
     Object(Vec<(String, Type)>),
     Record,
     ForeignRecord { collection: String },
+    PublicKey,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -57,6 +57,10 @@ func (t *Type) IsObject() bool {
 	return t.Tag == "Object"
 }
 
+func (t *Type) IsPublicKey() bool {
+	return t.Tag == "PublicKey"
+}
+
 func (t *Type) Object() ([]Field, error) {
 	var fields []Field
 
@@ -111,6 +115,10 @@ func (ft *FunctionType) IsMap() bool {
 
 func (ft *FunctionType) IsForeignRecord() bool {
 	return ft.Tag == "ForeignRecord"
+}
+
+func (ft *FunctionType) IsPublicKey() bool {
+	return ft.Tag == "PublicKey"
 }
 
 func (ft *FunctionType) ForeignRecord() *ForeignRecord {

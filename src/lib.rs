@@ -577,7 +577,7 @@ function x() {
         eprintln!("{}", collection.as_ref().unwrap_err().message);
         assert_eq!(
             collection.unwrap_err().message,
-            r#"Error found at line 3, column 22: Unrecognized token "object". Expected one of: "boolean", "map", "number", "string", "{"
+            r#"Error found at line 3, column 22: Unrecognized token "object". Expected one of: "PublicKey", "boolean", "map", "number", "string", "{"
 name: object;
       ^^^^^^"#,
         );
