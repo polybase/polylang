@@ -63,6 +63,10 @@ func (t *Type) IsPublicKey() bool {
 	return t.Tag == "PublicKey"
 }
 
+func (t *Type) IsForeignRecord() bool {
+	return t.Tag == "ForeignRecord"
+}
+
 func (t *Type) Object() ([]Field, error) {
 	var fields []Field
 
@@ -71,6 +75,16 @@ func (t *Type) Object() ([]Field, error) {
 	}
 
 	return fields, nil
+}
+
+func (t *Type) ForeignRecord() (*ForeignRecord, error) {
+	var foreignRecord ForeignRecord
+
+	if err := json.Unmarshal(t.Content, &foreignRecord); err != nil {
+		return nil, err
+	}
+
+	return &foreignRecord, nil
 }
 
 type Decorator struct {

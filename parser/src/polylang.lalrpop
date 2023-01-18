@@ -400,6 +400,7 @@ DecoratorName: String = {
         "public" => Ok(name),
         "read" => Ok(name),
         "call" => Ok(name),
+        "delegate" => Ok(name),
         _ => Err(ParseError::User {
             error: lexer::LexicalError::UserError {
                 start: l,
