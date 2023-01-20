@@ -1,4 +1,4 @@
-use crate::ast;
+use crate::{ast, stableast};
 use serde::Serialize;
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -6,13 +6,13 @@ pub struct JSCollection {
     code: String,
 }
 
-pub fn generate_js_collection(collection_ast: &ast::Collection) -> JSCollection {
+pub fn generate_js_collection(collection_ast: &stableast::Collection) -> JSCollection {
     let fns = collection_ast
-        .items
+        .attributes
         .iter()
         .filter_map(|item| {
-            if let ast::CollectionItem::Function(f) = item {
-                let JSFunc { name, code } = generate_js_function(&f);
+            if let stableast::CollectionAttribute::Method(m) = item {
+                let JSFunc { name, code } = generate_js_function(&m);
                 Some(format!("instance.{} = {}", &name, &code))
             } else {
                 None
@@ -40,19 +40,26 @@ struct JSFunc {
     code: String,
 }
 
-fn generate_js_function(func_ast: &ast::Function) -> JSFunc {
+fn generate_js_function(func_ast: &stableast::Method) -> JSFunc {
     let parameters = func_ast
-        .parameters
+        .attributes
         .iter()
+        .filter_map(|item| {
+            if let stableast::MethodAttribute::Parameter(p) = item {
+                Some(p)
+            } else {
+                None
+            }
+        })
         .map(|p| format!("{}", p.name))
         .collect::<Vec<String>>()
         .join(", ");
 
     JSFunc {
-        name: func_ast.name.clone(),
+        name: func_ast.name.to_string(),
         code: format!(
             "function {} ({}) {{\n{}\n}}",
-            func_ast.name, parameters, func_ast.statements_code,
+            func_ast.name, parameters, &func_ast.code,
         ),
     }
 }
@@ -63,23 +70,31 @@ mod tests {
 
     #[test]
     fn test_generate_js_function() {
-        let func_ast = ast::Function {
-            name: "HelloWorld".to_string(),
-            parameters: vec![
-                ast::Parameter {
-                    name: "a".to_string(),
-                    type_: ast::ParameterType::String,
+        let func_ast = stableast::Method {
+            name: "HelloWorld".into(),
+            attributes: vec![
+                stableast::MethodAttribute::Parameter(stableast::Parameter {
+                    name: "a".into(),
+                    type_: stableast::Type::Primitive(stableast::Primitive {
+                        value: stableast::PrimitiveType::String,
+                    }),
                     required: true,
-                },
-                ast::Parameter {
-                    name: "b".to_string(),
-                    type_: ast::ParameterType::Number,
+                }),
+                stableast::MethodAttribute::Parameter(stableast::Parameter {
+                    name: "b".into(),
+                    type_: stableast::Type::Primitive(stableast::Primitive {
+                        value: stableast::PrimitiveType::Number,
+                    }),
                     required: false,
-                },
+                }),
+                stableast::MethodAttribute::ReturnValue(stableast::ReturnValue {
+                    name: "_".into(),
+                    type_: stableast::Type::Primitive(stableast::Primitive {
+                        value: stableast::PrimitiveType::String,
+                    }),
+                }),
             ],
-            return_type: Some(ast::Type::String),
-            statements: vec![],
-            statements_code: "return a".to_string(),
+            code: "return a".into(),
         };
 
         assert_eq!(
@@ -136,6 +151,72 @@ mod tests {
                     return_type: Some(ast::Type::String),
                     statements: vec![],
                     statements_code: "return c".to_string(),
+                }),
+            ],
+        };
+
+        let collection_ast = stableast::Collection {
+            namespace: stableast::Namespace { value: "".into() },
+            name: "CollectionName".into(),
+            attributes: vec![
+                stableast::CollectionAttribute::Property(stableast::Property {
+                    name: "abc".into(),
+                    type_: stableast::Type::Primitive(stableast::Primitive {
+                        value: stableast::PrimitiveType::String,
+                    }),
+                    required: true,
+                }),
+                stableast::CollectionAttribute::Method(stableast::Method {
+                    name: "Hello".into(),
+                    attributes: vec![
+                        stableast::MethodAttribute::Parameter(stableast::Parameter {
+                            name: "a".into(),
+                            type_: stableast::Type::Primitive(stableast::Primitive {
+                                value: stableast::PrimitiveType::String,
+                            }),
+                            required: true,
+                        }),
+                        stableast::MethodAttribute::Parameter(stableast::Parameter {
+                            name: "b".into(),
+                            type_: stableast::Type::Primitive(stableast::Primitive {
+                                value: stableast::PrimitiveType::Number,
+                            }),
+                            required: false,
+                        }),
+                        stableast::MethodAttribute::ReturnValue(stableast::ReturnValue {
+                            name: "_".into(),
+                            type_: stableast::Type::Primitive(stableast::Primitive {
+                                value: stableast::PrimitiveType::String,
+                            }),
+                        }),
+                    ],
+                    code: "return a".into(),
+                }),
+                stableast::CollectionAttribute::Method(stableast::Method {
+                    name: "World".into(),
+                    attributes: vec![
+                        stableast::MethodAttribute::Parameter(stableast::Parameter {
+                            name: "c".into(),
+                            type_: stableast::Type::Primitive(stableast::Primitive {
+                                value: stableast::PrimitiveType::String,
+                            }),
+                            required: true,
+                        }),
+                        stableast::MethodAttribute::Parameter(stableast::Parameter {
+                            name: "d".into(),
+                            type_: stableast::Type::Primitive(stableast::Primitive {
+                                value: stableast::PrimitiveType::Number,
+                            }),
+                            required: false,
+                        }),
+                        stableast::MethodAttribute::ReturnValue(stableast::ReturnValue {
+                            name: "_".into(),
+                            type_: stableast::Type::Primitive(stableast::Primitive {
+                                value: stableast::PrimitiveType::String,
+                            }),
+                        }),
+                    ],
+                    code: "return c".into(),
                 }),
             ],
         };

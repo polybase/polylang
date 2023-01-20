@@ -18,10 +18,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	log.Println(string(parseResult))
 
 	var ast Program
-	if err := json.Unmarshal([]byte(parseResult), &ast); err != nil {
+	if err := json.Unmarshal([]byte(parseResult[0]), &ast); err != nil {
 		panic(err)
 	}
 
