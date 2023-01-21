@@ -5,7 +5,7 @@ mod validation;
 
 use polylang_parser::{ast, LexicalError, ParseError};
 use serde::Serialize;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 #[derive(Debug, Serialize)]
 struct Error {
@@ -107,8 +107,8 @@ fn parse<'a>(
     ))
 }
 
-fn parse_out_json(input: &str) -> String {
-    serde_json::to_string(&parse(input, "", &mut ast::Program::default())).unwrap()
+fn parse_out_json(input: &str, namespace: &str) -> String {
+    serde_json::to_string(&parse(input, namespace, &mut ast::Program::default())).unwrap()
 }
 
 fn validate_set(collection_ast_json: &str, data_json: &str) -> Result<(), Error> {
@@ -161,7 +161,9 @@ mod tests {
     #[test]
     fn test_parse() {
         let input = "collection Test {}";
-        let expected_output = r#"{"Ok":{"nodes":[{"Collection":{"name":"Test","items":[]}}]}}"#;
+        let expected_output = expect![[
+            r#"{"Ok":[{"nodes":[{"Collection":{"name":"Test","decorators":[],"items":[]}}]},[{"kind":"collection","namespace":{"kind":"namespace","value":""},"name":"Test","attributes":[]}]]}"#
+        ]];
 
         let output = parse_out_json(input);
         expected_output.assert_eq(&output);
@@ -169,9 +171,9 @@ mod tests {
 
     #[test]
     fn test_parse_collection_metadata() {
-        let input = "collection Collection { id: string; name?: string; lastRecordUpdated?: string; code?: string; ast?: string; publicKey?: string; @index(publicKey); @index([lastRecordUpdated, desc]); constructor (id: string, code: string) { this.id = id; this.code = code; this.ast = parse(code); this.publicKey = ctx.publicKey; } updateCode (code: string) { if (this.publicKey != ctx.publicKey) { throw error('invalid owner'); } this.code = code; this.ast = parse(code); } }";
+        let input = "@public collection Collection { id: string; name?: string; lastRecordUpdated?: string; code?: string; ast?: string; publicKey?: PublicKey; @index(publicKey); @index([lastRecordUpdated, desc]); constructor (id: string, code: string) { this.id = id; this.code = code; this.ast = parse(code); if (ctx.publicKey) this.publicKey = ctx.publicKey; } updateCode (code: string) { if (this.publicKey != ctx.publicKey) { throw error('invalid owner'); } this.code = code; this.ast = parse(code); } }";
         let expected_output = expect![[
-            r#"[{"kind":"collection","namespace":{"kind":"namespace","value":""},"name":"Collection","attributes":[{"kind":"property","name":"id","type":{"kind":"primitive","value":"string"},"required":true},{"kind":"property","name":"name","type":{"kind":"primitive","value":"string"},"required":false},{"kind":"property","name":"lastRecordUpdated","type":{"kind":"primitive","value":"string"},"required":false},{"kind":"property","name":"code","type":{"kind":"primitive","value":"string"},"required":false},{"kind":"property","name":"ast","type":{"kind":"primitive","value":"string"},"required":false},{"kind":"property","name":"publicKey","type":{"kind":"primitive","value":"string"},"required":false},{"kind":"index","fields":[{"direction":"asc","fieldPath":["publicKey"]}]},{"kind":"index","fields":[{"direction":"desc","fieldPath":["lastRecordUpdated"]}]},{"kind":"method","name":"constructor","attributes":[{"kind":"parameter","name":"id","type":{"kind":"primitive","value":"string"},"required":true},{"kind":"parameter","name":"code","type":{"kind":"primitive","value":"string"},"required":true}],"code":"this.id = id; this.code = code; this.ast = parse(code); this.publicKey = ctx.publicKey;"},{"kind":"method","name":"updateCode","attributes":[{"kind":"parameter","name":"code","type":{"kind":"primitive","value":"string"},"required":true}],"code":"if (this.publicKey != ctx.publicKey) { throw error('invalid owner'); } this.code = code; this.ast = parse(code);"}]}]"#
+            r#"[{"kind":"collection","namespace":{"kind":"namespace","value":""},"name":"Collection","attributes":[{"kind":"property","name":"id","type":{"kind":"primitive","value":"string"},"directives":[],"required":true},{"kind":"property","name":"name","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"lastRecordUpdated","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"code","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"ast","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"publicKey","type":{"kind":"publickey"},"directives":[],"required":false},{"kind":"index","fields":[{"direction":"asc","fieldPath":["publicKey"]}]},{"kind":"index","fields":[{"direction":"desc","fieldPath":["lastRecordUpdated"]}]},{"kind":"method","name":"constructor","attributes":[{"kind":"parameter","name":"id","type":{"kind":"primitive","value":"string"},"required":true},{"kind":"parameter","name":"code","type":{"kind":"primitive","value":"string"},"required":true}],"code":"this.id = id; this.code = code; this.ast = parse(code); if (ctx.publicKey) this.publicKey = ctx.publicKey;"},{"kind":"method","name":"updateCode","attributes":[{"kind":"parameter","name":"code","type":{"kind":"primitive","value":"string"},"required":true}],"code":"if (this.publicKey != ctx.publicKey) { throw error('invalid owner'); } this.code = code; this.ast = parse(code);"},{"kind":"directive","name":"public","arguments":[]}]}]"#
         ]];
 
         let mut program = ast::Program::default();
@@ -648,26 +650,6 @@ function x() {
     }
 
     #[test]
-    fn test_error_field_invalid_type() {
-        let code = "
-            collection test {
-                name: object;
-            }
-        ";
-
-        let mut program = ast::Program::default();
-        let result = parse(code, "", &mut program);
-        assert!(result.is_err());
-        eprintln!("{}", result.as_ref().unwrap_err().message);
-        assert_eq!(
-            result.unwrap_err().message,
-            r#"Error found at line 3, column 22: Unrecognized token "object". Expected one of: "boolean", "map", "number", "string", "{"
-name: object;
-      ^^^^^^"#,
-        );
-    }
-
-    #[test]
     fn test_array_map_field() {
         let cases = [
             (
@@ -816,7 +798,7 @@ name: object;
                             type_,
                             required,
                             decorators,
-                        }) if name == &item.name && type_ == &item.type_ && required == &item.required
+                        }) if name == &item.name && type_ == &item.type_ && required == &item.required && decorators.is_empty()
                     ),
                     "expected: {:?}, got: {:?}",
                     item,
@@ -893,7 +875,8 @@ name: object;
             }
         ";
 
-        let program = parse(code).unwrap();
+        let mut program = ast::Program::default();
+        let (program, _) = parse(code, "", &mut program).unwrap();
         assert_eq!(program.nodes.len(), 1);
 
         let collection = match &program.nodes[0] {

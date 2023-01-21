@@ -102,9 +102,10 @@ func (a *CollectionAttribute) MarshalJSON() ([]byte, error) {
 }
 
 type Property struct {
-	Name     string `json:"name"`
-	Type     Type   `json:"type"`
-	Required bool   `json:"required"`
+	Name       string      `json:"name"`
+	Type       Type        `json:"type"`
+	Directives []Directive `json:"directives"`
+	Required   bool        `json:"required"`
 }
 
 type Type AnyKinded
@@ -248,6 +249,21 @@ func (t *Type) ForeignRecord() (*ForeignRecord, bool, error) {
 	return &r, true, nil
 }
 
+type PublicKey struct{}
+
+func (t *Type) PublicKey() (*PublicKey, bool, error) {
+	if t.Kind != "publickey" {
+		return nil, false, nil
+	}
+
+	var r PublicKey
+	if err := json.Unmarshal(t.Value, &r); err != nil {
+		return nil, false, err
+	}
+
+	return &r, true, nil
+}
+
 func (ca *CollectionAttribute) Property() (*Property, bool, error) {
 	if ca.Kind != "property" {
 		return nil, false, nil
@@ -278,26 +294,30 @@ func (a *MethodAttribute) MarshalJSON() ([]byte, error) {
 }
 
 type Directive struct {
-	Name       string               `json:"name"`
-	Parameters []DirectiveParameter `json:"parameters"`
+	Name      string              `json:"name"`
+	Arguments []DirectiveArgument `json:"arguments"`
 }
 
-type DirectiveParameter AnyKinded
+type DirectiveArgument AnyKinded
 
-func (a *DirectiveParameter) UnmarshalJSON(data []byte) error {
+func (a *DirectiveArgument) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(data, (*AnyKinded)(a))
 }
 
-func (a *DirectiveParameter) MarshalJSON() ([]byte, error) {
+func (a *DirectiveArgument) MarshalJSON() ([]byte, error) {
 	return json.Marshal((*AnyKinded)(a))
 }
 
-func (dp *DirectiveParameter) Primitive() (*Primitive, bool, error) {
-	if dp.Kind != "primitive" {
+type FieldReference struct {
+	Path []string `json:"path"`
+}
+
+func (dp *DirectiveArgument) FieldReference() (*FieldReference, bool, error) {
+	if dp.Kind != "fieldreference" {
 		return nil, false, nil
 	}
 
-	var p Primitive
+	var p FieldReference
 	if err := json.Unmarshal(dp.Value, &p); err != nil {
 		return nil, false, err
 	}
@@ -366,6 +386,19 @@ func (ca *CollectionAttribute) Method() (*Method, bool, error) {
 	}
 
 	return &m, true, nil
+}
+
+func (ca *CollectionAttribute) Directive() (*Directive, bool, error) {
+	if ca.Kind != "directive" {
+		return nil, false, nil
+	}
+
+	var d Directive
+	if err := json.Unmarshal(ca.Value, &d); err != nil {
+		return nil, false, err
+	}
+
+	return &d, true, nil
 }
 
 type Index struct {

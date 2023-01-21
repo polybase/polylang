@@ -1,4 +1,4 @@
-use crate::{ast, stableast};
+use crate::stableast;
 use serde::Serialize;
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -86,7 +86,7 @@ mod tests {
                         value: stableast::PrimitiveType::Number,
                     }),
                     required: false,
-                },
+                }),
                 stableast::MethodAttribute::ReturnValue(stableast::ReturnValue {
                     name: "_".into(),
                     type_: stableast::Type::Primitive(stableast::Primitive {
@@ -108,57 +108,6 @@ mod tests {
 
     #[test]
     fn test_generate_collection_function() {
-        let collection_ast = ast::Collection {
-            name: "CollectionName".to_string(),
-            decorators: vec![],
-            items: vec![
-                ast::CollectionItem::Field(ast::Field {
-                    name: "abc".to_string(),
-                    type_: ast::Type::String,
-                    required: true,
-                    decorators: vec![],
-                }),
-                ast::CollectionItem::Function(ast::Function {
-                    name: "Hello".to_string(),
-                    decorators: vec![],
-                    parameters: vec![
-                        ast::Parameter {
-                            name: "a".to_string(),
-                            type_: ast::ParameterType::String,
-                            required: true,
-                        },
-                        ast::Parameter {
-                            name: "b".to_string(),
-                            type_: ast::ParameterType::Number,
-                            required: false,
-                        },
-                    ],
-                    return_type: Some(ast::Type::String),
-                    statements: vec![],
-                    statements_code: "return a".to_string(),
-                }),
-                ast::CollectionItem::Function(ast::Function {
-                    name: "World".to_string(),
-                    decorators: vec![],
-                    parameters: vec![
-                        ast::Parameter {
-                            name: "c".to_string(),
-                            type_: ast::ParameterType::String,
-                            required: true,
-                        },
-                        ast::Parameter {
-                            name: "d".to_string(),
-                            type_: ast::ParameterType::Number,
-                            required: false,
-                        },
-                    ],
-                    return_type: Some(ast::Type::String),
-                    statements: vec![],
-                    statements_code: "return c".to_string(),
-                }),
-            ],
-        };
-
         let collection_ast = stableast::Collection {
             namespace: stableast::Namespace { value: "".into() },
             name: "CollectionName".into(),
@@ -168,6 +117,7 @@ mod tests {
                     type_: stableast::Type::Primitive(stableast::Primitive {
                         value: stableast::PrimitiveType::String,
                     }),
+                    directives: vec![],
                     required: true,
                 }),
                 stableast::CollectionAttribute::Method(stableast::Method {

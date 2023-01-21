@@ -1,3 +1,7 @@
+// If you're adding new fields to any struct,
+// make sure to use #[serde(default)] on the field,
+// so that it doesn't break the deserialization (missing field errors).
+
 use std::borrow::Cow;
 
 use polylang_parser::ast;
@@ -38,6 +42,8 @@ pub enum CollectionAttribute<'a> {
     Method(Method<'a>),
     #[serde(borrow, rename = "index")]
     Index(Index<'a>),
+    #[serde(borrow, rename = "directive")]
+    Directive(Directive<'a>),
     #[serde(other)]
     Unknown,
 }
@@ -47,6 +53,7 @@ pub struct Property<'a> {
     pub name: Cow<'a, str>,
     #[serde(rename = "type", borrow)]
     pub type_: Type<'a>,
+    pub directives: Vec<Directive<'a>>,
     pub required: bool,
 }
 
@@ -92,19 +99,24 @@ pub enum MethodAttribute<'a> {
     Unknown,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Directive<'a> {
-    pub name: &'a str,
-    pub parameters: Vec<DirectiveParameter>,
+    pub name: Cow<'a, str>,
+    pub arguments: Vec<DirectiveArgument<'a>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind")]
-pub enum DirectiveParameter {
-    #[serde(rename = "primitive")]
-    Primitive(Primitive),
+pub enum DirectiveArgument<'a> {
+    #[serde(rename = "fieldreference")]
+    FieldReference(FieldReference<'a>),
     #[serde(other)]
     Unknown,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct FieldReference<'a> {
+    pub path: Vec<Cow<'a, str>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -137,6 +149,8 @@ pub enum Type<'a> {
     Record(Record),
     #[serde(borrow, rename = "foreignrecord")]
     ForeignRecord(ForeignRecord<'a>),
+    #[serde(rename = "publickey")]
+    PublicKey(PublicKey),
     #[serde(other)]
     Unknown,
 }
@@ -189,6 +203,9 @@ pub struct ObjectField<'a> {
 pub struct Record {}
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct PublicKey {}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct ForeignRecord<'a> {
     pub collection: Cow<'a, str>,
 }
@@ -211,6 +228,11 @@ impl<'a> Root<'a> {
                                 CollectionAttribute::Property(Property {
                                     name: Cow::Borrowed(&f.name),
                                     type_: Type::from_ast_type(&f.type_),
+                                    directives: f
+                                        .decorators
+                                        .iter()
+                                        .map(|d| Directive::from_decorator_ast(d))
+                                        .collect(),
                                     required: f.required,
                                 })
                             }
@@ -242,6 +264,12 @@ impl<'a> Root<'a> {
                                             ));
                                         }
 
+                                        for decorator in &f.decorators {
+                                            attributes.push(MethodAttribute::Directive(
+                                                Directive::from_decorator_ast(decorator),
+                                            ));
+                                        }
+
                                         attributes
                                     },
                                 })
@@ -264,6 +292,9 @@ impl<'a> Root<'a> {
                                     .collect(),
                             }),
                         })
+                        .chain(c.decorators.iter().map(|d| {
+                            CollectionAttribute::Directive(Directive::from_decorator_ast(d))
+                        }))
                         .collect(),
                 }),
                 ast::RootNode::Function(_) => Err("Functions are not supported at the root level")?,
@@ -303,6 +334,10 @@ impl<'a> Type<'a> {
                     })
                     .collect(),
             }),
+            ast::Type::ForeignRecord { collection } => Type::ForeignRecord(ForeignRecord {
+                collection: Cow::Borrowed(collection),
+            }),
+            ast::Type::PublicKey => Type::PublicKey(PublicKey {}),
         }
     }
 
@@ -340,6 +375,24 @@ impl<'a> Type<'a> {
                     collection: Cow::Borrowed(collection.as_str()),
                 })
             }
+            ast::ParameterType::PublicKey => Type::PublicKey(PublicKey {}),
+        }
+    }
+}
+
+impl<'a> Directive<'a> {
+    fn from_decorator_ast(ast: &'a ast::Decorator) -> Self {
+        Directive {
+            name: Cow::Borrowed(&ast.name),
+            arguments: ast
+                .arguments
+                .iter()
+                .map(|a| {
+                    DirectiveArgument::FieldReference(FieldReference {
+                        path: a.split('.').map(|s| Cow::Borrowed(s)).collect(),
+                    })
+                })
+                .collect(),
         }
     }
 }
@@ -374,6 +427,7 @@ mod tests {
                 type_: Type::Primitive(Primitive {
                     value: PrimitiveType::String,
                 }),
+                directives: vec![],
                 required: true,
             })],
         })]);
@@ -396,6 +450,7 @@ mod tests {
                       "kind": "primitive",
                       "value": "string"
                     },
+                    "directives": [],
                     "required": true
                   }
                 ]
@@ -441,6 +496,7 @@ mod tests {
                     type_: Type::Primitive(Primitive {
                         value: PrimitiveType::String
                     }),
+                    directives: vec![],
                     required: true,
                 }),
                 CollectionAttribute::Property(Property {
@@ -448,6 +504,7 @@ mod tests {
                     type_: Type::Primitive(Primitive {
                         value: PrimitiveType::Number
                     }),
+                    directives: vec![],
                     required: true,
                 }),
             ],
@@ -469,6 +526,7 @@ mod tests {
                       "kind": "primitive",
                       "value": "string"
                     },
+                    "directives": [],
                     "required": true
                   },
                   {
@@ -478,6 +536,7 @@ mod tests {
                       "kind": "primitive",
                       "value": "number"
                     },
+                    "directives": [],
                     "required": true
                   }
                 ]
@@ -492,6 +551,7 @@ mod tests {
             type_: Type::Primitive(Primitive {
                 value: PrimitiveType::String
             }),
+            directives: vec![],
             required: true,
         }),
         expect![[r#"
@@ -502,6 +562,7 @@ mod tests {
                 "kind": "primitive",
                 "value": "string"
               },
+              "directives": [],
               "required": true
             }"#]]
     );
@@ -518,6 +579,7 @@ mod tests {
                 type_: Type::Primitive(Primitive {
                     value: PrimitiveType::String
                 }),
+                directives: vec![],
                 required: true,
             })],
         })]),
@@ -538,6 +600,7 @@ mod tests {
                       "kind": "primitive",
                       "value": "string"
                     },
+                    "directives": [],
                     "required": true
                   }
                 ]
@@ -565,6 +628,7 @@ mod tests {
                       "kind": "primitive",
                       "value": "string"
                     },
+                    "directives": [],
                     "required": true
                   }
                 ]
@@ -589,6 +653,7 @@ mod tests {
                                                 value: String,
                                             },
                                         ),
+                                        directives: [],
                                         required: true,
                                     },
                                 ),
@@ -645,6 +710,7 @@ mod tests {
               "kind": "primitive",
               "value": "string"
             },
+            "directives": [],
             "required": true,
             "unknown_field": ""
           }
@@ -657,6 +723,7 @@ mod tests {
                         value: String,
                     },
                 ),
+                directives: [],
                 required: true,
             }
         "#]]
@@ -669,7 +736,7 @@ mod tests {
           [{
             "kind": "directive",
             "name": "read",
-            "parameters": []
+            "arguments": []
           }, {
             "kind": "parameter",
             "name": "from",
@@ -691,7 +758,7 @@ mod tests {
                 Directive(
                     Directive {
                         name: "read",
-                        parameters: [],
+                        arguments: [],
                     },
                 ),
                 Parameter(
@@ -722,13 +789,13 @@ mod tests {
           {
             "kind": "directive",
             "name": "read",
-            "parameters": []
+            "arguments": []
           }
         "#,
         expect![[r#"
             Directive {
                 name: "read",
-                parameters: [],
+                arguments: [],
             }
         "#]]
     );

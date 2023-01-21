@@ -242,7 +242,7 @@ pub(crate) fn validate_value<'a>(
                 });
             }
         }
-        stableast::Type::PublicKey => {
+        stableast::Type::PublicKey(_) => {
             if let Value::Map(map) = value {
                 match (
                     map.get("kty"),
@@ -322,7 +322,9 @@ pub(crate) fn validate_value<'a>(
                                 path.0.push(PathPart::Field("x"));
                                 return Err(ValidationError::InvalidType {
                                     path,
-                                    expected: ast::Type::String,
+                                    expected: stableast::Type::Primitive(stableast::Primitive {
+                                        value: stableast::PrimitiveType::String,
+                                    }),
                                 });
                             }
                         };
@@ -340,7 +342,9 @@ pub(crate) fn validate_value<'a>(
                                 path.0.push(PathPart::Field("y"));
                                 return Err(ValidationError::InvalidType {
                                     path,
-                                    expected: ast::Type::String,
+                                    expected: stableast::Type::Primitive(stableast::Primitive {
+                                        value: stableast::PrimitiveType::String,
+                                    }),
                                 });
                             }
                         };
@@ -409,7 +413,7 @@ pub(crate) fn validate_value<'a>(
                 })
             }
         }
-        stableast::Type::ForeignRecord(stableast::ForeignRecord { collection }) => {
+        stableast::Type::ForeignRecord(stableast::ForeignRecord { collection: _ }) => {
             if let Value::Map(map) = value {
                 if let Some(extra_field) = map.keys().filter(|k| *k != "id").nth(0) {
                     let mut path = path.clone();
@@ -425,7 +429,9 @@ pub(crate) fn validate_value<'a>(
                         path.0.push(PathPart::Field("id"));
                         Err(ValidationError::InvalidType {
                             path,
-                            expected: ast::Type::String,
+                            expected: stableast::Type::Primitive(stableast::Primitive {
+                                value: stableast::PrimitiveType::String,
+                            }),
                         })
                     }
                 } else {
@@ -514,7 +520,7 @@ mod tests {
                     type_: stableast::Type::Primitive(stableast::Primitive {
                         value: stableast::PrimitiveType::String,
                     }),
-                    decorators: vec![],
+                    directives: vec![],
                     required: true,
                 }),
                 stableast::CollectionAttribute::Property(stableast::Property {
@@ -522,7 +528,7 @@ mod tests {
                     type_: stableast::Type::Primitive(stableast::Primitive {
                         value: stableast::PrimitiveType::Number,
                     }),
-                    decorators: vec![],
+                    directives: vec![],
                     required: false,
                 }),
             ],
@@ -549,7 +555,7 @@ mod tests {
                             value: stableast::PrimitiveType::String,
                         })),
                     }),
-                    decorators: vec![],
+                    directives: vec![],
                     required: false,
                 },
             )],
@@ -579,6 +585,7 @@ mod tests {
                             value: stableast::PrimitiveType::String,
                         })),
                     }),
+                    directives: vec![],
                     required: false,
                 },
             )],
@@ -619,6 +626,7 @@ mod tests {
                             value: stableast::PrimitiveType::Number,
                         })),
                     }),
+                    directives: vec![],
                     required: false,
                 },
             )],
@@ -656,6 +664,7 @@ mod tests {
                             })),
                         })),
                     }),
+                    directives: vec![],
                     required: false,
                 },
             )],
@@ -700,6 +709,7 @@ mod tests {
                             value: stableast::PrimitiveType::Number,
                         })),
                     }),
+                    directives: vec![],
                     required: false,
                 },
             )],
@@ -732,6 +742,7 @@ mod tests {
                             value: stableast::PrimitiveType::Number,
                         })),
                     }),
+                    directives: vec![],
                     required: false,
                 },
             )],
@@ -775,6 +786,7 @@ mod tests {
                             value: stableast::PrimitiveType::Number,
                         })),
                     }),
+                    directives: vec![],
                     required: false,
                 },
             )],
@@ -821,6 +833,7 @@ mod tests {
                                     required: true,
                                 }],
                             }),
+                            directives: vec![],
                             required: true,
                         },
                     )],
@@ -849,6 +862,7 @@ mod tests {
                                     required: false,
                                 }],
                             }),
+                            directives: vec![],
                             required: true,
                         },
                     )],
@@ -871,6 +885,7 @@ mod tests {
                                     required: true,
                                 }],
                             }),
+                            directives: vec![],
                             required: false,
                         },
                     )],
@@ -905,6 +920,7 @@ mod tests {
                             required: true,
                         }],
                     }),
+                    directives: vec![],
                     required: true,
                 },
             )],
@@ -940,6 +956,7 @@ mod tests {
                             required: true,
                         }],
                     }),
+                    directives: vec![],
                     required: true,
                 },
             )],
@@ -977,7 +994,7 @@ mod tests {
                         value: stableast::PrimitiveType::String,
                     }),
                     required: true,
-                    decorators: vec![],
+                    directives: vec![],
                 }),
                 stableast::CollectionAttribute::Property(stableast::Property {
                     name: "age".into(),
@@ -985,7 +1002,7 @@ mod tests {
                         value: stableast::PrimitiveType::Number,
                     }),
                     required: false,
-                    decorators: vec![],
+                    directives: vec![],
                 }),
             ],
         };
@@ -1016,7 +1033,7 @@ mod tests {
                         value: stableast::PrimitiveType::String,
                     }),
                     required: true,
-                    decorators: vec![],
+                    directives: vec![],
                 }),
                 stableast::CollectionAttribute::Property(stableast::Property {
                     name: "age".into(),
@@ -1024,7 +1041,7 @@ mod tests {
                         value: stableast::PrimitiveType::Number,
                     }),
                     required: false,
-                    decorators: vec![],
+                    directives: vec![],
                 }),
             ],
         };
@@ -1061,7 +1078,7 @@ mod tests {
                         value: stableast::PrimitiveType::String,
                     }),
                     required: true,
-                    decorators: vec![],
+                    directives: vec![],
                 }),
                 stableast::CollectionAttribute::Property(stableast::Property {
                     name: "age".into(),
@@ -1069,7 +1086,7 @@ mod tests {
                         value: stableast::PrimitiveType::Number,
                     }),
                     required: false,
-                    decorators: vec![],
+                    directives: vec![],
                 }),
             ],
         };
@@ -1103,6 +1120,7 @@ mod tests {
                     type_: stableast::Type::Primitive(stableast::Primitive {
                         value: stableast::PrimitiveType::Boolean,
                     }),
+                    directives: vec![],
                     required: true,
                 },
             )],
@@ -1138,15 +1156,17 @@ mod tests {
         ($name:ident, $data:expr, $expected:expr) => {
             #[test]
             fn $name() {
-                let collection = ast::Collection {
-                    name: "users".to_string(),
-                    decorators: vec![],
-                    items: vec![ast::CollectionItem::Field(ast::Field {
-                        name: "public_key".to_string(),
-                        type_: ast::Type::PublicKey,
-                        required: true,
-                        decorators: vec![],
-                    })],
+                let collection = stableast::Collection {
+                    namespace: stableast::Namespace { value: "ns".into() },
+                    name: "users".into(),
+                    attributes: vec![stableast::CollectionAttribute::Property(
+                        stableast::Property {
+                            name: "public_key".into(),
+                            type_: stableast::Type::PublicKey(stableast::PublicKey {}),
+                            required: true,
+                            directives: vec![],
+                        },
+                    )],
                 };
                 let data = $data;
                 let result = validate_set(&collection, &data);
@@ -1372,15 +1392,17 @@ mod tests {
 
     #[test]
     fn test_validate_public_key_optional() {
-        let collection = ast::Collection {
-            name: "Collection".to_string(),
-            decorators: vec![],
-            items: vec![ast::CollectionItem::Field(ast::Field {
-                name: "public_key".to_string(),
-                type_: ast::Type::PublicKey,
-                required: false,
-                decorators: vec![],
-            })],
+        let collection = stableast::Collection {
+            namespace: stableast::Namespace { value: "ns".into() },
+            name: "Collection".into(),
+            attributes: vec![stableast::CollectionAttribute::Property(
+                stableast::Property {
+                    name: "public_key".into(),
+                    type_: stableast::Type::PublicKey(stableast::PublicKey {}),
+                    required: false,
+                    directives: vec![],
+                },
+            )],
         };
 
         let data = HashMap::new();
@@ -1393,17 +1415,19 @@ mod tests {
         ($name:ident, $data:expr, $expected:expr) => {
             #[test]
             fn $name() {
-                let collection = ast::Collection {
-                    name: "Collection".to_string(),
-                    decorators: vec![],
-                    items: vec![ast::CollectionItem::Field(ast::Field {
-                        name: "foreign_record".to_string(),
-                        type_: ast::Type::ForeignRecord {
-                            collection: "ForeignCollection".to_string(),
+                let collection = stableast::Collection {
+                    namespace: stableast::Namespace { value: "ns".into() },
+                    name: "Collection".into(),
+                    attributes: vec![stableast::CollectionAttribute::Property(
+                        stableast::Property {
+                            name: "foreign_record".into(),
+                            type_: stableast::Type::ForeignRecord(stableast::ForeignRecord {
+                                collection: "ForeignCollection".into(),
+                            }),
+                            required: true,
+                            directives: vec![],
                         },
-                        required: true,
-                        decorators: vec![],
-                    })],
+                    )],
                 };
 
                 let data = $data;
@@ -1455,17 +1479,19 @@ mod tests {
 
     #[test]
     fn test_validate_foreign_record_optional() {
-        let collection = ast::Collection {
-            name: "Collection".to_string(),
-            decorators: vec![],
-            items: vec![ast::CollectionItem::Field(ast::Field {
-                name: "foreign_record".to_string(),
-                type_: ast::Type::ForeignRecord {
-                    collection: "ForeignCollection".to_string(),
+        let collection = stableast::Collection {
+            namespace: stableast::Namespace { value: "ns".into() },
+            name: "Collection".into(),
+            attributes: vec![stableast::CollectionAttribute::Property(
+                stableast::Property {
+                    name: "foreign_record".into(),
+                    type_: stableast::Type::ForeignRecord(stableast::ForeignRecord {
+                        collection: "ForeignCollection".into(),
+                    }),
+                    required: false,
+                    directives: vec![],
                 },
-                required: false,
-                decorators: vec![],
-            })],
+            )],
         };
 
         let data = HashMap::new();

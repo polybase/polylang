@@ -44,8 +44,8 @@ func parseResult[T any](resultJSON string) (T, error) {
 	return result.Ok, nil
 }
 
-func Parse(input string) ([2]json.RawMessage, error) {
-	output := C.parse(C.CString(input))
+func Parse(input string, namespace string) ([2]json.RawMessage, error) {
+	output := C.parse(C.CString(input), C.CString(namespace))
 	return parseResult[[2]json.RawMessage](C.GoString(output))
 }
 
