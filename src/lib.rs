@@ -165,7 +165,7 @@ mod tests {
             r#"{"Ok":[{"nodes":[{"Collection":{"name":"Test","decorators":[],"items":[]}}]},[{"kind":"collection","namespace":{"kind":"namespace","value":""},"name":"Test","attributes":[]}]]}"#
         ]];
 
-        let output = parse_out_json(input);
+        let output = parse_out_json(input, "");
         expected_output.assert_eq(&output);
     }
 
