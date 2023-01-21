@@ -170,6 +170,20 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_collection_metadata() {
+        let input = "collection Collection { id: string; name?: string; lastRecordUpdated?: string; code?: string; ast?: string; publicKey?: string; @index(publicKey); @index([lastRecordUpdated, desc]); constructor (id: string, code: string) { this.id = id; this.code = code; this.ast = parse(code); this.publicKey = ctx.publicKey; } updateCode (code: string) { if (this.publicKey != ctx.publicKey) { throw error('invalid owner'); } this.code = code; this.ast = parse(code); } }";
+        let expected_output = expect![[
+            r#"[{"kind":"collection","namespace":{"kind":"namespace","value":""},"name":"Collection","attributes":[{"kind":"property","name":"id","type":{"kind":"primitive","value":"string"},"required":true},{"kind":"property","name":"name","type":{"kind":"primitive","value":"string"},"required":false},{"kind":"property","name":"lastRecordUpdated","type":{"kind":"primitive","value":"string"},"required":false},{"kind":"property","name":"code","type":{"kind":"primitive","value":"string"},"required":false},{"kind":"property","name":"ast","type":{"kind":"primitive","value":"string"},"required":false},{"kind":"property","name":"publicKey","type":{"kind":"primitive","value":"string"},"required":false},{"kind":"index","fields":[{"direction":"asc","fieldPath":["publicKey"]}]},{"kind":"index","fields":[{"direction":"desc","fieldPath":["lastRecordUpdated"]}]},{"kind":"method","name":"constructor","attributes":[{"kind":"parameter","name":"id","type":{"kind":"primitive","value":"string"},"required":true},{"kind":"parameter","name":"code","type":{"kind":"primitive","value":"string"},"required":true}],"code":"this.id = id; this.code = code; this.ast = parse(code); this.publicKey = ctx.publicKey;"},{"kind":"method","name":"updateCode","attributes":[{"kind":"parameter","name":"code","type":{"kind":"primitive","value":"string"},"required":true}],"code":"if (this.publicKey != ctx.publicKey) { throw error('invalid owner'); } this.code = code; this.ast = parse(code);"}]}]"#
+        ]];
+
+        let mut program = ast::Program::default();
+        let output = parse(input, "", &mut program).unwrap().1;
+        let output = serde_json::to_string(&output).unwrap();
+
+        expected_output.assert_eq(&output);
+    }
+
+    #[test]
     fn test_collection() {
         let mut program = ast::Program::default();
         let (program, _) = parse("collection Test {}", "", &mut program).unwrap();

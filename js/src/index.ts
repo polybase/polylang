@@ -17,7 +17,7 @@ export interface RootNode {
 export type Collection = any
 export type Function = any
 
-export async function parse (code: string): Promise<Program> {
+export async function parse (code: string): Promise<[Program, any]> {
   return unwrap(JSON.parse((await parser).parse(code)))
 }
 
@@ -25,6 +25,6 @@ export interface JSCollection {
   code: string
 }
 
-export async function generateJSCollection (collection: Collection): Promise<JSCollection> {
+export async function generateJSCollection (collection: any): Promise<JSCollection> {
   return unwrap(JSON.parse((await parser).generate_js_collection(JSON.stringify(collection))))
 }
