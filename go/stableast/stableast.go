@@ -122,12 +122,17 @@ type PrimitiveType string
 
 const (
 	PrimitiveTypeString  PrimitiveType = "string"
+	PrimitiveTypeBytes   PrimitiveType = "bytes"
 	PrimitiveTypeNumber  PrimitiveType = "number"
 	PrimitiveTypeBoolean PrimitiveType = "boolean"
 )
 
 func (pt PrimitiveType) IsString() bool {
 	return pt == PrimitiveTypeString
+}
+
+func (pt PrimitiveType) IsBytes() bool {
+	return pt == PrimitiveTypeBytes
 }
 
 func (pt PrimitiveType) IsNumber() bool {
