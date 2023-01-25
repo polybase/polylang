@@ -1515,7 +1515,6 @@ mod tests {
         let result = validate_set(&collection, &data);
         assert_eq!(result, Ok(()));
     }
-
     macro_rules! test_validate_bytes {
         ($name:ident, $data:expr, $expected:expr) => {
             #[test]
