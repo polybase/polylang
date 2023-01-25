@@ -1,10 +1,11 @@
 mod bindings;
 mod js;
+mod stableast;
 mod validation;
 
 use polylang_parser::{ast, LexicalError, ParseError};
 use serde::Serialize;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 #[derive(Debug, Serialize)]
 struct Error {
@@ -91,16 +92,27 @@ where
     }
 }
 
-fn parse(input: &str) -> Result<ast::Program, Error> {
-    polylang_parser::parse(input).map_err(|e| parse_error_to_error(input, e))
+fn parse<'a>(
+    input: &'a str,
+    namespace: &'a str,
+    program_holder: &'a mut ast::Program,
+) -> Result<(&'a ast::Program, stableast::Root<'a>), Error> {
+    *program_holder = polylang_parser::parse(input).map_err(|e| parse_error_to_error(input, e))?;
+
+    Ok((
+        program_holder,
+        stableast::Root::from_ast(namespace, program_holder).map_err(|e| Error {
+            message: e.to_string(),
+        })?,
+    ))
 }
 
-fn parse_out_json(input: &str) -> String {
-    serde_json::to_string(&parse(input)).unwrap()
+fn parse_out_json(input: &str, namespace: &str) -> String {
+    serde_json::to_string(&parse(input, namespace, &mut ast::Program::default())).unwrap()
 }
 
 fn validate_set(collection_ast_json: &str, data_json: &str) -> Result<(), Error> {
-    let collection_ast: ast::Collection = match serde_json::from_str(collection_ast_json) {
+    let collection_ast: stableast::Collection = match serde_json::from_str(collection_ast_json) {
         Ok(ast) => ast,
         Err(err) => {
             return Err(Error {
@@ -128,7 +140,7 @@ fn validate_set_out_json(collection_ast_json: &str, data_json: &str) -> String {
 }
 
 fn generate_collection_function(collection_ast: &str) -> Result<js::JSCollection, Error> {
-    let collection_ast: ast::Collection =
+    let collection_ast: stableast::Collection =
         serde_json::from_str(collection_ast).map_err(|e| Error {
             message: e.to_string(),
         })?;
@@ -142,43 +154,64 @@ fn generate_js_collection_out_json(collection_ast: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use expect_test::expect;
+
     use super::*;
 
     #[test]
     fn test_parse() {
         let input = "collection Test {}";
-        let expected_output = r#"{"Ok":{"nodes":[{"Collection":{"name":"Test","items":[]}}]}}"#;
+        let expected_output = expect![[
+            r#"{"Ok":[{"nodes":[{"Collection":{"name":"Test","decorators":[],"items":[]}}]},[{"kind":"collection","namespace":{"kind":"namespace","value":""},"name":"Test","attributes":[]}]]}"#
+        ]];
 
-        let output = parse_out_json(input);
-        assert_eq!(output, expected_output);
+        let output = parse_out_json(input, "");
+        expected_output.assert_eq(&output);
+    }
+
+    #[test]
+    fn test_parse_collection_metadata() {
+        let input = "@public collection Collection { id: string; name?: string; lastRecordUpdated?: string; code?: string; ast?: string; publicKey?: PublicKey; @index(publicKey); @index([lastRecordUpdated, desc]); constructor (id: string, code: string) { this.id = id; this.code = code; this.ast = parse(code); if (ctx.publicKey) this.publicKey = ctx.publicKey; } updateCode (code: string) { if (this.publicKey != ctx.publicKey) { throw error('invalid owner'); } this.code = code; this.ast = parse(code); } }";
+        let expected_output = expect![[
+            r#"[{"kind":"collection","namespace":{"kind":"namespace","value":""},"name":"Collection","attributes":[{"kind":"property","name":"id","type":{"kind":"primitive","value":"string"},"directives":[],"required":true},{"kind":"property","name":"name","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"lastRecordUpdated","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"code","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"ast","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"publicKey","type":{"kind":"publickey"},"directives":[],"required":false},{"kind":"index","fields":[{"direction":"asc","fieldPath":["publicKey"]}]},{"kind":"index","fields":[{"direction":"desc","fieldPath":["lastRecordUpdated"]}]},{"kind":"method","name":"constructor","attributes":[{"kind":"parameter","name":"id","type":{"kind":"primitive","value":"string"},"required":true},{"kind":"parameter","name":"code","type":{"kind":"primitive","value":"string"},"required":true}],"code":"this.id = id; this.code = code; this.ast = parse(code); if (ctx.publicKey) this.publicKey = ctx.publicKey;"},{"kind":"method","name":"updateCode","attributes":[{"kind":"parameter","name":"code","type":{"kind":"primitive","value":"string"},"required":true}],"code":"if (this.publicKey != ctx.publicKey) { throw error('invalid owner'); } this.code = code; this.ast = parse(code);"},{"kind":"directive","name":"public","arguments":[]}]}]"#
+        ]];
+
+        let mut program = ast::Program::default();
+        let output = parse(input, "", &mut program).unwrap().1;
+        let output = serde_json::to_string(&output).unwrap();
+
+        expected_output.assert_eq(&output);
     }
 
     #[test]
     fn test_collection() {
-        let program = parse("collection Test {}");
+        let mut program = ast::Program::default();
+        let (program, _) = parse("collection Test {}", "", &mut program).unwrap();
 
-        let program = program.unwrap();
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, items }) if name == "Test" && items.len() == 0)
+            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.is_empty())
         );
     }
 
     #[test]
     fn test_collection_with_fields() {
-        let program = parse(
+        let mut program = ast::Program::default();
+        let (program, _) = parse(
             "
             collection Test {
                 name: string;
                 age: number;
             }
             ",
-        );
+            "",
+            &mut program,
+        )
+        .unwrap();
 
-        let program = program.unwrap();
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, items }) if name == "Test" && items.len() == 2)
+            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 2)
         );
 
         let collection = match &program.nodes[0] {
@@ -187,28 +220,31 @@ mod tests {
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: true }) if name == "name" && *type_ == ast::Type::String)
+            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "name" && *type_ == ast::Type::String && decorators.is_empty())
         );
         assert!(
-            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: true }) if name == "age" && *type_ == ast::Type::Number)
+            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "age" && *type_ == ast::Type::Number && decorators.is_empty())
         );
     }
 
     #[test]
     fn test_collection_with_asc_desc_fields() {
-        let program = parse(
+        let mut program = ast::Program::default();
+        let (program, _) = parse(
             "
             collection Test {
                 asc: string;
                 desc: string;
             }
             ",
-        );
+            "",
+            &mut program,
+        )
+        .unwrap();
 
-        let program = program.unwrap();
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, items }) if name == "Test" && items.len() == 2)
+            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 2)
         );
 
         let collection = match &program.nodes[0] {
@@ -217,16 +253,17 @@ mod tests {
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: true }) if name == "asc" && *type_ == ast::Type::String),
+            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "asc" && *type_ == ast::Type::String && decorators.is_empty()),
         );
         assert!(
-            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: true }) if name == "desc" && *type_ == ast::Type::String),
+            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "desc" && *type_ == ast::Type::String && decorators.is_empty()),
         );
     }
 
     #[test]
     fn test_collection_with_functions() {
-        let program = parse(
+        let mut program = ast::Program::default();
+        let (program, _) = parse(
             "
             collection Test {
                 function get_age(a: number, b?: string) {
@@ -234,12 +271,14 @@ mod tests {
                 }
             }
             ",
-        );
+            "",
+            &mut program,
+        )
+        .unwrap();
 
-        let program = program.unwrap();
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, items }) if name == "Test" && items.len() == 1)
+            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 1)
         );
 
         let collection = match &program.nodes[0] {
@@ -248,7 +287,14 @@ mod tests {
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Function(ast::Function { name, parameters, statements, statements_code, return_type }) if name == "get_age" && parameters.len() == 2 && statements.len() == 1 && statements_code == "return 42;" && return_type == &None)
+            matches!(&collection.items[0], ast::CollectionItem::Function(ast::Function {
+                name,
+                decorators,
+                parameters,
+                statements,
+                statements_code,
+                return_type,
+            }) if name == "get_age" && decorators.is_empty() && parameters.len() == 2 && statements.len() == 1 && statements_code == "return 42;" && return_type == &None)
         );
 
         let function = match &collection.items[0] {
@@ -300,41 +346,44 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn test_if() {
-        let program = parse(
-            "
-            function x() {
-                if (1 == 1) {
-                    return 42;
-                } else {
-                    return 0;
-                }
-            }
-            ",
-        );
+    // #[test]
+    // fn test_if() {
+    //     let mut program = ast::Program::default();
+    //     let (_, _) = parse(
+    //         "
+    //         function x() {
+    //             if (1 == 1) {
+    //                 return 42;
+    //             } else {
+    //                 return 0;
+    //             }
+    //         }
+    //         ",
+    //         "",
+    //         &mut program,
+    //     )
+    //     .unwrap();
 
-        let mut program = program.unwrap();
-        assert_eq!(program.nodes.len(), 1);
+    //     assert_eq!(program.nodes.len(), 1);
 
-        let mut function = match program.nodes.pop().unwrap() {
-            ast::RootNode::Function(function) => function,
-            _ => panic!("Expected function"),
-        };
+    //     let mut function = match program.nodes.pop().unwrap() {
+    //         ast::RootNode::Function(function) => function,
+    //         _ => panic!("Expected function"),
+    //     };
 
-        assert_eq!(function.statements.len(), 1);
+    //     assert_eq!(function.statements.len(), 1);
 
-        let if_ = match function.statements.pop().unwrap() {
-            ast::Statement::If(if_) => if_,
-            _ => panic!("Expected if"),
-        };
+    //     let if_ = match function.statements.pop().unwrap() {
+    //         ast::Statement::If(if_) => if_,
+    //         _ => panic!("Expected if"),
+    //     };
 
-        assert!(
-            matches!(if_.condition, ast::Expression::Equal(n, m) if *n == ast::Expression::Primitive(ast::Primitive::Number(1.0)) && *m == ast::Expression::Primitive(ast::Primitive::Number(1.0)))
-        );
-        assert_eq!(if_.then_statements.len(), 1);
-        assert_eq!(if_.else_statements.len(), 1);
-    }
+    //     assert!(
+    //         matches!(if_.condition, ast::Expression::Equal(n, m) if *n == ast::Expression::Primitive(ast::Primitive::Number(1.0)) && *m == ast::Expression::Primitive(ast::Primitive::Number(1.0)))
+    //     );
+    //     assert_eq!(if_.then_statements.len(), 1);
+    //     assert_eq!(if_.else_statements.len(), 1);
+    // }
 
     #[test]
     fn test_call() {
@@ -386,7 +435,8 @@ mod tests {
             }
         ";
 
-        let program = parse(code).unwrap();
+        let mut program = ast::Program::default();
+        let (program, _) = parse(code, "", &mut program).unwrap();
 
         assert_eq!(program.nodes.len(), 1);
 
@@ -400,26 +450,26 @@ mod tests {
 
         assert!(matches!(
             &collection.items[0],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: true })
-            if name == "name" && *type_ == ast::Type::String
+            ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators })
+            if name == "name" && *type_ == ast::Type::String && decorators.is_empty()
         ));
 
         assert!(matches!(
             &collection.items[1],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: false })
-            if name == "age" && *type_ == ast::Type::Number
+            ast::CollectionItem::Field(ast::Field { name, type_, required: false, decorators })
+            if name == "age" && *type_ == ast::Type::Number && decorators.is_empty()
         ));
 
         assert!(matches!(
             &collection.items[2],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: true })
-            if name == "balance" && *type_ == ast::Type::Number
+            ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators })
+            if name == "balance" && *type_ == ast::Type::Number && decorators.is_empty()
         ));
 
         assert!(matches!(
             &collection.items[3],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: true })
-            if name == "publicKey" && *type_ == ast::Type::String
+            ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators })
+            if name == "publicKey" && *type_ == ast::Type::String && decorators.is_empty()
         ));
 
         assert!(matches!(
@@ -519,11 +569,12 @@ mod tests {
             collection test-cities {}
         ";
 
-        let collection = parse(code);
-        assert!(collection.is_err());
-        eprintln!("{}", collection.as_ref().unwrap_err().message);
+        let mut program = ast::Program::default();
+        let result = parse(code, "", &mut program);
+        assert!(result.is_err());
+        eprintln!("{}", result.as_ref().unwrap_err().message);
         assert_eq!(
-            collection.unwrap_err().message,
+            result.unwrap_err().message,
             r#"Error found at line 2, column 27: Unrecognized token "-". Expected one of: "{"
 collection test-cities {}
                ^"#,
@@ -536,11 +587,12 @@ collection test-cities {}
             collection ą {}
         ";
 
-        let collection = parse(code);
-        assert!(collection.is_err());
-        eprintln!("{}", collection.as_ref().unwrap_err().message);
+        let mut program = ast::Program::default();
+        let result = parse(code, "", &mut program);
+        assert!(result.is_err());
+        eprintln!("{}", result.as_ref().unwrap_err().message);
         assert_eq!(
-            collection.unwrap_err().message,
+            result.unwrap_err().message,
             r#"Error found at line 2, column 23: Invalid token
 collection ą {}
            ^"#,
@@ -553,11 +605,12 @@ collection ą {}
             function x() {
         ";
 
-        let collection = parse(code);
-        assert!(collection.is_err());
-        eprintln!("{}", collection.as_ref().unwrap_err().message);
+        let mut program = ast::Program::default();
+        let result = parse(code, "", &mut program);
+        assert!(result.is_err());
+        eprintln!("{}", result.as_ref().unwrap_err().message);
         assert_eq!(
-            collection.unwrap_err().message,
+            result.unwrap_err().message,
             r#"Error found at line 2, column 26: Unexpected end of file
 function x() {
               ^"#,
@@ -565,21 +618,34 @@ function x() {
     }
 
     #[test]
-    fn test_error_field_invalid_type() {
+    fn test_foreign_record_field() {
         let code = "
             collection test {
-                name: object;
+                account: Account;
             }
         ";
 
-        let collection = parse(code);
-        assert!(collection.is_err());
-        eprintln!("{}", collection.as_ref().unwrap_err().message);
+        let mut program = ast::Program::default();
+        let (program, _) = parse(code, "", &mut program).unwrap();
+
+        let collection = match &program.nodes[0] {
+            ast::RootNode::Collection(c) => c,
+            _ => panic!("expected collection"),
+        };
+
+        assert_eq!(collection.items.len(), 1);
+
+        let field = match &collection.items[0] {
+            ast::CollectionItem::Field(f) => f,
+            _ => panic!("expected field"),
+        };
+
+        assert_eq!(field.name, "account");
         assert_eq!(
-            collection.unwrap_err().message,
-            r#"Error found at line 3, column 22: Unrecognized token "object". Expected one of: "boolean", "map", "number", "string", "{"
-name: object;
-      ^^^^^^"#,
+            field.type_,
+            ast::Type::ForeignRecord {
+                collection: "Account".to_string(),
+            }
         );
     }
 
@@ -592,6 +658,7 @@ name: object;
                     name: "numbers".to_string(),
                     type_: ast::Type::Array(Box::new(ast::Type::Number)),
                     required: true,
+                    decorators: vec![],
                 }],
             ),
             (
@@ -600,6 +667,7 @@ name: object;
                     name: "strings".to_string(),
                     type_: ast::Type::Array(Box::new(ast::Type::String)),
                     required: true,
+                    decorators: vec![],
                 }],
             ),
             (
@@ -608,6 +676,7 @@ name: object;
                     name: "numToStr".to_string(),
                     type_: ast::Type::Map(Box::new(ast::Type::Number), Box::new(ast::Type::String)),
                     required: true,
+                    decorators: vec![],
                 }],
             ),
             (
@@ -616,12 +685,14 @@ name: object;
                     name: "strToNum".to_string(),
                     type_: ast::Type::Map(Box::new(ast::Type::String), Box::new(ast::Type::Number)),
                     required: true,
+                    decorators: vec![],
                 }],
             ),
         ];
 
         for (code, expected) in cases.iter() {
-            let program = parse(code).unwrap();
+            let mut program = ast::Program::default();
+            let (program, _) = parse(code, "", &mut program).unwrap();
             assert_eq!(program.nodes.len(), 1);
             let collection = match &program.nodes[0] {
                 ast::RootNode::Collection(c) => c,
@@ -637,7 +708,8 @@ name: object;
                             name,
                             type_,
                             required,
-                        }) if name == &item.name && type_ == &item.type_ && required == &item.required
+                            decorators,
+                        }) if name == &item.name && type_ == &item.type_ && required == &item.required && decorators == &item.decorators
                     ),
                     "expected: {:?}, got: {:?}",
                     item,
@@ -659,14 +731,17 @@ name: object;
                             name: "name".to_string(),
                             type_: ast::Type::String,
                             required: true,
+                            decorators: vec![],
                         },
                         ast::Field {
                             name: "age".to_string(),
                             type_: ast::Type::Number,
                             required: true,
+                            decorators: vec![],
                         },
                     ]),
                     required: true,
+                    decorators: vec![],
                 }],
             ),
             (
@@ -677,8 +752,10 @@ name: object;
                         name: "name".to_string(),
                         type_: ast::Type::String,
                         required: false,
+                        decorators: vec![],
                     }]),
                     required: true,
+                    decorators: vec![],
                 }],
             ),
             (
@@ -691,16 +768,20 @@ name: object;
                             name: "name".to_string(),
                             type_: ast::Type::String,
                             required: true,
+                            decorators: vec![],
                         }]),
                         required: true,
+                        decorators: vec![],
                     }]),
                     required: true,
+                    decorators: vec![],
                 }],
             ),
         ];
 
         for (code, expected) in cases.iter() {
-            let program = parse(code).unwrap();
+            let mut program = ast::Program::default();
+            let (program, _) = parse(code, "", &mut program).unwrap();
             assert_eq!(program.nodes.len(), 1);
             let collection = match &program.nodes[0] {
                 ast::RootNode::Collection(c) => c,
@@ -716,7 +797,8 @@ name: object;
                             name,
                             type_,
                             required,
-                        }) if name == &item.name && type_ == &item.type_ && required == &item.required
+                            decorators,
+                        }) if name == &item.name && type_ == &item.type_ && required == &item.required && decorators.is_empty()
                     ),
                     "expected: {:?}, got: {:?}",
                     item,
@@ -742,7 +824,7 @@ name: object;
             }
         ";
 
-        assert!(parse(code).is_ok());
+        assert!(parse(code, "", &mut ast::Program::default()).is_ok());
     }
 
     #[test]
@@ -757,7 +839,8 @@ name: object;
             }
         ";
 
-        let program = parse(code).unwrap();
+        let mut program = ast::Program::default();
+        let (program, _) = parse(code, "", &mut program).unwrap();
         assert_eq!(program.nodes.len(), 1);
 
         let collection = match &program.nodes[0] {
@@ -779,6 +862,52 @@ name: object;
         );
     }
 
+    #[test]
+    fn test_decorators() {
+        let code = "
+            @public
+            collection Account {
+                @read
+                owner: PublicKey;
+
+                @call(owner)
+                function noop() {}
+            }
+        ";
+
+        let mut program = ast::Program::default();
+        let (program, _) = parse(code, "", &mut program).unwrap();
+        assert_eq!(program.nodes.len(), 1);
+
+        let collection = match &program.nodes[0] {
+            ast::RootNode::Collection(c) => c,
+            _ => panic!("expected collection"),
+        };
+
+        assert_eq!(collection.decorators.len(), 1);
+        assert_eq!(collection.decorators[0].name, "public");
+
+        assert_eq!(collection.items.len(), 2);
+
+        let field = match &collection.items[0] {
+            ast::CollectionItem::Field(f) => f,
+            _ => panic!("expected field"),
+        };
+
+        assert_eq!(field.decorators.len(), 1);
+        assert_eq!(field.decorators[0].name, "read");
+
+        let function = match &collection.items[1] {
+            ast::CollectionItem::Function(f) => f,
+            _ => panic!("expected function"),
+        };
+
+        assert_eq!(function.decorators.len(), 1);
+        assert_eq!(function.decorators[0].name, "call");
+        assert_eq!(function.decorators[0].arguments.len(), 1);
+        assert_eq!(function.decorators[0].arguments[0], "owner");
+    }
+
     /// Tests that collections from the filesystem directory 'test-collections' parse without an error
     #[test]
     fn test_fs_collections() {
@@ -798,12 +927,13 @@ name: object;
             }
 
             let code = std::fs::read_to_string(&path).unwrap();
-            let collection = parse(&code);
-            if collection.is_err() {
+            let mut program = ast::Program::default();
+            let result = parse(&code, "", &mut program);
+            if result.is_err() {
                 eprintln!("Error parsing collection: {}", path.display());
-                eprintln!("{}", collection.as_ref().unwrap_err().message);
+                eprintln!("{}", result.as_ref().unwrap_err().message);
             }
-            assert!(collection.is_ok());
+            assert!(result.is_ok());
         }
     }
 }

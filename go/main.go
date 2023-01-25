@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/polybase/polylang/parser"
+	"github.com/polybase/polylang/stableast"
 )
 
 type Program struct {
@@ -14,14 +15,18 @@ type Program struct {
 }
 
 func main() {
-	parseResult, err := parser.Parse("collection Test { name: string!; }")
+	parseResult, err := parser.Parse("collection Test { name: string; }", "default")
 	if err != nil {
 		panic(err)
 	}
-	log.Println(string(parseResult))
 
 	var ast Program
-	if err := json.Unmarshal([]byte(parseResult), &ast); err != nil {
+	if err := json.Unmarshal([]byte(parseResult[0]), &ast); err != nil {
+		panic(err)
+	}
+
+	var stableAST stableast.Root
+	if err := json.Unmarshal([]byte(parseResult[1]), &stableAST); err != nil {
 		panic(err)
 	}
 

@@ -12,8 +12,9 @@ type RootNode struct {
 }
 
 type Collection struct {
-	Name  string           `json:"name"`
-	Items []CollectionItem `json:"items"`
+	Name       string           `json:"name"`
+	Decorators []Decorator      `json:"decorators"`
+	Items      []CollectionItem `json:"items"`
 }
 
 type CollectionItem struct {
@@ -23,9 +24,10 @@ type CollectionItem struct {
 }
 
 type Field struct {
-	Name     string `json:"name"`
-	Type     Type   `json:"type_"`
-	Required bool   `json:"required"`
+	Name       string      `json:"name"`
+	Type       Type        `json:"type_"`
+	Required   bool        `json:"required"`
+	Decorators []Decorator `json:"decorators"`
 }
 
 type Type struct {
@@ -57,6 +59,14 @@ func (t *Type) IsObject() bool {
 	return t.Tag == "Object"
 }
 
+func (t *Type) IsPublicKey() bool {
+	return t.Tag == "PublicKey"
+}
+
+func (t *Type) IsForeignRecord() bool {
+	return t.Tag == "ForeignRecord"
+}
+
 func (t *Type) Object() ([]Field, error) {
 	var fields []Field
 
@@ -67,13 +77,24 @@ func (t *Type) Object() ([]Field, error) {
 	return fields, nil
 }
 
-type FieldDecorator struct {
-	Name      string      `json:"name"`
-	Arguments []Primitive `json:"arguments"`
+func (t *Type) ForeignRecord() (*ForeignRecord, error) {
+	var foreignRecord ForeignRecord
+
+	if err := json.Unmarshal(t.Content, &foreignRecord); err != nil {
+		return nil, err
+	}
+
+	return &foreignRecord, nil
+}
+
+type Decorator struct {
+	Name      string   `json:"name"`
+	Arguments []string `json:"arguments"`
 }
 
 type Function struct {
 	Name           string        `json:"name"`
+	Decorators     []Decorator   `json:"decorators"`
 	Parameters     []Parameter   `json:"parameters"`
 	ReturnType     *Type         `json:"return_type"`
 	Statements     []interface{} `json:"statements"`
@@ -111,6 +132,10 @@ func (ft *FunctionType) IsMap() bool {
 
 func (ft *FunctionType) IsForeignRecord() bool {
 	return ft.Tag == "ForeignRecord"
+}
+
+func (ft *FunctionType) IsPublicKey() bool {
+	return ft.Tag == "PublicKey"
 }
 
 func (ft *FunctionType) ForeignRecord() *ForeignRecord {

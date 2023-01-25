@@ -17,14 +17,14 @@ export interface RootNode {
 export type Collection = any
 export type Function = any
 
-export async function parse (code: string): Promise<Program> {
-  return unwrap(JSON.parse((await parser).parse(code)))
+export async function parse (code: string, namespace: string): Promise<[Program, any]> {
+  return unwrap(JSON.parse((await parser).parse(code, namespace)))
 }
 
 export interface JSCollection {
   code: string
 }
 
-export async function generateJSCollection (collection: Collection): Promise<JSCollection> {
+export async function generateJSCollection (collection: any): Promise<JSCollection> {
   return unwrap(JSON.parse((await parser).generate_js_collection(JSON.stringify(collection))))
 }
