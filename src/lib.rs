@@ -1,6 +1,6 @@
 mod bindings;
 mod js;
-mod stableast;
+pub mod stableast;
 mod validation;
 
 use polylang_parser::{ast, LexicalError, ParseError};
