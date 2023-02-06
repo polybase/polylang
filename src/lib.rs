@@ -7,6 +7,8 @@ use polylang_parser::{ast, LexicalError, ParseError};
 use serde::Serialize;
 use std::collections::HashMap;
 
+pub use polylang_parser::ast;
+
 #[derive(Debug, Serialize)]
 pub struct Error {
     message: String,
