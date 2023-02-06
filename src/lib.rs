@@ -1,5 +1,5 @@
 mod bindings;
-mod js;
+pub mod js;
 pub mod stableast;
 mod validation;
 
