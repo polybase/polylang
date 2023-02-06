@@ -3,7 +3,7 @@ pub mod js;
 pub mod stableast;
 mod validation;
 
-use polylang_parser::{ast, LexicalError, ParseError};
+use polylang_parser::{LexicalError, ParseError};
 use serde::Serialize;
 use std::collections::HashMap;
 
