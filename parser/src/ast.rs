@@ -50,6 +50,7 @@ pub enum Type {
     Object(Vec<Field>),
     PublicKey,
     ForeignRecord { collection: String },
+    Bytes,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -64,6 +65,7 @@ pub enum ParameterType {
     Record,
     ForeignRecord { collection: String },
     PublicKey,
+    Bytes,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
