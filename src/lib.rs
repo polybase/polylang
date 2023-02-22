@@ -11,7 +11,7 @@ pub use polylang_parser::ast;
 
 #[derive(Debug, Serialize)]
 pub struct Error {
-    message: String,
+    pub message: String,
 }
 
 fn parse_error_to_error<T>(input: &str, error: ParseError<usize, T, LexicalError>) -> Error
