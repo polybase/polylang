@@ -1,0 +1,39 @@
+name: Publish (Stable)
+
+on:
+  release:
+    types: [published]
+    tags:
+      - "*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ secrets.ADMIN_TOKEN }}
+
+      - run: git config --global user.email "hello@polybase.xyz"
+      - run: git config --global user.name "Polybase CI"
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+
+      - name: "NPM Identity"
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
+
+      - name: Install packages
+        run: yarn
+
+      - name: Build packages
+        run: yarn lerna run build
+
+      # - name: "Publish"
+      #   run: yarn lerna publish ${{ github.ref_name }} --force-git-tag --yes --force-publish
