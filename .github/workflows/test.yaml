@@ -5,19 +5,23 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
+
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
+
       - name: Pull testnet collections
         continue-on-error: true
         run: |
           ./pull-collections.sh
+
       - name: Test the main crate
         uses: actions-rs/cargo@v1
         with:
           command: test
+
       - name: Test the parser
         uses: actions-rs/cargo@v1
         with:
