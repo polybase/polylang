@@ -15,7 +15,6 @@
     "clean": "rimraf node/* && rimraf web/*",
     "build": "yarn clean && webpack build",
     "prepare": "yarn build",
-    "release": "npx np",
     "fix": "yarn eslint \"./src/**/*.{ts,tsx}\" webpack.config.js --fix"
   },
   "devDependencies": {
