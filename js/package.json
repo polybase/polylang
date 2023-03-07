@@ -34,6 +34,10 @@
     "webpack-cli": "^4.10.0",
     "webpack-node-externals": "^3.0.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/polybase/polylang.git"
+  },
   "engines": {
     "node": ">=16.0.0"
   }
