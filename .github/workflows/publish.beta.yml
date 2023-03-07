@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - ci-publish
 
 jobs:
   publish:
@@ -36,6 +35,6 @@ jobs:
         working-directory: ./js
         run: yarn lerna run build
 
-      # - name: "Publish"
-      #   working-directory: ./js
-      #   run: yarn lerna publish --canary --preid beta --dist-tag beta --yes
+      - name: "Publish"
+        working-directory: ./js
+        run: yarn lerna publish --canary --preid beta --dist-tag beta --yes
