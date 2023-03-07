@@ -19,6 +19,10 @@ jobs:
       - run: git config --global user.email "hello@polybase.xyz"
       - run: git config --global user.name "Polybase CI"
 
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: "latest"
+
       - uses: actions/setup-node@v3
         with:
           node-version: 16.x
@@ -30,10 +34,13 @@ jobs:
           echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
 
       - name: Install packages
+        working-directory: ./js
         run: yarn
 
       - name: Build packages
+        working-directory: ./js
         run: yarn lerna run build
 
-      # - name: "Publish"
-      #   run: yarn lerna publish ${{ github.ref_name }} --force-git-tag --yes --force-publish
+      - name: "Publish"
+        working-directory: ./js
+        run: yarn lerna publish ${{ github.ref_name }} --force-git-tag --yes --force-publish
