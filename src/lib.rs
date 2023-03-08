@@ -908,6 +908,39 @@ function x() {
         assert_eq!(function.decorators[0].arguments[0], "owner");
     }
 
+    #[test]
+    fn test_foreign_record_array() {
+        let code = "
+            collection test {
+                people: Person[];
+            }
+        ";
+
+        let mut program = ast::Program::default();
+        let (program, _) = parse(code, "", &mut program).unwrap();
+        assert_eq!(program.nodes.len(), 1);
+
+        let collection = match &program.nodes[0] {
+            ast::RootNode::Collection(c) => c,
+            _ => panic!("expected collection"),
+        };
+
+        assert_eq!(collection.items.len(), 1);
+
+        let field = match &collection.items[0] {
+            ast::CollectionItem::Field(f) => f,
+            _ => panic!("expected field"),
+        };
+
+        assert_eq!(field.name, "people");
+        assert_eq!(
+            field.type_,
+            ast::Type::Array(Box::new(ast::Type::ForeignRecord {
+                collection: "Person".to_string()
+            }))
+        );
+    }
+
     /// Tests that collections from the filesystem directory 'test-collections' parse without an error
     #[test]
     fn test_fs_collections() {
