@@ -921,7 +921,7 @@ function x() {
             }
         ";
 
-        let mut program = ast::Program::default();
+        let mut program = None;
         let (program, _) = parse(code, "", &mut program).unwrap();
         assert_eq!(program.nodes.len(), 1);
 
