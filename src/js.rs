@@ -3,7 +3,7 @@ use serde::Serialize;
 
 #[derive(Debug, Serialize, PartialEq)]
 pub struct JSCollection {
-    code: String,
+    pub code: String,
 }
 
 pub fn generate_js_collection(collection_ast: &stableast::Collection) -> JSCollection {

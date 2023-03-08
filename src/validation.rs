@@ -144,6 +144,22 @@ pub(crate) fn validate_value<'a>(
                     })
                 }
             }
+            stableast::PrimitiveType::Bytes => {
+                if let Value::String(s) = value {
+                    match base64::engine::general_purpose::STANDARD.decode(s.as_bytes()) {
+                        Ok(_) => Ok(()),
+                        Err(e) => Err(ValidationError::Base64DecodeError {
+                            path: path.clone(),
+                            error: e,
+                        }),
+                    }
+                } else {
+                    Err(ValidationError::InvalidType {
+                        path: path.clone(),
+                        expected: expected_type.clone(),
+                    })
+                }
+            }
         },
         stableast::Type::Array(a) => {
             if let Value::Array(arr) = value {
@@ -1499,4 +1515,60 @@ mod tests {
         let result = validate_set(&collection, &data);
         assert_eq!(result, Ok(()));
     }
+    macro_rules! test_validate_bytes {
+        ($name:ident, $data:expr, $expected:expr) => {
+            #[test]
+            fn $name() {
+                let collection = stableast::Collection {
+                    namespace: stableast::Namespace { value: "ns".into() },
+                    name: "Collection".into(),
+                    attributes: vec![stableast::CollectionAttribute::Property(
+                        stableast::Property {
+                            name: "bytes".into(),
+                            type_: stableast::Type::Primitive(stableast::Primitive {
+                                value: stableast::PrimitiveType::Bytes,
+                            }),
+                            required: true,
+                            directives: vec![],
+                        },
+                    )],
+                };
+
+                let data = $data;
+                let result = validate_set(&collection, &data);
+                assert_eq!(result, $expected);
+            }
+        };
+    }
+
+    test_validate_bytes!(
+        test_validate_bytes,
+        HashMap::from([(
+            "bytes".to_string(),
+            Value::String(
+                base64::engine::general_purpose::STANDARD.encode(&rand::random::<[u8; 32]>())
+            )
+        )]),
+        Ok(())
+    );
+
+    test_validate_bytes!(
+        test_validate_bytes_invalid_base64,
+        HashMap::from([("bytes".to_string(), Value::String("invalid".to_string()))]),
+        Err(ValidationError::Base64DecodeError {
+            path: PathParts(vec![PathPart::Field("bytes")]),
+            error: base64::DecodeError::InvalidPadding,
+        })
+    );
+
+    test_validate_bytes!(
+        test_validate_bytes_invalid_type,
+        HashMap::from([("bytes".to_string(), Value::Number(5.0))]),
+        Err(ValidationError::InvalidType {
+            path: PathParts(vec![PathPart::Field("bytes")]),
+            expected: stableast::Type::Primitive(stableast::Primitive {
+                value: stableast::PrimitiveType::Bytes,
+            }),
+        })
+    );
 }

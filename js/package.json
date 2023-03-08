@@ -1,6 +1,6 @@
 {
   "name": "@polybase/polylang",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -15,7 +15,6 @@
     "clean": "rimraf node/* && rimraf web/*",
     "build": "yarn clean && webpack build",
     "prepare": "yarn build",
-    "release": "npx np",
     "fix": "yarn eslint \"./src/**/*.{ts,tsx}\" webpack.config.js --fix"
   },
   "devDependencies": {
@@ -27,6 +26,7 @@
     "eslint-plugin-import": "^2.26.0",
     "eslint-plugin-n": "^15.2.0",
     "eslint-plugin-promise": "^6.0.0",
+    "lerna": "^6.5.1",
     "rimraf": "^3.0.2",
     "ts-loader": "^9.4.0",
     "typescript": "^4.6.4",

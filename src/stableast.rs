@@ -168,6 +168,8 @@ pub enum PrimitiveType {
     Number,
     #[serde(rename = "boolean")]
     Boolean,
+    #[serde(rename = "bytes")]
+    Bytes,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -338,6 +340,9 @@ impl<'a> Type<'a> {
                 collection: Cow::Borrowed(collection),
             }),
             ast::Type::PublicKey => Type::PublicKey(PublicKey {}),
+            ast::Type::Bytes => Type::Primitive(Primitive {
+                value: PrimitiveType::Bytes,
+            }),
         }
     }
 
@@ -376,6 +381,9 @@ impl<'a> Type<'a> {
                 })
             }
             ast::ParameterType::PublicKey => Type::PublicKey(PublicKey {}),
+            ast::ParameterType::Bytes => Type::Primitive(Primitive {
+                value: PrimitiveType::Bytes,
+            }),
         }
     }
 }
