@@ -120,6 +120,7 @@ pub enum Expression {
     Ident(String),
     Boolean(bool),
     Object(Object),
+    Array(Vec<Expression>),
     Assign(Box<Expression>, Box<Expression>),
     AssignSub(Box<Expression>, Box<Expression>),
     AssignAdd(Box<Expression>, Box<Expression>),
