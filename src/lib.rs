@@ -946,6 +946,57 @@ function x() {
         );
     }
 
+    #[test]
+    fn test_expr_array_empty() {
+        let code = "[]";
+        let expr = polylang_parser::parse_expression(code).unwrap();
+        assert_eq!(expr, ast::Expression::Array(vec![]));
+    }
+
+    #[test]
+    fn test_expr_array_single() {
+        let code = "[1]";
+        let expr = polylang_parser::parse_expression(code).unwrap();
+        assert_eq!(
+            expr,
+            ast::Expression::Array(vec![ast::Expression::Primitive(ast::Primitive::Number(
+                1.0
+            ))])
+        );
+    }
+
+    #[test]
+    fn test_expr_array_multiple() {
+        let code = "[1, 2, 3]";
+        let expr = polylang_parser::parse_expression(code).unwrap();
+        assert_eq!(
+            expr,
+            ast::Expression::Array(vec![
+                ast::Expression::Primitive(ast::Primitive::Number(1.0)),
+                ast::Expression::Primitive(ast::Primitive::Number(2.0)),
+                ast::Expression::Primitive(ast::Primitive::Number(3.0)),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_expr_array_nested() {
+        let code = "[[1], [2, 3]]";
+        let expr = polylang_parser::parse_expression(code).unwrap();
+        assert_eq!(
+            expr,
+            ast::Expression::Array(vec![
+                ast::Expression::Array(vec![ast::Expression::Primitive(ast::Primitive::Number(
+                    1.0
+                ))]),
+                ast::Expression::Array(vec![
+                    ast::Expression::Primitive(ast::Primitive::Number(2.0)),
+                    ast::Expression::Primitive(ast::Primitive::Number(3.0)),
+                ]),
+            ])
+        );
+    }
+
     /// Tests that collections from the filesystem directory 'test-collections' parse without an error
     #[test]
     fn test_fs_collections() {
