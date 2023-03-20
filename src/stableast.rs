@@ -2,7 +2,7 @@
 // make sure to use #[serde(default)] on the field,
 // so that it doesn't break the deserialization (missing field errors).
 
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt::Display};
 
 use polylang_parser::ast;
 use serde::{Deserialize, Serialize};
@@ -155,6 +155,35 @@ pub enum Type<'a> {
     Unknown,
 }
 
+impl Display for Type<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Primitive(p) => write!(f, "{}", p.value),
+            Type::Array(a) => write!(f, "{}[]", a.value),
+            Type::Map(m) => write!(f, "map<{}, {}>", m.key, m.value),
+            Type::Object(o) => {
+                write!(f, "{{ ")?;
+                for (i, field) in o.fields.iter().enumerate() {
+                    write!(
+                        f,
+                        "{}{}: {}",
+                        field.name,
+                        if field.required { "" } else { "?" },
+                        field.type_
+                    )?;
+                    write!(f, ";")?;
+                    write!(f, " ")?;
+                }
+                write!(f, "}}")
+            }
+            Type::Record(_) => write!(f, "record"),
+            Type::ForeignRecord(fr) => write!(f, "{}", fr.collection),
+            Type::PublicKey(_) => write!(f, "PublicKey"),
+            Type::Unknown => write!(f, "UNKNOWN"),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Primitive {
     pub value: PrimitiveType,
@@ -170,6 +199,17 @@ pub enum PrimitiveType {
     Boolean,
     #[serde(rename = "bytes")]
     Bytes,
+}
+
+impl Display for PrimitiveType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PrimitiveType::String => write!(f, "string"),
+            PrimitiveType::Number => write!(f, "number"),
+            PrimitiveType::Boolean => write!(f, "boolean"),
+            PrimitiveType::Bytes => write!(f, "bytes"),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -830,4 +870,78 @@ mod tests {
             }
         "#]]
     );
+
+    #[test]
+    fn type_display_string() {
+        let type_ = Type::Primitive(Primitive {
+            value: PrimitiveType::String,
+        });
+
+        assert_eq!(type_.to_string(), "string");
+    }
+
+    #[test]
+    fn type_display_object() {
+        let type_ = Type::Object(Object {
+            fields: vec![
+                ObjectField {
+                    name: Cow::Borrowed("b"),
+                    type_: Type::Primitive(Primitive {
+                        value: PrimitiveType::Boolean,
+                    }),
+                    required: true,
+                },
+                ObjectField {
+                    name: Cow::Borrowed("num"),
+                    type_: Type::Primitive(Primitive {
+                        value: PrimitiveType::Number,
+                    }),
+                    required: false,
+                },
+                ObjectField {
+                    name: Cow::Borrowed("emptyObject"),
+                    type_: Type::Object(Object { fields: vec![] }),
+                    required: true,
+                },
+                ObjectField {
+                    name: Cow::Borrowed("col"),
+                    type_: Type::ForeignRecord(ForeignRecord {
+                        collection: Cow::Borrowed("Col"),
+                    }),
+                    required: true,
+                },
+                ObjectField {
+                    name: Cow::Borrowed("stringArray"),
+                    type_: Type::Array(Array {
+                        value: Box::new(Type::Primitive(Primitive {
+                            value: PrimitiveType::String,
+                        })),
+                    }),
+                    required: true,
+                },
+                ObjectField {
+                    name: Cow::Borrowed("mapStringToNumber"),
+                    type_: Type::Map(Map {
+                        key: Box::new(Type::Primitive(Primitive {
+                            value: PrimitiveType::String,
+                        })),
+                        value: Box::new(Type::Primitive(Primitive {
+                            value: PrimitiveType::Number,
+                        })),
+                    }),
+                    required: true,
+                },
+                ObjectField {
+                    name: Cow::Borrowed("publicKey"),
+                    type_: Type::PublicKey(PublicKey {}),
+                    required: true,
+                },
+            ],
+        });
+
+        assert_eq!(
+            type_.to_string(),
+            "{ b: boolean; num?: number; emptyObject: { }; col: Col; stringArray: string[]; mapStringToNumber: map<string, number>; publicKey: PublicKey; }"
+        );
+    }
 }
