@@ -147,15 +147,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut masm_code = String::new();
     std::io::stdin().read_to_string(&mut masm_code)?;
 
-    let assembler =
-        miden::Assembler::new().with_module_provider(miden_stdlib::StdLibrary::default());
+    let assembler = miden::Assembler::default()
+        .with_library(&miden_stdlib::StdLibrary::default())
+        .expect("Failed to load stdlib");
     let program = assembler
         .compile(&masm_code)
         .expect("Failed to compile miden assembly");
 
+    let advice_provider = miden::MemAdviceProvider::from(
+        miden::AdviceInputs::default()
+            .with_tape_values(advice_tape)
+            .expect("Invalid advice tape"),
+    );
+    let stack_inputs = miden::StackInputs::try_from_values(stack).unwrap();
+    miden_processor::execute(&program, stack_inputs, advice_provider);
+
     let mut process = miden_processor::Process::new_debug(
         assembler.kernel(),
-        miden::ProgramInputs::new(&stack, &advice_tape, vec![]).unwrap(),
+        miden::StackInputs::try_from_values(stack).unwrap(),
+        miden::MemAdviceProvider::from(
+            miden::AdviceInputs::default()
+                .with_tape_values(advice_tape)
+                .expect("Invalid advice tape"),
+        ),
     );
     let execution_result = process.execute(&program);
     let (_system, _decoder, stack, _range_checker, chiplets) = process.to_components();

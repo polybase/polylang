@@ -23,9 +23,9 @@ console_error_panic_hook = "0.1.7"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 polylang_parser = { path = "./parser" }
-miden = "0.3.0"
-miden-processor = "0.3.0"
-miden-stdlib = "0.2.0"
+miden-vm = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.4.0" }
+miden-processor = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.4.0" }
+miden-stdlib = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.4.0" }
 lazy_static = "1.4.0"
 
 [dev-dependencies]
