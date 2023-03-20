@@ -1,6 +1,6 @@
 export type Root = Node[]
 
-export type Node = Collection
+export type Node = Collection | { kind: string }
 
 export interface Collection {
   kind: 'collection'
