@@ -44,9 +44,9 @@ func parseResult[T any](resultJSON string) (T, error) {
 	return result.Ok, nil
 }
 
-func Parse(input string) (json.RawMessage, error) {
-	output := C.parse(C.CString(input))
-	return parseResult[json.RawMessage](C.GoString(output))
+func Parse(input string, namespace string) ([2]json.RawMessage, error) {
+	output := C.parse(C.CString(input), C.CString(namespace))
+	return parseResult[[2]json.RawMessage](C.GoString(output))
 }
 
 func ValidateSet(collectionAST, data string) error {

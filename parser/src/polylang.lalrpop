@@ -1,44 +1,173 @@
 use crate::ast::*;
+use crate::lexer;
 use std::str::FromStr;
 use lalrpop_util::ParseError;
 
-grammar;
+grammar<'input>(input: &'input str);
 
-pub Ident: String = {
-    <s:r"[a-zA-Z_\$][a-zA-Z0-9_]*"> => s.to_string(),
+extern {
+    type Location = usize;
+    type Error = lexer::LexicalError;
+
+    enum lexer::Tok<'input> {
+        identifier => lexer::Tok::Identifier(<&'input str>),
+        number => lexer::Tok::NumberLiteral(<f64>),
+        string => lexer::Tok::StringLiteral(<&'input str>),
+        "desc" => lexer::Tok::Desc,
+        "asc" => lexer::Tok::Asc,
+        "true" => lexer::Tok::True,
+        "false" => lexer::Tok::False,
+        "string" => lexer::Tok::String,
+        "number" => lexer::Tok::Number,
+        "boolean" => lexer::Tok::Boolean,
+        "map" => lexer::Tok::Map,
+        "record" => lexer::Tok::Record,
+        "PublicKey" => lexer::Tok::PublicKey,
+        "bytes" => lexer::Tok::Bytes,
+        "let" => lexer::Tok::Let,
+        "break" => lexer::Tok::Break,
+        "return" => lexer::Tok::Return,
+        "throw" => lexer::Tok::Throw,
+        "if" => lexer::Tok::If,
+        "else" => lexer::Tok::Else,
+        "while" => lexer::Tok::While,
+        "for" => lexer::Tok::For,
+        "function" => lexer::Tok::Function,
+        "@index" => lexer::Tok::Index,
+        "collection" => lexer::Tok::Collection,
+        "{" => lexer::Tok::LBrace,
+        "}" => lexer::Tok::RBrace,
+        "[" => lexer::Tok::LBracket,
+        "]" => lexer::Tok::RBracket,
+        "(" => lexer::Tok::LParen,
+        ")" => lexer::Tok::RParen,
+        "<" => lexer::Tok::ArrowLeft,
+        ">" => lexer::Tok::ArrowRight,
+        ":" => lexer::Tok::Colon,
+        ";" => lexer::Tok::Semicolon,
+        "," => lexer::Tok::Comma,
+        "." => lexer::Tok::Dot,
+        "!" => lexer::Tok::Bang,
+        "?" => lexer::Tok::Question,
+        "~" => lexer::Tok::Tilde,
+        "*" => lexer::Tok::Star,
+        "/" => lexer::Tok::Slash,
+        "%" => lexer::Tok::Percent,
+        "+" => lexer::Tok::Plus,
+        "-" => lexer::Tok::Minus,
+        "&" => lexer::Tok::Ampersand,
+        "**" => lexer::Tok::StarStar,
+        "&&" => lexer::Tok::AmpersandAmpersand,
+        "@" => lexer::Tok::At,
+        "^" => lexer::Tok::Caret,
+        "|" => lexer::Tok::Pipe,
+        "||" => lexer::Tok::PipePipe,
+        "<=" => lexer::Tok::Lte,
+        ">=" => lexer::Tok::Gte,
+        "=" => lexer::Tok::Equal,
+        "==" => lexer::Tok::EqualEqual,
+        "!=" => lexer::Tok::BangEqual,
+        "-=" => lexer::Tok::MinusEqual,
+        "+=" => lexer::Tok::PlusEqual,
+    }
+}
+
+Ident: String = {
+    <i:identifier> => i.to_string(),
     "desc" => "desc".to_string(),
     "asc" => "asc".to_string(),
 };
 
-pub Type: Type = {
+BasicType: Type = {
     "string" => Type::String,
     "number" => Type::Number,
+    "boolean" => Type::Boolean,
+    "bytes" => Type::Bytes,
 };
 
-pub ParameterType: ParameterType = {
-    "string" => ParameterType::String,
-    "number" => ParameterType::Number,
+ArrayInnerType: Type = {
+    <t:BasicType> => t,
+    <i:Ident> => Type::ForeignRecord {
+        collection: i,
+    },
+}
+
+Type: Type = {
+    BasicType,
+    <t:ArrayInnerType> "[" "]" => Type::Array(Box::new(t)),
+    "map" "<" <kt:BasicType> "," <vt:Type> ">" => Type::Map(Box::new(kt), Box::new(vt)),
+    "{" <fields:(Field ";")*> "}" => Type::Object(fields.into_iter().map(|(f, _)| f).collect()),
+    "PublicKey" => Type::PublicKey,
+    <i:Ident> => Type::ForeignRecord {
+        collection: i,
+    },
+};
+
+ParameterType: ParameterType = {
+    <l:@L> <t:Type> =>? match t {
+        Type::String => Ok(ParameterType::String),
+        Type::Number => Ok(ParameterType::Number),
+        Type::Boolean => Ok(ParameterType::Boolean),
+        Type::Bytes => Ok(ParameterType::Bytes),
+        Type::Array(t) => Ok(ParameterType::Array(*t)),
+        Type::Map(kt, vt) => Ok(ParameterType::Map(*kt, *vt)),
+        Type::Object(fields) => Err(ParseError::User {
+            error: lexer::LexicalError::UserError {
+                start: l,
+                end: l,
+                message: "object type not allowed for parameter".to_string(),
+            }
+        }),
+        Type::PublicKey => Ok(ParameterType::PublicKey),
+        Type::ForeignRecord { collection } => Ok(ParameterType::ForeignRecord { collection }),
+    },
     "record" => ParameterType::Record,
 };
 
-pub Number: f64 = {
-    <s:r"-?[0-9]+(\.[0-9]+)?"> =>? f64::from_str(s).map_err(|_| ParseError::User {
-        error: "invalid number",
-    }),
+Number: f64 = {
+    <n:number> => n,
 };
 
-pub String: String = {
-    <s:r#"'[^']*'"#> => s[1..s.len()-1].to_string(),
+String: String = {
+    <s:string> => s[1..s.len()-1].to_string(),
 };
 
-pub Boolean: bool = {
+Boolean: bool = {
     "true" => true,
     "false" => false,
 };
 
-pub Primitive: Primitive = {
+Primitive: Primitive = {
     <n:Number> => Primitive::Number(n),
     <s:String> => Primitive::String(s),
+};
+
+ObjectFieldValues: Vec<(String, Expression)> = {
+    <id:Ident> ":" <e:Expression> => vec![(id, e)],
+    <id:Ident> ":" <e:Expression> "," <fs:ObjectFieldValues> => {
+        let mut fs = fs;
+        fs.insert(0, (id, e));
+        fs
+    },
+};
+
+Array: Vec<Expression> = {
+    "[" "]" => vec![],
+    "[" <e:Expression> "]" => vec![e],
+    "[" <e:Expression> "," <values:ArrayValues> "]" => {
+        let mut values = values;
+        values.insert(0, e);
+        values
+    },
+}
+
+ArrayValues: Vec<Expression> = {
+    <e: Expression> => vec![e],
+    <e: Expression> "," <es:ArrayValues> => {
+        let mut es = es;
+        es.insert(0, e);
+        es
+    },
 };
 
 pub Expression: Expression = {
@@ -48,6 +177,8 @@ pub Expression: Expression = {
     <b:Boolean> => Expression::Boolean(b),
     #[precedence(level="0")]
     <id:Ident> => Expression::Ident(id),
+    #[precedence(level="0")]
+    "{" <fields:ObjectFieldValues> "}" => Expression::Object(Object { fields }),
     #[precedence(level="1")]
     <l:Expression> "[" <r:Expression> "]" => Expression::Index(Box::new(l), Box::new(r)),
     #[precedence(level="1")]
@@ -57,9 +188,11 @@ pub Expression: Expression = {
     #[precedence(level="1")]
     "(" <e:Expression> ")" => e,
     #[precedence(level="2")]
-    <l:Expression> "!" => Expression::Not(Box::new(l)),
+    <array:Array> => Expression::Array(array),
     #[precedence(level="2")]
-    <l:Expression> "~" => Expression::BitNot(Box::new(l)),
+    "!" <l:Expression> => Expression::Not(Box::new(l)),
+    #[precedence(level="2")]
+    "~" <l:Expression> => Expression::BitNot(Box::new(l)),
     #[precedence(level="3")] #[assoc(side="left")]
     <l:Expression> "**" <r:Expression> => Expression::Exponent(Box::new(l), Box::new(r)),
     #[precedence(level="4")] #[assoc(side="left")]
@@ -73,19 +206,21 @@ pub Expression: Expression = {
     #[precedence(level="5")] #[assoc(side="left")]
     <l:Expression> "-" <r:Expression> => Expression::Subtract(Box::new(l), Box::new(r)),
     #[precedence(level="6")] #[assoc(side="left")]
-    <l:Expression> "<<" <r:Expression> => Expression::ShiftLeft(Box::new(l), Box::new(r)),
+    <l:Expression> "<" <second:("<")?> <r:Expression> => match second {
+        None => Expression::LessThan(Box::new(l), Box::new(r)),
+        Some(_) => Expression::ShiftLeft(Box::new(l), Box::new(r)),
+    },
     #[precedence(level="6")] #[assoc(side="left")]
-    <l:Expression> ">>" <r:Expression> => Expression::ShiftRight(Box::new(l), Box::new(r)),
+    <l:Expression> ">" <second:(">")?> <r:Expression> => match second {
+        None => Expression::GreaterThan(Box::new(l), Box::new(r)),
+        Some(_) => Expression::ShiftRight(Box::new(l), Box::new(r)),
+    },
     #[precedence(level="7")] #[assoc(side="left")]
     <l:Expression> "&" <r:Expression> => Expression::BitAnd(Box::new(l), Box::new(r)),
     #[precedence(level="8")] #[assoc(side="left")]
     <l:Expression> "^" <r:Expression> => Expression::BitXor(Box::new(l), Box::new(r)),
     #[precedence(level="9")] #[assoc(side="left")]
     <l:Expression> "|" <r:Expression> => Expression::BitOr(Box::new(l), Box::new(r)),
-    #[precedence(level="10")] #[assoc(side="none")]
-    <l:Expression> "<" <r:Expression> => Expression::LessThan(Box::new(l), Box::new(r)),
-    #[precedence(level="10")] #[assoc(side="none")]
-    <l:Expression> ">" <r:Expression> => Expression::GreaterThan(Box::new(l), Box::new(r)),
     #[precedence(level="10")] #[assoc(side="none")]
     <l:Expression> "<=" <r:Expression> => Expression::LessThanOrEqual(Box::new(l), Box::new(r)),
     #[precedence(level="10")] #[assoc(side="none")]
@@ -106,7 +241,7 @@ pub Expression: Expression = {
     <l:Expression> "=" <r:Expression> => Expression::Assign(Box::new(l), Box::new(r)),
 };
 
-pub ArgumentList: Vec<Expression> = {
+ArgumentList: Vec<Expression> = {
     <e:Expression> <rest:("," Expression)*> => {
         let mut args = vec![e];
         for (_, e) in rest {
@@ -117,7 +252,7 @@ pub ArgumentList: Vec<Expression> = {
     => vec![],
 };
 
-pub PrimitiveArgumentList: Vec<Primitive> = {
+PrimitiveArgumentList: Vec<Primitive> = {
     <p:Primitive> <rest:("," Primitive)*> => {
         let mut args = vec![p];
         for (_, p) in rest {
@@ -128,7 +263,7 @@ pub PrimitiveArgumentList: Vec<Primitive> = {
     => vec![],
 };
 
-pub CompoundStatement: Statement = {
+CompoundStatement: Statement = {
     <i:If> => Statement::If(i),
     <w:While> => Statement::While(w),
     <f:For> => Statement::For(f),
@@ -138,7 +273,7 @@ Let: Let = {
     "let" <i:Ident> "=" <e:Expression> => Let { identifier: i, expression: e },
 };
 
-pub SmallStatement: Statement = {
+SmallStatement: Statement = {
     "break" => Statement::Break,
     "return" <e:Expression> => Statement::Return(e),
     "throw" <e:Expression> => Statement::Throw(e),
@@ -146,21 +281,21 @@ pub SmallStatement: Statement = {
     <e:Expression> => Statement::Expression(e),
 };
 
-pub SimpleStatement: Statement = {
+SimpleStatement: Statement = {
     <s:SmallStatement> ";" => s,
 };
 
-pub Statement: Statement = {
+Statement: Statement = {
     SimpleStatement,
     CompoundStatement,
 };
 
-pub StatementsOrSimpleStatement: Vec<Statement> = {
+StatementsOrSimpleStatement: Vec<Statement> = {
     "{" <s:Statement*> "}" => s,
     <s:SimpleStatement> => vec![s],
 };
 
-pub If: If = {
+If: If = {
     "if" "(" <e:Expression> ")" <s:StatementsOrSimpleStatement> <s2:("else" StatementsOrSimpleStatement)?> => If {
         condition: e,
         then_statements: s,
@@ -168,14 +303,14 @@ pub If: If = {
     },
 };
 
-pub While: While = {
+While: While = {
     "while" "(" <e:Expression> ")" "{" <s:Statement*> "}" => While {
         condition: e,
         statements: s,
     },
 };
 
-pub For: For = {
+For: For = {
     "for" "(" <init:Let> ";" <cond:Expression> ";" <post:Expression> ")" "{" <statements:Statement*> "}" => For {
         initial_statement: ForInitialStatement::Let(init),
         condition: cond,
@@ -190,7 +325,7 @@ pub For: For = {
     },
 };
 
-pub ParameterList: Vec<Parameter> = {
+ParameterList: Vec<Parameter> = {
     <p:Parameter> <rest:("," Parameter)*> => {
         let mut params = vec![p];
         for (_, p) in rest {
@@ -201,7 +336,7 @@ pub ParameterList: Vec<Parameter> = {
     => vec![],
 };
 
-pub Parameter: Parameter = {
+Parameter: Parameter = {
     <name:Ident> ":" <type_:ParameterType> => Parameter {
         name,
         type_,
@@ -214,9 +349,10 @@ pub Parameter: Parameter = {
     },
 };
 
-pub RootFunction: Function = {
+RootFunction: Function = {
     "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
+        decorators: vec![],
         parameters: pl,
         return_type: return_type.map(|(_, t)| t),
         statements: s,
@@ -224,16 +360,18 @@ pub RootFunction: Function = {
     }
 };
 
-pub Function: Function = {
-    "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+Function: Function = {
+    <decs:Decorator*> "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
+        decorators: decs,
         parameters: pl,
         return_type: return_type.map(|(_, t)| t),
         statements: s,
         statements_code: input[l..r].to_string(),
     },
-    <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
+    <decs:Decorator*> <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
+        decorators: decs,
         parameters: pl,
         return_type: return_type.map(|(_, t)| t),
         statements: s,
@@ -241,47 +379,81 @@ pub Function: Function = {
     },
 };
 
-pub Field: Field = {
-    <name:Ident> "?" ":" <type_:Type> => Field{
+Field: Field = {
+    <decs:Decorator*> <name:Ident> "?" ":" <type_:Type> => Field{
         name,
         type_,
         required: false,
+        decorators: decs,
     },
-    <name:Ident> ":" <type_:Type> => Field{
+    <decs:Decorator*> <name:Ident> ":" <type_:Type> => Field{
         name,
         type_,
         required: true,
+        decorators: decs,
     },
 };
 
-pub IndexField: IndexField = {
-    "[" <name:Ident> "," <order:Order> "]" => IndexField{
-        name,
+IndexField: IndexField = {
+    "[" <path:FieldPath> "," <order:Order> "]" => IndexField{
+        path,
         order,
     },
-    <name:Ident> => IndexField{
-        name,
+    <path:FieldPath> => IndexField{
+        path,
         order: Order::Asc,
     },
 };
 
-pub Order: Order = {
+FieldPath: Vec<String> = {
+    <name:Ident> <rest:("." Ident)*> => {
+        let mut path = vec![name];
+        for (_, name) in rest {
+            path.push(name);
+        }
+        path
+    },
+};
+
+Order: Order = {
     "asc" => Order::Asc,
     "desc" => Order::Desc,
 };
 
-pub Index: Index = {
+Index: Index = {
     "@index" "(" <fields:IndexFields> ")"  => Index{
-        unique: false,
-        fields: fields,
-    },
-    "@unique" "(" <fields:IndexFields> ")"  => Index{
-        unique: true,
         fields: fields,
     },
 };
 
-pub IndexFields: Vec<IndexField> = {
+DecoratorName: String = {
+    <l:@L> <name:Ident> =>? match name.as_str() {
+        "public" => Ok(name),
+        "read" => Ok(name),
+        "call" => Ok(name),
+        "delegate" => Ok(name),
+        _ => Err(ParseError::User {
+            error: lexer::LexicalError::UserError {
+                start: l,
+                end: l,
+                message: format!("Unknown decorator: {}", name),
+            },
+        }),
+    }
+}
+
+Decorator: Decorator = {
+    "@" <name:DecoratorName> "(" <arguments:Ident*> ")" => Decorator{
+        name,
+        arguments,
+    },
+    "@" <name:DecoratorName> => Decorator{
+        name,
+        arguments: vec![],
+    },
+};
+
+IndexFields: Vec<IndexField> = {
     <f:IndexField> <rest:("," IndexField)*> => {
         let mut fields = vec![f];
         for (_, f) in rest {
@@ -292,20 +464,21 @@ pub IndexFields: Vec<IndexField> = {
     => vec![],
 };
 
-pub CollectionItem: CollectionItem = {
+CollectionItem: CollectionItem = {
     <f:Field> ";" => CollectionItem::Field(f),
     <i:Index> ";" => CollectionItem::Index(i),
     <f:Function> => CollectionItem::Function(f),
 };
 
-pub Collection: Collection = {
-    "collection" <name:Ident> "{" <items:CollectionItem*> "}" => Collection {
+Collection: Collection = {
+    <decorators:Decorator*> "collection" <name:Ident> "{" <items:CollectionItem*> "}" => Collection {
         name: name,
+        decorators: decorators,
         items: items,
     },
 };
 
-pub RootNode: RootNode = {
+RootNode: RootNode = {
     <c:Collection> => RootNode::Collection(c),
     <f:RootFunction> => RootNode::Function(f),
 };

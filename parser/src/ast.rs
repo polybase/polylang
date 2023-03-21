@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Program {
     pub nodes: Vec<RootNode>,
 }
@@ -14,6 +14,7 @@ pub enum RootNode {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Collection {
     pub name: String,
+    pub decorators: Vec<Decorator>,
     pub items: Vec<CollectionItem>,
 }
 
@@ -24,30 +25,47 @@ pub enum CollectionItem {
     Index(Index),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Field {
     pub name: String,
     pub type_: Type,
     pub required: bool,
+    pub decorators: Vec<Decorator>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct FieldDecorator {
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Decorator {
     pub name: String,
-    pub arguments: Vec<Primitive>,
+    pub arguments: Vec<String>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "tag", content = "content")]
 pub enum Type {
     String,
     Number,
+    Boolean,
+    Array(Box<Type>),
+    Map(Box<Type>, Box<Type>),
+    Object(Vec<Field>),
+    PublicKey,
+    ForeignRecord { collection: String },
+    Bytes,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "tag", content = "content")]
 pub enum ParameterType {
     String,
     Number,
+    Boolean,
+    Array(Type),
+    Map(Type, Type),
+    Object(Vec<(String, Type)>),
     Record,
+    ForeignRecord { collection: String },
+    PublicKey,
+    Bytes,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -60,6 +78,7 @@ pub struct Parameter {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Function {
     pub name: String,
+    pub decorators: Vec<Decorator>,
     pub parameters: Vec<Parameter>,
     pub return_type: Option<Type>,
     pub statements: Vec<Statement>,
@@ -68,13 +87,12 @@ pub struct Function {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Index {
-    pub unique: bool,
     pub fields: Vec<IndexField>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct IndexField {
-    pub name: String,
+    pub path: Vec<String>,
     pub order: Order,
 }
 
@@ -101,6 +119,8 @@ pub enum Expression {
     Primitive(Primitive),
     Ident(String),
     Boolean(bool),
+    Object(Object),
+    Array(Vec<Expression>),
     Assign(Box<Expression>, Box<Expression>),
     AssignSub(Box<Expression>, Box<Expression>),
     AssignAdd(Box<Expression>, Box<Expression>),
@@ -168,4 +188,9 @@ pub enum ForInitialStatement {
 pub enum Primitive {
     Number(f64),
     String(String),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Object {
+    pub fields: Vec<(String, Expression)>,
 }

@@ -1,48 +1,47 @@
 {
-    "env": {
-        "browser": true,
-        "es2021": true
-    },
-    "extends": [
-        "standard"
+  "env": {
+    "browser": true,
+    "es2021": true
+  },
+  "extends": [
+    "standard"
+  ],
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "module"
+  },
+  "plugins": [
+    "@typescript-eslint"
+  ],
+  "rules": {
+    "comma-dangle": [
+      2,
+      "always-multiline"
     ],
-    "parser": "@typescript-eslint/parser",
-    "parserOptions": {
-        "ecmaVersion": "latest",
-        "sourceType": "module"
-    },
-    "plugins": [
-        "@typescript-eslint"
+    "object-curly-spacing": [
+      2,
+      "always"
     ],
-    "rules": {
-      "comma-dangle": [
-        2,
-        "always-multiline"
-      ],
-      "object-curly-spacing": [
-        2,
-        "always"
-      ],
-      "react/display-name": 0,
-      "semi": [
-        "error",
-        "never"
-      ],
-      "no-underscore-dangle": 0,
-      "space-before-function-paren": [
-        "error",
-        "always"
-      ],
-      "arrow-body-style": 0,
-      "no-use-before-define": 0,
-      "arrow-parens": 0,
-      "no-trailing-spaces": "error",
-      "@typescript-eslint/indent": ["error", 2],
-      "quotes": "off",
-      "@typescript-eslint/quotes": [
-        "error",
-        "single"
-      ]
-    }
+    "react/display-name": 0,
+    "semi": [
+      "error",
+      "never"
+    ],
+    "no-underscore-dangle": 0,
+    "space-before-function-paren": 0,
+    "arrow-body-style": 0,
+    "no-use-before-define": 0,
+    "arrow-parens": 0,
+    "no-trailing-spaces": "error",
+    "@typescript-eslint/indent": [
+      "error",
+      2
+    ],
+    "quotes": "off",
+    "@typescript-eslint/quotes": [
+      "error",
+      "single"
+    ]
   }
-  
+}

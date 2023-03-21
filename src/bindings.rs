@@ -16,9 +16,10 @@ pub extern "C" fn init() {
 }
 
 #[cfg(target_arch = "wasm32")]
+#[cfg(feature = "parser")]
 #[wasm_bindgen]
-pub fn parse(input: &str) -> String {
-    crate::parse_out_json(input)
+pub fn parse(input: &str, namespace: &str) -> String {
+    crate::parse_out_json(input, namespace)
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -34,12 +35,16 @@ pub fn generate_js_collection(collection_ast_json: &str) -> String {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "parser")]
 #[no_mangle]
-pub extern "C" fn parse(input: *const c_char) -> *mut c_char {
+pub extern "C" fn parse(input: *const c_char, namespace: *const c_char) -> *mut c_char {
     let input = unsafe { std::ffi::CStr::from_ptr(input) };
     let input = input.to_str().unwrap();
 
-    let output = crate::parse_out_json(input);
+    let namespace = unsafe { std::ffi::CStr::from_ptr(namespace) };
+    let namespace = namespace.to_str().unwrap();
+
+    let output = crate::parse_out_json(input, namespace);
     let output = std::ffi::CString::new(output).unwrap();
     output.into_raw()
 }
