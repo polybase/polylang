@@ -360,7 +360,7 @@ RootFunction: Function = {
     }
 };
 
-Function: Function = {
+pub Function: Function = {
     <decs:Decorator*> "function" <i: Ident> "(" <pl:ParameterList> ")" <return_type:(":" Type)?> "{" <l:@L> <s:Statement*> <r:@R> "}" => Function {
         name: i,
         decorators: decs,

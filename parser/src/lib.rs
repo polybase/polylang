@@ -20,3 +20,11 @@ pub fn parse_expression(
     let lexer = lexer::Lexer::new(input);
     polylang::ExpressionParser::new().parse(input, lexer)
 }
+
+// temp for compiler
+pub fn parse_function(
+    input: &str,
+) -> Result<ast::Function, ParseError<usize, lexer::Tok, lexer::LexicalError>> {
+    let lexer = lexer::Lexer::new(input);
+    polylang::FunctionParser::new().parse(input, lexer)
+}

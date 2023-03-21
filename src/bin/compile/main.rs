@@ -20,10 +20,13 @@ fn main() {
         }
     }
 
-    let program = polylang::parse(&code).unwrap_or_else(|e| {
+    let mut program = None;
+    let (_, _) = polylang::parse(&code, "namespace", &mut program).unwrap_or_else(|e| {
         eprintln!("{}", e.message);
         std::process::exit(1);
     });
+    let program = program.unwrap();
+
     let (miden_code, abi) =
         polylang::compiler::compile(program, collection_name.as_deref(), &function_name);
     println!("{}", miden_code);

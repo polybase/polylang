@@ -25,7 +25,7 @@ macro_rules! comment {
 
 lazy_static::lazy_static! {
     // TODO: rewrite this in raw instructions for better performance
-    static ref READ_ADVICE_INTO_STRING: ast::Function = crate::polylang::FunctionParser::new().parse(r#"
+    static ref READ_ADVICE_INTO_STRING: ast::Function = polylang_parser::parse_function(r#"
         function readAdviceIntoString(length: number, dataPtr: number): number {
             if (length == 0) return 0;
             let i = 0;
@@ -38,7 +38,7 @@ lazy_static::lazy_static! {
             return length;
         }
     "#).unwrap();
-    static ref READ_ADVICE_STRING: ast::Function = crate::polylang::FunctionParser::new().parse(r#"
+    static ref READ_ADVICE_STRING: ast::Function = polylang_parser::parse_function(r#"
         function readAdviceString(): string {
             let length = readAdvice();
             let dataPtr = dynamicAlloc(length);
@@ -47,7 +47,7 @@ lazy_static::lazy_static! {
         }
     "#).unwrap();
     // TODO: fix early return, so that we can do `if (length == 0) return '0';`
-    static ref UINT32_TO_STRING: ast::Function = crate::polylang::FunctionParser::new().parse(r#"
+    static ref UINT32_TO_STRING: ast::Function = polylang_parser::parse_function(r#"
         function uint32ToString(value: number): string {
             let isZero = value == 0;
 
@@ -79,7 +79,7 @@ lazy_static::lazy_static! {
     "#).unwrap();
     // TODO: rewrite this in raw instructions for better performance
     // TODO: We shouldn't have to copy the current message into a new string, but we do because `addressOf(message)` is always the same. This error surfaces when we try to log in a for or while loop.
-    static ref LOG_STRING: ast::Function = crate::polylang::FunctionParser::new().parse(r#"
+    static ref LOG_STRING: ast::Function = polylang_parser::parse_function(r#"
         function logString(message: string) {
             let currentLog = dynamicAlloc(2);
             writeMemory(currentLog, deref(addressOf(message)));
@@ -1217,10 +1217,17 @@ fn compile_ast_function_call(
 
     let mut return_result = function_compiler
         .memory
-        .allocate_symbol(match function.return_type {
+        .allocate_symbol(match &function.return_type {
             None => Type::PrimitiveType(PrimitiveType::Boolean),
             Some(ast::Type::Number) => Type::PrimitiveType(PrimitiveType::UInt32),
             Some(ast::Type::String) => Type::String,
+            Some(ast::Type::Boolean) => todo!(),
+            Some(ast::Type::Array(_)) => todo!(),
+            Some(ast::Type::Map(_, _)) => todo!(),
+            Some(ast::Type::Object(_)) => todo!(),
+            Some(ast::Type::PublicKey) => todo!(),
+            Some(ast::Type::ForeignRecord { collection }) => todo!(),
+            Some(ast::Type::Bytes) => todo!(),
         });
     for (arg, param) in args.iter().zip(function.parameters.iter()) {
         // We need to make a copy of the arg, because Ident expressions return symbols of variables.
@@ -1925,9 +1932,16 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                         ast::CollectionItem::Field(f) => {
                             collection.fields.push((
                                 f.name.clone(),
-                                match f.type_ {
+                                match &f.type_ {
                                     ast::Type::String => Type::String,
                                     ast::Type::Number => Type::PrimitiveType(PrimitiveType::UInt32),
+                                    ast::Type::Boolean => todo!(),
+                                    ast::Type::Array(_) => todo!(),
+                                    ast::Type::Map(_, _) => todo!(),
+                                    ast::Type::Object(_) => todo!(),
+                                    ast::Type::PublicKey => todo!(),
+                                    ast::Type::ForeignRecord { collection } => todo!(),
+                                    ast::Type::Bytes => todo!(),
                                 },
                             ));
                         }
@@ -2012,10 +2026,17 @@ pub fn compile(
             &function
                 .parameters
                 .iter()
-                .map(|p| match p.type_ {
+                .map(|p| match &p.type_ {
                     ast::ParameterType::String => todo!(),
                     ast::ParameterType::Number => Type::PrimitiveType(PrimitiveType::UInt32),
                     ast::ParameterType::Record => Type::Struct(collection_struct.clone().unwrap()),
+                    ast::ParameterType::Boolean => todo!(),
+                    ast::ParameterType::Array(_) => todo!(),
+                    ast::ParameterType::Map(_, _) => todo!(),
+                    ast::ParameterType::Object(_) => todo!(),
+                    ast::ParameterType::ForeignRecord { collection } => todo!(),
+                    ast::ParameterType::PublicKey => todo!(),
+                    ast::ParameterType::Bytes => todo!(),
                 })
                 .collect::<Vec<_>>(),
         );
