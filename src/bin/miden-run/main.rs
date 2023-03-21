@@ -106,21 +106,22 @@ impl Args {
 fn hash(struct_type: polylang::compiler::Struct, value: &abi::Value) -> Vec<u64> {
     let hasher_program = polylang::compiler::compile_struct_hasher(struct_type);
 
-    let assembler =
-        miden::Assembler::new().with_module_provider(miden_stdlib::StdLibrary::default());
+    let assembler = miden::Assembler::default()
+        .with_library(&miden_stdlib::StdLibrary::default())
+        .expect("Failed to load stdlib");
+
     let program = assembler
         .compile(hasher_program)
         .expect("Failed to compile miden assembly");
 
-    let mut process = miden_processor::Process::new_debug(
-        assembler.kernel(),
-        miden::ProgramInputs::new(&[], &value.serialize(), vec![]).unwrap(),
-    );
-    let execution_result = process
-        .execute(&program)
-        .expect("Failed to execute program");
+    let execution_result = miden::execute(
+        &program,
+        miden::StackInputs::try_from_values(value.serialize()).unwrap(),
+        miden::MemAdviceProvider::from(miden::AdviceInputs::default()),
+    )
+    .unwrap();
 
-    execution_result.stack_outputs(4).to_vec()
+    execution_result.stack_outputs().stack().to_vec()
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -160,29 +161,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("Invalid advice tape"),
     );
     let stack_inputs = miden::StackInputs::try_from_values(stack).unwrap();
-    miden_processor::execute(&program, stack_inputs, advice_provider);
+    let mut last_ok_state = None;
+    let mut err = None;
 
-    let mut process = miden_processor::Process::new_debug(
-        assembler.kernel(),
-        miden::StackInputs::try_from_values(stack).unwrap(),
-        miden::MemAdviceProvider::from(
-            miden::AdviceInputs::default()
-                .with_tape_values(advice_tape)
-                .expect("Invalid advice tape"),
-        ),
-    );
-    let execution_result = process.execute(&program);
-    let (_system, _decoder, stack, _range_checker, chiplets) = process.to_components();
+    for state in miden_processor::execute_iter(&program, stack_inputs, advice_provider) {
+        match state {
+            Ok(state) => {
+                last_ok_state = Some(state);
+            }
+            Err(e) => {
+                err = Some(e);
+            }
+        }
+    }
+
+    let stack = last_ok_state
+        .as_ref()
+        .unwrap()
+        .stack
+        .iter()
+        .map(|x| mont_red_cst(x.inner() as _))
+        .collect::<Vec<_>>();
 
     let get_mem_values = |addr| {
-        chiplets.get_mem_value(0, addr).map(|word| {
-            [
-                mont_red_cst(word[0].inner() as _),
-                mont_red_cst(word[1].inner() as _),
-                mont_red_cst(word[2].inner() as _),
-                mont_red_cst(word[3].inner() as _),
-            ]
-        })
+        last_ok_state
+            .as_ref()
+            .unwrap()
+            .memory
+            .iter()
+            .find(|(a, _)| *a == addr)
+            .map(|(_, word)| {
+                [
+                    mont_red_cst(word[0].inner() as _),
+                    mont_red_cst(word[1].inner() as _),
+                    mont_red_cst(word[2].inner() as _),
+                    mont_red_cst(word[3].inner() as _),
+                ]
+            })
     };
     let get_mem_value = |addr| get_mem_values(addr).map(|word| word[0]);
     let read_string = |len: u64, data_ptr: u64| {
@@ -216,9 +231,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Log: {}", msg);
     }
 
-    match execution_result {
-        Ok(output) => {
-            println!("Output: {:?}", output);
+    match err {
+        None => {
+            println!("Output: {:?}", stack);
 
             if let Some(type_) = args.abi.out_this_type {
                 let value = type_.read(&get_mem_values, args.abi.out_this_addr.unwrap() as _);
@@ -227,8 +242,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             Ok(())
         }
-        Err(miden::ExecutionError::FailedAssertion(_)) => {
-            println!("Output: {:?}", stack.get_outputs());
+        Some(miden::ExecutionError::FailedAssertion(_)) => {
+            println!("Output: {:?}", stack);
 
             // read the error string out from the memory
             let str_len = get_mem_value(1).ok_or_else(|| "Got an error, but no error string")?;
@@ -246,6 +261,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Err(format!("Assertion failed: {}", read_string(str_len, str_data_ptr)).into())
             }
         }
-        Err(e) => Err(format!("Execution error: {:?}", e).into()),
+        Some(e) => Err(format!("Execution error: {:?}", e).into()),
     }
 }

@@ -866,12 +866,12 @@ mod test {
 
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
-            &miden::ProgramInputs::none(),
+            miden::StackInputs::default(),
+            miden::MemAdviceProvider::default(),
         )
-        .unwrap()
-        .program_outputs();
+        .unwrap();
 
-        let stack = outputs.stack_outputs(5);
+        let stack = outputs.stack_outputs().stack();
         assert_eq!(stack, &[4294967294, 2, 1, 0, 0]);
     }
 
@@ -898,11 +898,11 @@ mod test {
 
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
-            &miden::ProgramInputs::none(),
-        )?
-        .program_outputs();
+            miden::StackInputs::default(),
+            miden::MemAdviceProvider::default(),
+        )?;
 
-        let stack = outputs.stack_outputs(1);
+        let stack = outputs.stack_outputs().stack();
 
         Ok(stack[0] as i32)
     }
@@ -959,11 +959,11 @@ mod test {
 
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
-            &miden::ProgramInputs::none(),
-        )?
-        .program_outputs();
+            miden::StackInputs::default(),
+            miden::MemAdviceProvider::default(),
+        )?;
 
-        let stack = outputs.stack_outputs(1);
+        let stack = outputs.stack_outputs().stack();
 
         Ok(stack[0] as i32)
     }
@@ -1016,11 +1016,11 @@ mod test {
 
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
-            &miden::ProgramInputs::none(),
-        )?
-        .program_outputs();
+            miden::StackInputs::default(),
+            miden::MemAdviceProvider::default(),
+        )?;
 
-        let stack = outputs.stack_outputs(1);
+        let stack = outputs.stack_outputs().stack();
 
         Ok(stack[0] as i32)
     }
@@ -1073,11 +1073,11 @@ mod test {
 
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
-            &miden::ProgramInputs::none(),
-        )?
-        .program_outputs();
+            miden::StackInputs::default(),
+            miden::MemAdviceProvider::default(),
+        )?;
 
-        let stack = outputs.stack_outputs(1);
+        let stack = outputs.stack_outputs().stack();
 
         Ok(stack[0] as i32)
     }
@@ -1138,11 +1138,11 @@ mod test {
 
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
-            &miden::ProgramInputs::none(),
-        )?
-        .program_outputs();
+            miden::StackInputs::default(),
+            miden::MemAdviceProvider::default(),
+        )?;
 
-        let stack = outputs.stack_outputs(1);
+        let stack = outputs.stack_outputs().stack();
 
         Ok(stack[0] as i32)
     }
@@ -1228,11 +1228,11 @@ mod test {
 
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
-            &miden::ProgramInputs::none(),
-        )?
-        .program_outputs();
+            miden::StackInputs::default(),
+            miden::MemAdviceProvider::default(),
+        )?;
 
-        let stack = outputs.stack_outputs(1);
+        let stack = outputs.stack_outputs().stack();
 
         Ok(stack[0] as i32)
     }
@@ -1299,11 +1299,11 @@ mod test {
 
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
-            &miden::ProgramInputs::none(),
-        )?
-        .program_outputs();
+            miden::StackInputs::default(),
+            miden::MemAdviceProvider::default(),
+        )?;
 
-        let stack = outputs.stack_outputs(1);
+        let stack = outputs.stack_outputs().stack();
 
         Ok(stack[0] as i32)
     }
@@ -1363,11 +1363,11 @@ mod test {
 
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
-            &miden::ProgramInputs::none(),
-        )?
-        .program_outputs();
+            miden::StackInputs::default(),
+            miden::MemAdviceProvider::default(),
+        )?;
 
-        let stack = outputs.stack_outputs(1);
+        let stack = outputs.stack_outputs().stack();
 
         Ok(stack[0] as i32)
     }
@@ -1422,11 +1422,11 @@ mod test {
 
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
-            &miden::ProgramInputs::none(),
-        )?
-        .program_outputs();
+            miden::StackInputs::default(),
+            miden::MemAdviceProvider::default(),
+        )?;
 
-        let stack = outputs.stack_outputs(1);
+        let stack = outputs.stack_outputs().stack();
 
         Ok(stack[0] as i32)
     }
@@ -1478,11 +1478,11 @@ mod test {
 
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
-            &miden::ProgramInputs::none(),
-        )?
-        .program_outputs();
+            miden::StackInputs::default(),
+            miden::MemAdviceProvider::default(),
+        )?;
 
-        let stack = outputs.stack_outputs(1);
+        let stack = outputs.stack_outputs().stack();
 
         Ok(stack[0] != 0)
     }
