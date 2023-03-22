@@ -5,6 +5,10 @@ set -uo pipefail
 cargo build --release --bin compile 2>/dev/null || { echo "Failed to build compile" && exit 1; }
 # cargo build --release --bin miden-run 2>/dev/null || { echo "Failed to build miden-run" && exit 1; }
 
+declare -A specific_error_counter=()
+success_count=0
+failure_count=0
+
 for file in ./test-collections/*; do
     echo "Processing file: $file" >&2
     code=$(cat "$file")
@@ -20,30 +24,25 @@ for file in ./test-collections/*; do
                 current_collection="$name"
                 ;;
             function)
-                echo "$(tput bold)Compiling $name$(tput sgr0)"
-                ./target/release/compile collection:"$current_collection" function:"$name" <<<"$code"
+                output=$(./target/release/compile collection:"$current_collection" function:"$name" <<<"$code" 2>&1)
                 if [ $? -ne 0 ]; then
-                    echo "Failure"
+                    if [ -z "${specific_error_counter["$output"]+x}" ]; then
+                        specific_error_counter["$output"]=0
+                    fi
+                    specific_error_counter["$output"]=$((specific_error_counter["$output"] + 1))
+                    failure_count=$((failure_count + 1))
                 else
-                    echo "Success"
+                    success_count=$((success_count + 1))
                 fi
                 ;;
         esac
     done
-done | {
-    success_count=0
-    failure_count=0
-    while read -r line; do
-        case "$line" in
-            Success)
-                success_count=$((success_count + 1))
-                ;;
-            Failure)
-                failure_count=$((failure_count + 1))
-                ;;
-        esac
+done
 
-        echo "Successes: $success_count"
-        echo "Failures:  $failure_count"
-    done
-}
+echo "Successes: $success_count"
+echo "Failures:  $failure_count"
+
+echo "Top errors:"
+for error in "${!specific_error_counter[@]}"; do
+    echo "  ${specific_error_counter["$error"]} - $error"
+done | sort -nr

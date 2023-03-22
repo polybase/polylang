@@ -1936,11 +1936,17 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                                     ast::Type::String => Type::String,
                                     ast::Type::Number => Type::PrimitiveType(PrimitiveType::UInt32),
                                     ast::Type::Boolean => todo!(),
-                                    ast::Type::Array(_) => todo!(),
-                                    ast::Type::Map(_, _) => todo!(),
+                                    ast::Type::Array(_) => {
+                                        todo!("Array fields are not implemented")
+                                    }
+                                    ast::Type::Map(_, _) => todo!("Map fields are not implemented"),
                                     ast::Type::Object(_) => todo!(),
-                                    ast::Type::PublicKey => todo!(),
-                                    ast::Type::ForeignRecord { collection } => todo!(),
+                                    ast::Type::PublicKey => {
+                                        todo!("PublicKey fields are not implemented")
+                                    }
+                                    ast::Type::ForeignRecord { collection } => {
+                                        todo!("ForeignRecord fields are not implemented")
+                                    }
                                     ast::Type::Bytes => todo!(),
                                 },
                             ));
@@ -2027,7 +2033,9 @@ pub fn compile(
                 .parameters
                 .iter()
                 .map(|p| match &p.type_ {
-                    ast::ParameterType::String => todo!(),
+                    ast::ParameterType::String => {
+                        todo!("String parameters in functions are not implemented")
+                    }
                     ast::ParameterType::Number => Type::PrimitiveType(PrimitiveType::UInt32),
                     ast::ParameterType::Record => Type::Struct(collection_struct.clone().unwrap()),
                     ast::ParameterType::Boolean => todo!(),
