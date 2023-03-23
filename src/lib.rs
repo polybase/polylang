@@ -997,6 +997,74 @@ function x() {
         );
     }
 
+    #[test]
+    fn test_expr_object_empty() {
+        let code = "{}";
+        let expr = polylang_parser::parse_expression(code).unwrap();
+        assert_eq!(
+            expr,
+            ast::Expression::Object(ast::Object { fields: vec![] })
+        );
+    }
+
+    #[test]
+    fn test_object() {
+        let code = r#"
+            collection Test {
+                field: { a?: number; };
+
+                constructor () {
+                    self.field = {};
+                }
+            }
+        "#;
+
+        let mut program = None;
+        let (program, _) = parse(code, "", &mut program).unwrap();
+        assert_eq!(program.nodes.len(), 1);
+
+        let collection = match &program.nodes[0] {
+            ast::RootNode::Collection(c) => c,
+            _ => panic!("expected collection"),
+        };
+
+        assert_eq!(collection.items.len(), 2);
+
+        let field = match &collection.items[0] {
+            ast::CollectionItem::Field(f) => f,
+            _ => panic!("expected field"),
+        };
+
+        assert_eq!(field.name, "field");
+        assert_eq!(
+            field.type_,
+            ast::Type::Object(vec![ast::Field {
+                name: "a".to_string(),
+                type_: ast::Type::Number,
+                required: false,
+                decorators: vec![],
+            }])
+        );
+
+        let function = match &collection.items[1] {
+            ast::CollectionItem::Function(f) => f,
+            _ => panic!("expected function"),
+        };
+
+        assert_eq!(function.name, "constructor");
+        assert_eq!(function.parameters.len(), 0);
+
+        let (_l, r) = match &function.statements[0] {
+            ast::Statement::Expression(ast::Expression::Assign(l, r)) => (l, r),
+            _ => panic!("expected assignment"),
+        };
+
+        assert_eq!(
+            r.as_ref(),
+            &ast::Expression::Object(ast::Object { fields: vec![] })
+        );
+    }
+
     /// Tests that collections from the filesystem directory 'test-collections' parse without an error
     #[test]
     fn test_fs_collections() {
