@@ -10,6 +10,12 @@ success_count=0
 failure_count=0
 
 for file in ./test-collections/*; do
+    # Skip this user's schemas. They have a lot of errors unrelated to the compiler.
+    if [[ $file =~ ./test-collections/pk-0x86b28d5590a407110f9cac95fd554cd4fc5bd611d6d88aed5fdbeee519f5792411d128cabf54b3035c2bf3f14c50e37c3cfc98523c2243b42cd394da42ca48f8-* ]]; then
+        echo "Skipping file: $file" >&2
+        continue
+    fi
+
     echo "Processing file: $file" >&2
     code=$(cat "$file")
 
@@ -30,6 +36,7 @@ for file in ./test-collections/*; do
                         specific_error_counter["$output"]=0
                     fi
                     specific_error_counter["$output"]=$((specific_error_counter["$output"] + 1))
+                    echo "Failed to compile $current_collection:$name - $output"
                     failure_count=$((failure_count + 1))
                 else
                     success_count=$((success_count + 1))
