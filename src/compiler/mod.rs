@@ -110,6 +110,35 @@ lazy_static::lazy_static! {
             writeMemory(5, currentLog);
         }
     "#).unwrap();
+    static ref PUBLIC_KEY_TO_HEX: ast::Function = polylang_parser::parse_function(r#"
+        function publicKeyToHex(publicKey: PublicKey): string {
+            let length = 2 + 64 * 2;
+            let dataPtr = dynamicAlloc(length);
+
+            // Write the 0x prefix
+            writeMemory(dataPtr, 48);
+            writeMemory(dataPtr + 1, 120);
+
+            let i = 0;
+            let extraPtr = deref(addressOf(publicKey) + 4);
+            let startMem = dataPtr + 2;
+            while (i < 32) {
+                let pos = i * 2;
+                let byte = deref(extraPtr + i);
+                let firstDigit = byte / 16;
+                let secondDigit = byte % 16;
+                writeMemory(startMem + pos, firstDigit + 48);
+                writeMemory(startMem + pos + 1, secondDigit + 48);
+                // TODO: secondDigit values are correct,
+                // but logging out the final string outputs:
+                // 0x4<><?533>63531517:8;;76>03>6966<=4;3<208919>0:<<1558873:34773;4<5>:19>35397806824<00=0<:=7:=315>11:3:51:;2=1;1>:2;?467?:3;1<:35
+                // The bug might be unrelated to this function.
+                i = i + 1;
+            }
+
+            return unsafeToString(length, dataPtr);
+        }
+    "#).unwrap();
     static ref BUILTINS_SCOPE: &'static Scope<'static, 'static> = {
         let mut scope = Scope::new();
 
@@ -709,6 +738,17 @@ lazy_static::lazy_static! {
 
             result
         }))));
+
+        builtins.push((
+            "publicKeyToHex".to_string(),
+            Function::Builtin(Box::new(&|compiler, _, args| {
+                let old_root_scope = compiler.root_scope;
+                compiler.root_scope = &BUILTINS_SCOPE;
+                let result = compile_ast_function_call(&PUBLIC_KEY_TO_HEX, compiler, args, None);
+                compiler.root_scope = old_root_scope;
+                result
+            })),
+        ));
 
         Box::leak(Box::new(builtins))
     };
