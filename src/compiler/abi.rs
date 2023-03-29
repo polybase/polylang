@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use super::{PrimitiveType, Struct, Type};
+use base64::Engine;
+
+use super::{publickey, PrimitiveType, Struct, Type};
 
 type MemoryReader<'a> = dyn Fn(u64) -> Option<[u64; 4]> + 'a;
 
@@ -16,6 +18,7 @@ pub enum Value {
     Hash([u64; 4]),
     Int32(i32),
     String(String),
+    PublicKey(publickey::Key),
     StructValue(Vec<(String, Value)>),
 }
 
@@ -78,6 +81,45 @@ impl TypeReader for Type {
 
                 Ok(Value::String(string))
             }
+            Type::PublicKey => {
+                let kty = reader(addr)
+                    .map(|x| x[0])
+                    .ok_or("invalid address for public key kty")?;
+                let crv = reader(addr + 1)
+                    .map(|x| x[0])
+                    .ok_or("invalid address for public key crv")?;
+                let alg = reader(addr + 2)
+                    .map(|x| x[0])
+                    .ok_or("invalid address for public key alg")?;
+                let use_ = reader(addr + 3)
+                    .map(|x| x[0])
+                    .ok_or("invalid address for public key use")?;
+                let extra_ptr = reader(addr + 4)
+                    .map(|x| x[0])
+                    .ok_or("invalid address for public key extra ptr")?;
+
+                let mut extra_bytes = vec![];
+                for i in 0..64 {
+                    let byte = reader(extra_ptr + i)
+                        .map(|x| x[0])
+                        .ok_or("invalid address for public key extra byte")?;
+                    extra_bytes.push(byte as u8);
+                }
+
+                let x = extra_bytes[0..32].try_into()?;
+                let y = extra_bytes[32..64].try_into()?;
+
+                let key = publickey::Key {
+                    kty: (kty as u8).into(),
+                    crv: (crv as u8).into(),
+                    alg: (alg as u8).into(),
+                    use_: (use_ as u8).into(),
+                    x,
+                    y,
+                };
+
+                Ok(Value::PublicKey(key))
+            }
         }
     }
 }
@@ -125,6 +167,33 @@ impl Parser for Type {
                 Ok(Value::Hash(hash))
             }
             Type::String => Ok(Value::String(value.to_string())),
+            Type::PublicKey => {
+                let mut values = value.split(',');
+                let kty = values.next().ok_or("missing kty")?;
+                let crv = values.next().ok_or("missing crv")?;
+                let alg = values.next().ok_or("missing alg")?;
+                let use_ = values.next().ok_or("missing use")?;
+                let x_base64 = values.next().ok_or("missing x")?;
+                let y_base64 = values.next().ok_or("missing y")?;
+
+                let x = base64::engine::general_purpose::URL_SAFE.decode(x_base64)?;
+                let y = base64::engine::general_purpose::URL_SAFE.decode(y_base64)?;
+
+                let mut extra_bytes = vec![];
+                extra_bytes.extend_from_slice(&x);
+                extra_bytes.extend_from_slice(&y);
+
+                let key = publickey::Key {
+                    kty: kty.parse().map_err(|_| "invalid kty")?,
+                    crv: crv.parse().map_err(|_| "invalid crv")?,
+                    alg: alg.parse().map_err(|_| "invalid alg")?,
+                    use_: use_.parse().map_err(|_| "invalid use")?,
+                    x: x.try_into().map_err(|_| "invalid x")?,
+                    y: y.try_into().map_err(|_| "invalid y")?,
+                };
+
+                Ok(Value::PublicKey(key))
+            }
         }
     }
 }
@@ -141,6 +210,16 @@ impl Value {
                 .into_iter()
                 .chain(s.bytes().map(|b| b as u64))
                 .collect(),
+            Value::PublicKey(k) => vec![
+                u8::from(k.kty) as u64,
+                u8::from(k.crv) as u64,
+                u8::from(k.alg) as u64,
+                u8::from(k.use_) as u64,
+            ]
+            .into_iter()
+            .chain(k.x.iter().map(|b| *b as u64))
+            .chain(k.y.iter().map(|b| *b as u64))
+            .collect(),
             Value::StructValue(sv) => sv
                 .iter()
                 .flat_map(|(_, v)| v.serialize())

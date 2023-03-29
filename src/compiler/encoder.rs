@@ -35,7 +35,7 @@ pub(crate) enum Instruction<'a> {
     MemLoad(Option<u32>),       // mem_load.1234
     MemLoadW(Option<u32>),      // mem_loadw.1234
     AdvPush(u32),               // adv_push.1234
-    Rphash,                     // rphash
+    HMerge,                     // hmerge
     While {
         condition: Vec<Instruction<'a>>,
         body: Vec<Instruction<'a>>,
@@ -106,7 +106,7 @@ impl Instruction<'_> {
             Instruction::U32WrappingSub => write_indent!(f, "u32wrapping_sub"),
             Instruction::U32WrappingMul => write_indent!(f, "u32wrapping_mul"),
             Instruction::Exec(name) => write_indent!(f, "exec.{}", name),
-            Instruction::Rphash => write_indent!(f, "rphash"),
+            Instruction::HMerge => write_indent!(f, "hmerge"),
             Instruction::While { condition, body } => {
                 for instruction in condition {
                     instruction.encode(f, depth)?;

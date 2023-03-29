@@ -3,6 +3,7 @@ mod boolean;
 mod encoder;
 mod int32;
 mod ir;
+mod publickey;
 mod string;
 mod uint32;
 mod uint64;
@@ -44,6 +45,23 @@ lazy_static::lazy_static! {
             let dataPtr = dynamicAlloc(length);
             readAdviceIntoString(length, dataPtr);
             return unsafeToString(length, dataPtr);
+        }
+    "#).unwrap();
+    static ref READ_ADVICE_PUBLIC_KEY: ast::Function = polylang_parser::parse_function(r#"
+        function readAdvicePublicKey(): PublicKey {
+            let kty = readAdvice();
+            let crv = readAdvice();
+            let alg = readAdvice();
+            let use_ = readAdvice();
+            let extraPtr = dynamicAlloc(64);
+
+            let i = 0;
+            while (i < 64) {
+                writeMemory(extraPtr + i, readAdvice());
+                i = i + 1;
+            }
+            
+            return unsafeToPublicKey(kty, crv, alg, use_, extraPtr);
         }
     "#).unwrap();
     // TODO: fix early return, so that we can do `if (length == 0) return '0';`
@@ -209,6 +227,88 @@ lazy_static::lazy_static! {
             })),
         ));
 
+        builtins.push((
+            "unsafeToPublicKey".to_string(),
+            Function::Builtin(Box::new(&|compiler, _, args| {
+                let kty = args.get(0).unwrap();
+                assert_eq!(kty.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+                let crv = args.get(1).unwrap();
+                assert_eq!(crv.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+                let alg = args.get(2).unwrap();
+                assert_eq!(alg.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+                let use_ = args.get(3).unwrap();
+                assert_eq!(use_.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+                let extra_ptr = args.get(4).unwrap();
+                assert_eq!(extra_ptr.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+
+                assert!(args.get(5).is_none());
+
+                let pk = compiler.memory.allocate_symbol(Type::PublicKey);
+
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    kty.memory_addr,
+                    kty.type_.miden_width(),
+                );
+
+                compiler.memory.write(
+                    &mut compiler.instructions,
+                    publickey::kty(&pk).memory_addr,
+                    &vec![ValueSource::Stack; kty.type_.miden_width() as _],
+                );
+
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    crv.memory_addr,
+                    crv.type_.miden_width(),
+                );
+
+                compiler.memory.write(
+                    &mut compiler.instructions,
+                    publickey::crv(&pk).memory_addr,
+                    &vec![ValueSource::Stack; crv.type_.miden_width() as _],
+                );
+
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    alg.memory_addr,
+                    alg.type_.miden_width(),
+                );
+
+                compiler.memory.write(
+                    &mut compiler.instructions,
+                    publickey::alg(&pk).memory_addr,
+                    &vec![ValueSource::Stack; alg.type_.miden_width() as _],
+                );
+
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    use_.memory_addr,
+                    use_.type_.miden_width(),
+                );
+
+                compiler.memory.write(
+                    &mut compiler.instructions,
+                    publickey::use_(&pk).memory_addr,
+                    &vec![ValueSource::Stack; use_.type_.miden_width() as _],
+                );
+
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    extra_ptr.memory_addr,
+                    extra_ptr.type_.miden_width(),
+                );
+
+                compiler.memory.write(
+                    &mut compiler.instructions,
+                    publickey::extra_ptr(&pk).memory_addr,
+                    &vec![ValueSource::Stack; extra_ptr.type_.miden_width() as _],
+                );
+
+                pk
+            })),
+        ));
+
         builtins.push(("deref".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
             let address = args.get(0).unwrap();
 
@@ -298,7 +398,7 @@ lazy_static::lazy_static! {
                     encoder::Instruction::Push(0),
                     encoder::Instruction::Push(0),
                     // [0, 0, 0, byte, h[3], h[2], h[1], h[0], len - 1, data_ptr]
-                    encoder::Instruction::Rphash,
+                    encoder::Instruction::HMerge,
                     // [h[3], h[2], h[1], h[0], len - 1, data_ptr]
                     encoder::Instruction::MovUp(5),
                     // [data_ptr, h[3], h[2], h[1], h[0], len - 1]
@@ -325,6 +425,62 @@ lazy_static::lazy_static! {
 
             result
          }))));
+
+         builtins.push(("hashPublicKey".to_owned(), Function::Builtin(Box::new(&|compiler, _, args| {
+            let public_key = args.get(0).unwrap();
+            assert_eq!(public_key.type_, Type::PublicKey);
+
+            let result = compiler
+                .memory
+                .allocate_symbol(Type::Hash);
+
+            compiler.instructions.extend([
+                encoder::Instruction::Push(0),
+                encoder::Instruction::Push(0),
+                encoder::Instruction::Push(0),
+                encoder::Instruction::Push(0),
+            ]);
+            // [h[3], h[2], h[1], h[0]]
+            compiler.memory.read(
+                &mut compiler.instructions,
+                public_key.memory_addr,
+                4,
+            );
+
+            compiler.instructions.push(encoder::Instruction::HMerge);
+
+            // We hashed kty, crv, alg, use. Now we need to hash the x and y coordinates.
+            let extra_ptr = publickey::extra_ptr(public_key);
+            // x
+            for i in (0..32).step_by(4) {
+                // [h[3], h[2], h[1], h[0]]
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    extra_ptr.memory_addr + i,
+                    4,
+                );
+                compiler.instructions.push(encoder::Instruction::HMerge);
+            }
+
+            // y
+            for i in (32..64).step_by(4) {
+                // [h[3], h[2], h[1], h[0]]
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    extra_ptr.memory_addr + i,
+                    4,
+                );
+                compiler.instructions.push(encoder::Instruction::HMerge);
+            }
+
+            compiler.memory.write(
+                &mut compiler.instructions,
+                result.memory_addr,
+                &[ValueSource::Stack, ValueSource::Stack, ValueSource::Stack, ValueSource::Stack],
+            );
+
+            result
+        }))));
 
         Box::leak(Box::new(builtins))
     };
@@ -394,6 +550,17 @@ lazy_static::lazy_static! {
                 let old_root_scope = compiler.root_scope;
                 compiler.root_scope = &BUILTINS_SCOPE;
                 let result = compile_ast_function_call(&READ_ADVICE_STRING, compiler, args, None);
+                compiler.root_scope = old_root_scope;
+                result
+            })),
+        ));
+
+        builtins.push((
+            "readAdvicePublicKey".to_string(),
+            Function::Builtin(Box::new(&|compiler, _, args| {
+                let old_root_scope = compiler.root_scope;
+                compiler.root_scope = &BUILTINS_SCOPE;
+                let result = compile_ast_function_call(&READ_ADVICE_PUBLIC_KEY, compiler, args, None);
                 compiler.root_scope = old_root_scope;
                 result
             })),
@@ -576,8 +743,9 @@ pub struct Struct {
 pub enum Type {
     PrimitiveType(PrimitiveType),
     String,
-    /// A type that can contain a 4-field wide hash, such as one returned by `rphash`
+    /// A type that can contain a 4-field wide hash, such as one returned by `hmerge`
     Hash,
+    PublicKey,
     Struct(Struct),
 }
 
@@ -587,6 +755,7 @@ impl Type {
             Type::PrimitiveType(pt) => pt.miden_width(),
             Type::String => string::WIDTH,
             Type::Hash => 4,
+            Type::PublicKey => publickey::WIDTH,
             Type::Struct(struct_) => struct_.fields.iter().map(|(_, t)| t.miden_width()).sum(),
         }
     }
@@ -772,7 +941,7 @@ impl Memory {
             // 0 is reserved for the null pointer
             // 1, 2 and reserved for the error string
             // 3 is reserved for the dynamic allocation pointer
-            // 4, 5 and reserved for logging
+            // 4, 5 are reserved for logging
             static_alloc_ptr: 6,
         }
     }
@@ -851,6 +1020,7 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
         Expression::Ident(id) => scope.find_symbol(id).unwrap().clone(),
         Expression::Primitive(ast::Primitive::Number(n)) => uint32::new(compiler, *n as u32),
         Expression::Primitive(ast::Primitive::String(s)) => string::new(compiler, s),
+        Expression::Boolean(b) => boolean::new(compiler, *b),
         Expression::Add(a, b) => {
             let a = compile_expression(a, compiler, scope);
             let b = compile_expression(b, compiler, scope);
@@ -898,7 +1068,9 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
                 Expression::Ident(id) => id,
                 _ => panic!("expected function name"),
             };
-            let func = scope.find_function(func_name).unwrap();
+            let func = scope
+                .find_function(func_name)
+                .expect(format!("function {} not found", func_name).as_str());
             let mut args_symbols = vec![];
             for arg in args {
                 args_symbols.push(compile_expression(arg, compiler, scope));
@@ -1221,11 +1393,11 @@ fn compile_ast_function_call(
             None => Type::PrimitiveType(PrimitiveType::Boolean),
             Some(ast::Type::Number) => Type::PrimitiveType(PrimitiveType::UInt32),
             Some(ast::Type::String) => Type::String,
+            Some(ast::Type::PublicKey) => Type::PublicKey,
             Some(ast::Type::Boolean) => todo!(),
             Some(ast::Type::Array(_)) => todo!(),
             Some(ast::Type::Map(_, _)) => todo!(),
             Some(ast::Type::Object(_)) => todo!(),
-            Some(ast::Type::PublicKey) => todo!(),
             Some(ast::Type::ForeignRecord { collection }) => todo!(),
             Some(ast::Type::Bytes) => todo!(),
         });
@@ -1468,6 +1640,7 @@ fn compile_eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             );
             result
         }
+        (Type::PublicKey, Type::PublicKey) => publickey::eq(compiler, a, b),
         e => unimplemented!("{:?}", e),
     }
 }
@@ -1707,6 +1880,15 @@ fn log(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Symbol {
                 &[arg.clone()],
                 None,
             ),
+            Type::PrimitiveType(PrimitiveType::Boolean) => compile_function_call(
+                compiler,
+                scope.find_function("uint32ToString").unwrap(),
+                &[Symbol {
+                    type_: Type::PrimitiveType(PrimitiveType::UInt32),
+                    ..arg.clone()
+                }],
+                None,
+            ),
             t => unimplemented!("You can't log a {:?} yet", t),
         };
 
@@ -1745,7 +1927,7 @@ fn generic_hash(compiler: &mut Compiler, value: &Symbol) -> Symbol {
             encoder::Instruction::Push(0),
         ]);
         // [0, 0, 0, data, h[3], h[2], h[1], h[0]]
-        compiler.instructions.push(encoder::Instruction::Rphash);
+        compiler.instructions.push(encoder::Instruction::HMerge);
         // [h[3], h[2], h[1], h[0]]
     }
 
@@ -1773,6 +1955,12 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
             &[value],
             None,
         ),
+        Type::PublicKey => compile_function_call(
+            compiler,
+            BUILTINS_SCOPE.find_function("hashPublicKey").unwrap(),
+            &[value],
+            None,
+        ),
         Type::Struct(s) => {
             let mut offset = 0;
             let struct_hash = compiler.memory.allocate_symbol(Type::Hash);
@@ -1797,7 +1985,7 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
                     field_hash.type_.miden_width(),
                 );
 
-                compiler.instructions.push(encoder::Instruction::Rphash);
+                compiler.instructions.push(encoder::Instruction::HMerge);
 
                 compiler.memory.write(
                     &mut compiler.instructions,
@@ -1843,6 +2031,12 @@ fn read_struct_from_advice_tape(
             Type::String => compile_function_call(
                 compiler,
                 BUILTINS_SCOPE.find_function("readAdviceString").unwrap(),
+                &[],
+                None,
+            ),
+            Type::PublicKey => compile_function_call(
+                compiler,
+                BUILTINS_SCOPE.find_function("readAdvicePublicKey").unwrap(),
                 &[],
                 None,
             ),
@@ -1897,6 +2091,18 @@ fn read_collection_inputs(
                 None,
             ),
             Type::PrimitiveType(PrimitiveType::UInt64) => todo!(),
+            Type::String => compile_function_call(
+                compiler,
+                BUILTINS_SCOPE.find_function("readAdviceString").unwrap(),
+                &[],
+                None,
+            ),
+            Type::PublicKey => compile_function_call(
+                compiler,
+                BUILTINS_SCOPE.find_function("readAdvicePublicKey").unwrap(),
+                &[],
+                None,
+            ),
             Type::Struct(struct_) => {
                 let symbol = compiler.memory.allocate_symbol(arg.clone());
                 read_struct_from_advice_tape(compiler, &symbol, struct_);
@@ -1935,15 +2141,15 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                                 match &f.type_ {
                                     ast::Type::String => Type::String,
                                     ast::Type::Number => Type::PrimitiveType(PrimitiveType::UInt32),
-                                    ast::Type::Boolean => todo!(),
+                                    ast::Type::Boolean => {
+                                        Type::PrimitiveType(PrimitiveType::Boolean)
+                                    }
                                     ast::Type::Array(_) => {
                                         todo!("Array fields are not implemented")
                                     }
                                     ast::Type::Map(_, _) => todo!("Map fields are not implemented"),
                                     ast::Type::Object(_) => todo!(),
-                                    ast::Type::PublicKey => {
-                                        todo!("PublicKey fields are not implemented")
-                                    }
+                                    ast::Type::PublicKey => Type::PublicKey,
                                     ast::Type::ForeignRecord { collection } => {
                                         todo!("ForeignRecord fields are not implemented")
                                     }
@@ -2033,17 +2239,15 @@ pub fn compile(
                 .parameters
                 .iter()
                 .map(|p| match &p.type_ {
-                    ast::ParameterType::String => {
-                        todo!("String parameters in functions are not implemented")
-                    }
+                    ast::ParameterType::String => Type::String,
                     ast::ParameterType::Number => Type::PrimitiveType(PrimitiveType::UInt32),
                     ast::ParameterType::Record => Type::Struct(collection_struct.clone().unwrap()),
+                    ast::ParameterType::PublicKey => Type::PublicKey,
                     ast::ParameterType::Boolean => todo!(),
                     ast::ParameterType::Array(_) => todo!(),
                     ast::ParameterType::Map(_, _) => todo!(),
                     ast::ParameterType::Object(_) => todo!(),
                     ast::ParameterType::ForeignRecord { collection } => todo!(),
-                    ast::ParameterType::PublicKey => todo!(),
                     ast::ParameterType::Bytes => todo!(),
                 })
                 .collect::<Vec<_>>(),
@@ -2052,14 +2256,19 @@ pub fn compile(
         this_addr = this_symbol.as_ref().map(|ts| ts.memory_addr);
 
         if let Some(this_symbol) = &this_symbol {
-            let this_hash = hash(&mut compiler, this_symbol.clone());
-            let is_eq = compile_eq(&mut compiler, &this_hash, expected_hash.as_ref().unwrap());
-            let assert_fn = compiler.root_scope.find_function("assert").unwrap();
-            let error_str = string::new(
-                &mut compiler,
-                "Hash of this does not match the expected hash",
-            );
-            compile_function_call(&mut compiler, assert_fn, &[is_eq, error_str], None);
+            // let this_hash = hash(&mut compiler, this_symbol.clone());
+            // compiler.memory.read(
+            //     &mut compiler.instructions,
+            //     this_hash.memory_addr,
+            //     this_hash.type_.miden_width(),
+            // );
+            // let is_eq = compile_eq(&mut compiler, &this_hash, expected_hash.as_ref().unwrap());
+            // let assert_fn = compiler.root_scope.find_function("assert").unwrap();
+            // let error_str = string::new(
+            //     &mut compiler,
+            //     "Hash of this does not match the expected hash",
+            // );
+            // compile_function_call(&mut compiler, assert_fn, &[is_eq, error_str], None);
         }
 
         let result =

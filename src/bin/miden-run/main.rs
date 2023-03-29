@@ -116,8 +116,12 @@ fn hash(struct_type: polylang::compiler::Struct, value: &abi::Value) -> Vec<u64>
 
     let execution_result = miden::execute(
         &program,
-        miden::StackInputs::try_from_values(value.serialize()).unwrap(),
-        miden::MemAdviceProvider::from(miden::AdviceInputs::default()),
+        miden::StackInputs::default(),
+        miden::MemAdviceProvider::from(
+            miden::AdviceInputs::default()
+                .with_tape_values(value.serialize().into_iter())
+                .unwrap(),
+        ),
     )
     .unwrap();
 
@@ -139,9 +143,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             },
             &this_value,
         );
-        eprintln!("Hash of input this: {:?}", this_hash);
+        eprintln!(
+            "Hash of input this: {:?}",
+            this_hash.iter().take(4).rev().collect::<Vec<_>>()
+        );
 
-        stack.extend(this_hash.iter().rev());
+        stack.extend(this_hash.iter().take(4).rev());
     }
     advice_tape.extend(args.advice_tape);
 
