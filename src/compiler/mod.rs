@@ -1,5 +1,6 @@
 pub mod abi;
 mod boolean;
+mod bytes;
 mod encoder;
 mod int32;
 mod ir;
@@ -45,6 +46,20 @@ lazy_static::lazy_static! {
             let dataPtr = dynamicAlloc(length);
             readAdviceIntoString(length, dataPtr);
             return unsafeToString(length, dataPtr);
+        }
+    "#).unwrap();
+    static ref READ_ADVICE_BYTES: ast::Function = polylang_parser::parse_function(r#"
+        function readAdviceBytes(): bytes {
+            let length = readAdvice();
+            let dataPtr = dynamicAlloc(length);
+
+            let i = 0;
+            while (i < length) {
+                writeMemory(dataPtr + i, readAdvice());
+                i = i + 1;
+            }
+
+            return unsafeToBytes(length, dataPtr);
         }
     "#).unwrap();
     static ref READ_ADVICE_PUBLIC_KEY: ast::Function = polylang_parser::parse_function(r#"
@@ -257,6 +272,45 @@ lazy_static::lazy_static! {
         ));
 
         builtins.push((
+            "unsafeToBytes".to_string(),
+            Function::Builtin(Box::new(&|compiler, _, args| {
+                let length = args.get(0).unwrap();
+                let address_ptr = args.get(1).unwrap();
+
+                assert_eq!(length.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+                assert_eq!(address_ptr.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+
+                let two = uint32::new(compiler, 2);
+                let mut s = dynamic_alloc(compiler, &[two]);
+                s.type_ = Type::Bytes;
+
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    length.memory_addr,
+                    length.type_.miden_width(),
+                );
+                compiler.memory.write(
+                    &mut compiler.instructions,
+                    string::length(&s).memory_addr,
+                    &vec![ValueSource::Stack; length.type_.miden_width() as _],
+                );
+
+                compiler.memory.read(
+                    &mut compiler.instructions,
+                    address_ptr.memory_addr,
+                    address_ptr.type_.miden_width(),
+                );
+                compiler.memory.write(
+                    &mut compiler.instructions,
+                    string::data_ptr(&s).memory_addr,
+                    &vec![ValueSource::Stack; address_ptr.type_.miden_width() as _],
+                );
+
+                s
+            })),
+        ));
+
+        builtins.push((
             "unsafeToPublicKey".to_string(),
             Function::Builtin(Box::new(&|compiler, _, args| {
                 let kty = args.get(0).unwrap();
@@ -371,9 +425,9 @@ lazy_static::lazy_static! {
          }))));
 
 
-        builtins.push(("hashString".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
+        let hash_string = Function::Builtin(Box::new(&|compiler, _, args| {
             let string = args.get(0).unwrap();
-            assert_eq!(string.type_, Type::String);
+            assert!(matches!(string.type_, Type::String | Type::Bytes));
 
             let result = compiler
                 .memory
@@ -453,7 +507,13 @@ lazy_static::lazy_static! {
             );
 
             result
-         }))));
+         }));
+
+         builtins.push(("hashString".to_string(), hash_string.clone()));
+
+         // bytes have the same layout as strings,
+         // so we can reuse the hashing function
+         builtins.push(("hashBytes".to_owned(), hash_string.clone()));
 
          builtins.push(("hashPublicKey".to_owned(), Function::Builtin(Box::new(&|compiler, _, args| {
             let public_key = args.get(0).unwrap();
@@ -579,6 +639,17 @@ lazy_static::lazy_static! {
                 let old_root_scope = compiler.root_scope;
                 compiler.root_scope = &BUILTINS_SCOPE;
                 let result = compile_ast_function_call(&READ_ADVICE_STRING, compiler, args, None);
+                compiler.root_scope = old_root_scope;
+                result
+            })),
+        ));
+
+        builtins.push((
+            "readAdviceBytes".to_string(),
+            Function::Builtin(Box::new(&|compiler, _, args| {
+                let old_root_scope = compiler.root_scope;
+                compiler.root_scope = &BUILTINS_SCOPE;
+                let result = compile_ast_function_call(&READ_ADVICE_BYTES, compiler, args, None);
                 compiler.root_scope = old_root_scope;
                 result
             })),
@@ -783,6 +854,7 @@ pub struct Struct {
 pub enum Type {
     PrimitiveType(PrimitiveType),
     String,
+    Bytes,
     /// A type that can contain a 4-field wide hash, such as one returned by `hmerge`
     Hash,
     PublicKey,
@@ -794,6 +866,7 @@ impl Type {
         match self {
             Type::PrimitiveType(pt) => pt.miden_width(),
             Type::String => string::WIDTH,
+            Type::Bytes => bytes::WIDTH,
             Type::Hash => 4,
             Type::PublicKey => publickey::WIDTH,
             Type::Struct(struct_) => struct_.fields.iter().map(|(_, t)| t.miden_width()).sum(),
@@ -1434,12 +1507,12 @@ fn compile_ast_function_call(
             Some(ast::Type::Number) => Type::PrimitiveType(PrimitiveType::UInt32),
             Some(ast::Type::String) => Type::String,
             Some(ast::Type::PublicKey) => Type::PublicKey,
+            Some(ast::Type::Bytes) => Type::Bytes,
             Some(ast::Type::Boolean) => todo!(),
             Some(ast::Type::Array(_)) => todo!(),
             Some(ast::Type::Map(_, _)) => todo!(),
             Some(ast::Type::Object(_)) => todo!(),
             Some(ast::Type::ForeignRecord { collection }) => todo!(),
-            Some(ast::Type::Bytes) => todo!(),
         });
     for (arg, param) in args.iter().zip(function.parameters.iter()) {
         // We need to make a copy of the arg, because Ident expressions return symbols of variables.
@@ -1995,6 +2068,12 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
             &[value],
             None,
         ),
+        Type::Bytes => compile_function_call(
+            compiler,
+            BUILTINS_SCOPE.find_function("hashBytes").unwrap(),
+            &[value],
+            None,
+        ),
         Type::PublicKey => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("hashPublicKey").unwrap(),
@@ -2074,6 +2153,12 @@ fn read_struct_from_advice_tape(
                 &[],
                 None,
             ),
+            Type::Bytes => compile_function_call(
+                compiler,
+                BUILTINS_SCOPE.find_function("readAdviceBytes").unwrap(),
+                &[],
+                None,
+            ),
             Type::PublicKey => compile_function_call(
                 compiler,
                 BUILTINS_SCOPE.find_function("readAdvicePublicKey").unwrap(),
@@ -2137,6 +2222,12 @@ fn read_collection_inputs(
                 &[],
                 None,
             ),
+            Type::Bytes => compile_function_call(
+                compiler,
+                BUILTINS_SCOPE.find_function("readAdviceBytes").unwrap(),
+                &[],
+                None,
+            ),
             Type::PublicKey => compile_function_call(
                 compiler,
                 BUILTINS_SCOPE.find_function("readAdvicePublicKey").unwrap(),
@@ -2184,16 +2275,16 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                                     ast::Type::Boolean => {
                                         Type::PrimitiveType(PrimitiveType::Boolean)
                                     }
+                                    ast::Type::Bytes => Type::Bytes,
+                                    ast::Type::PublicKey => Type::PublicKey,
                                     ast::Type::Array(_) => {
                                         todo!("Array fields are not implemented")
                                     }
                                     ast::Type::Map(_, _) => todo!("Map fields are not implemented"),
                                     ast::Type::Object(_) => todo!(),
-                                    ast::Type::PublicKey => Type::PublicKey,
                                     ast::Type::ForeignRecord { collection } => {
                                         todo!("ForeignRecord fields are not implemented")
                                     }
-                                    ast::Type::Bytes => todo!(),
                                 },
                             ));
                         }
@@ -2283,12 +2374,12 @@ pub fn compile(
                     ast::ParameterType::Number => Type::PrimitiveType(PrimitiveType::UInt32),
                     ast::ParameterType::Record => Type::Struct(collection_struct.clone().unwrap()),
                     ast::ParameterType::PublicKey => Type::PublicKey,
+                    ast::ParameterType::Bytes => Type::Bytes,
                     ast::ParameterType::Boolean => todo!(),
                     ast::ParameterType::Array(_) => todo!(),
                     ast::ParameterType::Map(_, _) => todo!(),
                     ast::ParameterType::Object(_) => todo!(),
                     ast::ParameterType::ForeignRecord { collection } => todo!(),
-                    ast::ParameterType::Bytes => todo!(),
                 })
                 .collect::<Vec<_>>(),
         );

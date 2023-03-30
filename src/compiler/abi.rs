@@ -18,6 +18,7 @@ pub enum Value {
     Hash([u64; 4]),
     Int32(i32),
     String(String),
+    Bytes(Vec<u8>),
     PublicKey(publickey::Key),
     StructValue(Vec<(String, Value)>),
 }
@@ -80,6 +81,18 @@ impl TypeReader for Type {
                 let string = String::from_utf8(bytes)?;
 
                 Ok(Value::String(string))
+            }
+            Type::Bytes => {
+                let mut bytes = vec![];
+
+                let length = reader(addr).ok_or("invalid address for bytes length")?[0];
+                let data_ptr = reader(addr + 1).ok_or("invalid address for bytes data ptr")?[0];
+                for i in 0..length {
+                    let byte = reader(data_ptr + i).ok_or("invalid address for bytes byte")?[0];
+                    bytes.push(byte as u8);
+                }
+
+                Ok(Value::Bytes(bytes))
             }
             Type::PublicKey => {
                 let kty = reader(addr)
@@ -167,6 +180,13 @@ impl Parser for Type {
                 Ok(Value::Hash(hash))
             }
             Type::String => Ok(Value::String(value.to_string())),
+            Type::Bytes => {
+                let mut bytes = vec![];
+                for byte in value.split(',') {
+                    bytes.push(byte.parse()?);
+                }
+                Ok(Value::Bytes(bytes))
+            }
             Type::PublicKey => {
                 let mut values = value.split(',');
                 let kty = values.next().ok_or("missing kty")?;
@@ -209,6 +229,10 @@ impl Value {
             Value::String(s) => [s.len() as u64]
                 .into_iter()
                 .chain(s.bytes().map(|b| b as u64))
+                .collect(),
+            Value::Bytes(b) => [b.len() as u64]
+                .into_iter()
+                .chain(b.iter().map(|b| *b as u64))
                 .collect(),
             Value::PublicKey(k) => vec![
                 u8::from(k.kty) as u64,
