@@ -19,6 +19,7 @@ pub enum Value {
     Int32(i32),
     String(String),
     Bytes(Vec<u8>),
+    CollectionReference(Vec<u8>),
     PublicKey(publickey::Key),
     StructValue(Vec<(String, Value)>),
 }
@@ -93,6 +94,21 @@ impl TypeReader for Type {
                 }
 
                 Ok(Value::Bytes(bytes))
+            }
+            Type::CollectionReference { .. } => {
+                let mut bytes = vec![];
+
+                let length =
+                    reader(addr).ok_or("invalid address for collection reference length")?[0];
+                let data_ptr =
+                    reader(addr + 1).ok_or("invalid address for collection reference data ptr")?[0];
+                for i in 0..length {
+                    let byte = reader(data_ptr + i)
+                        .ok_or("invalid address for collection reference byte")?[0];
+                    bytes.push(byte as u8);
+                }
+
+                Ok(Value::CollectionReference(bytes))
             }
             Type::PublicKey => {
                 let kty = reader(addr)
@@ -187,6 +203,13 @@ impl Parser for Type {
                 }
                 Ok(Value::Bytes(bytes))
             }
+            Type::CollectionReference { .. } => {
+                let mut bytes = vec![];
+                for byte in value.split(',') {
+                    bytes.push(byte.parse()?);
+                }
+                Ok(Value::CollectionReference(bytes))
+            }
             Type::PublicKey => {
                 let mut values = value.split(',');
                 let kty = values.next().ok_or("missing kty")?;
@@ -233,6 +256,10 @@ impl Value {
             Value::Bytes(b) => [b.len() as u64]
                 .into_iter()
                 .chain(b.iter().map(|b| *b as u64))
+                .collect(),
+            Value::CollectionReference(cr) => [cr.len() as u64]
+                .into_iter()
+                .chain(cr.iter().map(|b| *b as u64))
                 .collect(),
             Value::PublicKey(k) => vec![
                 u8::from(k.kty) as u64,

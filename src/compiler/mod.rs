@@ -427,7 +427,7 @@ lazy_static::lazy_static! {
 
         let hash_string = Function::Builtin(Box::new(&|compiler, _, args| {
             let string = args.get(0).unwrap();
-            assert!(matches!(string.type_, Type::String | Type::Bytes));
+            assert!(matches!(string.type_, Type::String | Type::Bytes | Type::CollectionReference { .. }));
 
             let result = compiler
                 .memory
@@ -511,9 +511,10 @@ lazy_static::lazy_static! {
 
          builtins.push(("hashString".to_string(), hash_string.clone()));
 
-         // bytes have the same layout as strings,
+         // bytes and collection reference have the same layout as strings,
          // so we can reuse the hashing function
          builtins.push(("hashBytes".to_owned(), hash_string.clone()));
+         builtins.push(("hashCollectionReference".to_owned(), hash_string.clone()));
 
          builtins.push(("hashPublicKey".to_owned(), Function::Builtin(Box::new(&|compiler, _, args| {
             let public_key = args.get(0).unwrap();
@@ -651,6 +652,24 @@ lazy_static::lazy_static! {
                 compiler.root_scope = &BUILTINS_SCOPE;
                 let result = compile_ast_function_call(&READ_ADVICE_BYTES, compiler, args, None);
                 compiler.root_scope = old_root_scope;
+                result
+            })),
+        ));
+
+        builtins.push((
+            "readAdviceCollectionReference".to_string(),
+            Function::Builtin(Box::new(&|compiler, _, args| {
+                let old_root_scope = compiler.root_scope;
+                compiler.root_scope = &BUILTINS_SCOPE;
+
+                let result = compile_ast_function_call(&READ_ADVICE_BYTES, compiler, args, None);
+                compiler.root_scope = old_root_scope;
+
+                let result = Symbol {
+                    type_: Type::CollectionReference { collection: "".to_owned() },
+                    ..result
+                };
+
                 result
             })),
         ));
@@ -855,6 +874,9 @@ pub enum Type {
     PrimitiveType(PrimitiveType),
     String,
     Bytes,
+    CollectionReference {
+        collection: String,
+    },
     /// A type that can contain a 4-field wide hash, such as one returned by `hmerge`
     Hash,
     PublicKey,
@@ -867,6 +889,7 @@ impl Type {
             Type::PrimitiveType(pt) => pt.miden_width(),
             Type::String => string::WIDTH,
             Type::Bytes => bytes::WIDTH,
+            Type::CollectionReference { .. } => bytes::WIDTH,
             Type::Hash => 4,
             Type::PublicKey => publickey::WIDTH,
             Type::Struct(struct_) => struct_.fields.iter().map(|(_, t)| t.miden_width()).sum(),
@@ -1508,11 +1531,13 @@ fn compile_ast_function_call(
             Some(ast::Type::String) => Type::String,
             Some(ast::Type::PublicKey) => Type::PublicKey,
             Some(ast::Type::Bytes) => Type::Bytes,
+            Some(ast::Type::ForeignRecord { collection }) => Type::CollectionReference {
+                collection: collection.clone(),
+            },
             Some(ast::Type::Boolean) => todo!(),
             Some(ast::Type::Array(_)) => todo!(),
             Some(ast::Type::Map(_, _)) => todo!(),
             Some(ast::Type::Object(_)) => todo!(),
-            Some(ast::Type::ForeignRecord { collection }) => todo!(),
         });
     for (arg, param) in args.iter().zip(function.parameters.iter()) {
         // We need to make a copy of the arg, because Ident expressions return symbols of variables.
@@ -2018,6 +2043,22 @@ fn log(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Symbol {
     }
 }
 
+fn read_advice_collection_reference(compiler: &mut Compiler, collection: String) -> Symbol {
+    let r = compile_function_call(
+        compiler,
+        BUILTINS_SCOPE
+            .find_function("readAdviceCollectionReference")
+            .unwrap(),
+        &[],
+        None,
+    );
+
+    Symbol {
+        type_: Type::CollectionReference { collection },
+        ..r
+    }
+}
+
 /// A generic hash function that can hash any symbol by hashing each of it's field elements.
 /// Not useful for hashing strings, or any data structure that uses pointers.
 fn generic_hash(compiler: &mut Compiler, value: &Symbol) -> Symbol {
@@ -2071,6 +2112,14 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
         Type::Bytes => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("hashBytes").unwrap(),
+            &[value],
+            None,
+        ),
+        Type::CollectionReference { .. } => compile_function_call(
+            compiler,
+            BUILTINS_SCOPE
+                .find_function("hashCollectionReference")
+                .unwrap(),
             &[value],
             None,
         ),
@@ -2159,6 +2208,9 @@ fn read_struct_from_advice_tape(
                 &[],
                 None,
             ),
+            Type::CollectionReference { collection } => {
+                read_advice_collection_reference(compiler, collection.clone())
+            }
             Type::PublicKey => compile_function_call(
                 compiler,
                 BUILTINS_SCOPE.find_function("readAdvicePublicKey").unwrap(),
@@ -2228,6 +2280,9 @@ fn read_collection_inputs(
                 &[],
                 None,
             ),
+            Type::CollectionReference { collection } => {
+                read_advice_collection_reference(compiler, collection.clone())
+            }
             Type::PublicKey => compile_function_call(
                 compiler,
                 BUILTINS_SCOPE.find_function("readAdvicePublicKey").unwrap(),
@@ -2277,14 +2332,16 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                                     }
                                     ast::Type::Bytes => Type::Bytes,
                                     ast::Type::PublicKey => Type::PublicKey,
+                                    ast::Type::ForeignRecord { collection } => {
+                                        Type::CollectionReference {
+                                            collection: collection.clone(),
+                                        }
+                                    }
                                     ast::Type::Array(_) => {
                                         todo!("Array fields are not implemented")
                                     }
                                     ast::Type::Map(_, _) => todo!("Map fields are not implemented"),
                                     ast::Type::Object(_) => todo!(),
-                                    ast::Type::ForeignRecord { collection } => {
-                                        todo!("ForeignRecord fields are not implemented")
-                                    }
                                 },
                             ));
                         }
@@ -2375,11 +2432,13 @@ pub fn compile(
                     ast::ParameterType::Record => Type::Struct(collection_struct.clone().unwrap()),
                     ast::ParameterType::PublicKey => Type::PublicKey,
                     ast::ParameterType::Bytes => Type::Bytes,
+                    ast::ParameterType::ForeignRecord { collection } => Type::CollectionReference {
+                        collection: collection.clone(),
+                    },
                     ast::ParameterType::Boolean => todo!(),
                     ast::ParameterType::Array(_) => todo!(),
                     ast::ParameterType::Map(_, _) => todo!(),
                     ast::ParameterType::Object(_) => todo!(),
-                    ast::ParameterType::ForeignRecord { collection } => todo!(),
                 })
                 .collect::<Vec<_>>(),
         );
