@@ -330,13 +330,24 @@ mod tests {
     }
 
     #[test]
-    fn test_string() {
-        let string = polylang_parser::parse_expression("'hello world'");
+    fn test_string_single() {
+        let string = polylang_parser::parse_expression("'hello\" world'");
 
         assert!(string.is_ok());
         assert_eq!(
             string.unwrap(),
-            ast::Expression::Primitive(ast::Primitive::String("hello world".to_string()))
+            ast::Expression::Primitive(ast::Primitive::String("hello\" world".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_string_double() {
+        let string = polylang_parser::parse_expression("\"hello' world\"");
+
+        assert!(string.is_ok());
+        assert_eq!(
+            string.unwrap(),
+            ast::Expression::Primitive(ast::Primitive::String("hello' world".to_string()))
         );
     }
 

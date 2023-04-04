@@ -412,9 +412,10 @@ impl<'input> Lexer<'input> {
     /// parses 'hello' as Tok::String("'hello'")
     fn lex_string(&mut self) -> Option<LexerItem<'input>> {
         let (start, c) = self.peek_char()?;
-        if c != '\'' {
+        if c != '\'' && c != '"' {
             return None;
         }
+        let first_c = c;
         self.next_char();
 
         let mut end = start;
@@ -424,7 +425,7 @@ impl<'input> Lexer<'input> {
                 break false;
             };
 
-            if c == '\'' {
+            if c == first_c {
                 end = i;
                 self.next_char();
                 break true;
@@ -744,11 +745,38 @@ mod tests {
     }
 
     #[test]
+    fn test_lex_double_quote_string() {
+        let input = "\"hello\" \"world\"";
+        let mut lexer = Lexer::new("\"hello\" \"world\"");
+        assert_eq!(
+            lexer.next(),
+            Some(Ok((0, Tok::StringLiteral("\"hello\""), 7)))
+        );
+        assert_eq!(&input[0..7], "\"hello\"");
+        assert_eq!(
+            lexer.next(),
+            Some(Ok((8, Tok::StringLiteral("\"world\""), 15)))
+        );
+        assert_eq!(&input[8..15], "\"world\"");
+        assert_eq!(lexer.next(), None);
+    }
+
+    #[test]
     fn test_lex_string_unterminated() {
         let mut lexer = Lexer::new("'hello");
         assert_eq!(
             lexer.next(),
             Some(Err(LexicalError::UnterminatedString { start: 0, end: 6 }))
+        );
+        assert_eq!(lexer.next(), None);
+    }
+
+    #[test]
+    fn test_lex_string_unterminated_mismatch() {
+        let mut lexer = Lexer::new("'hello\"");
+        assert_eq!(
+            lexer.next(),
+            Some(Err(LexicalError::UnterminatedString { start: 0, end: 7 }))
         );
         assert_eq!(lexer.next(), None);
     }
