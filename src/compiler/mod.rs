@@ -1251,6 +1251,47 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             boolean::compile_or(compiler, &a, &b)
         }
+        Expression::Array(exprs) => {
+            let mut symbols = vec![];
+            for expr in exprs {
+                symbols.push(compile_expression(expr, compiler, scope));
+            }
+
+            assert!(
+                symbols.iter().all(|s| s.type_ == symbols[0].type_),
+                "all array elements must be of the same type"
+            );
+
+            if symbols.is_empty() {
+                array::new(
+                    compiler,
+                    0,
+                    // TODO: We need to infer what the type of the array is,
+                    // for example, if the user does `this.array = []` we need
+                    // the type to be the same as this.array
+                    Type::PrimitiveType(PrimitiveType::UInt32),
+                )
+                .0
+            } else {
+                let type_ = symbols[0].type_.clone();
+                let (array, data_ptr) = array::new(compiler, symbols.len() as u32, type_);
+
+                for (i, symbol) in symbols.iter().enumerate() {
+                    compiler.memory.read(
+                        compiler.instructions,
+                        symbol.memory_addr,
+                        symbol.type_.miden_width(),
+                    );
+                    compiler.memory.write(
+                        compiler.instructions,
+                        data_ptr + i as u32 * symbols[0].type_.miden_width(),
+                        &vec![ValueSource::Stack; symbol.type_.miden_width() as usize],
+                    );
+                }
+
+                array
+            }
+        }
         e => unimplemented!("{:?}", e),
     };
 

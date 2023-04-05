@@ -3,53 +3,39 @@ use super::*;
 /// [capacity, length, data_ptr]
 pub(crate) const WIDTH: u32 = 3;
 
-pub(crate) fn new(compiler: &mut Compiler, bytes: &[u8]) -> Symbol {
+/// Returns (array_symbol, data_ptr), because data_ptr is known statically
+pub(crate) fn new(compiler: &mut Compiler, len: u32, element_type: Type) -> (Symbol, u32) {
     let symbol = Symbol {
         memory_addr: compiler.memory.allocate(WIDTH),
-        type_: Type::Bytes,
+        type_: Type::Array(Box::new(element_type)),
     };
 
     let symbol_capacity = capacity(&symbol);
     let symbol_length = length(&symbol);
     let symbol_data_ptr = data_ptr(&symbol);
 
+    let capacity = len * 2;
     compiler.memory.write(
         &mut compiler.instructions,
         symbol_capacity.memory_addr,
-        &[ValueSource::Immediate(bytes.len() as u32)],
+        &[ValueSource::Immediate(capacity)],
     );
 
     compiler.memory.write(
         &mut compiler.instructions,
         symbol_length.memory_addr,
-        &[ValueSource::Immediate(bytes.len() as u32)],
+        &[ValueSource::Immediate(len)],
     );
 
-    let allocated_ptr = dynamic_alloc(compiler, &[symbol_length]);
+    let allocated_ptr = compiler.memory.allocate(len * 2);
 
     compiler.memory.write(
         &mut compiler.instructions,
         symbol_data_ptr.memory_addr,
-        &[ValueSource::Memory(allocated_ptr.memory_addr)],
+        &[ValueSource::Immediate(allocated_ptr)],
     );
 
-    compiler.memory.read(
-        &mut compiler.instructions,
-        symbol_data_ptr.memory_addr,
-        symbol_data_ptr.type_.miden_width(),
-    );
-    // [symbol_data_ptr]
-
-    compiler.memory.write(
-        &mut compiler.instructions,
-        allocated_ptr.memory_addr,
-        &bytes
-            .iter()
-            .map(|b| ValueSource::Immediate(*b as u32))
-            .collect::<Vec<_>>(),
-    );
-
-    symbol
+    (symbol, allocated_ptr)
 }
 
 pub(crate) fn capacity(symbol: &Symbol) -> Symbol {
