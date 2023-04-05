@@ -1,4 +1,5 @@
 pub mod abi;
+mod array;
 mod boolean;
 mod bytes;
 mod encoder;
@@ -425,96 +426,53 @@ lazy_static::lazy_static! {
          }))));
 
 
-        let hash_string = Function::Builtin(Box::new(&|compiler, _, args| {
-            let string = args.get(0).unwrap();
-            assert!(matches!(string.type_, Type::String | Type::Bytes | Type::CollectionReference { .. }));
-
-            let result = compiler
-                .memory
-                .allocate_symbol(Type::Hash);
-
-            compiler.instructions.extend([
-                encoder::Instruction::Push(0),
-                encoder::Instruction::Push(0),
-                encoder::Instruction::Push(0),
-                encoder::Instruction::Push(0),
-            ]);
-            // [h[3], h[2], h[1], h[0]]
-            compiler.memory.read(
-                &mut compiler.instructions,
-                string::data_ptr(string).memory_addr,
-                string::data_ptr(string).type_.miden_width(),
-            );
-            // [data_ptr, h[3], h[2], h[1], h[0]]
-            compiler.memory.read(
-                &mut compiler.instructions,
-                string::length(string).memory_addr,
-                string::length(string).type_.miden_width(),
-            );
-            // [len, data_ptr, h[3], h[2], h[1], h[0]]
-
-            compiler.instructions.push(encoder::Instruction::While {
-                // len > 0
-                condition: vec![
-                    encoder::Instruction::Dup(None),
-                    // [len, len, data_ptr, h[3], h[2], h[1], h[0]]
-                    encoder::Instruction::Push(0),
-                    // [0, len, len, data_ptr, h[3], h[2], h[1], h[0]]
-                    encoder::Instruction::U32CheckedGT,
-                    // [len > 0, len, data_ptr, h[3], h[2], h[1], h[0]]
-                ],
-                body: vec![
-                    // [len, data_ptr, h[3], h[2], h[1], h[0]]
-                    encoder::Instruction::Push(1),
-                    // [1, len, data_ptr, h[3], h[2], h[1], h[0]]
-                    encoder::Instruction::U32CheckedSub,
-                    // [len - 1, data_ptr, h[3], h[2], h[1], h[0]]
-                    encoder::Instruction::MovDown(5),
-                    // [data_ptr, h[3], h[2], h[1], h[0], len - 1]
-                    encoder::Instruction::Dup(None),
-                    // [data_ptr, data_ptr, h[3], h[2], h[1], h[0], len - 1]
-                    encoder::Instruction::MovDown(6),
-                    // [data_ptr, h[3], h[2], h[1], h[0], len - 1, data_ptr]
-                    encoder::Instruction::MemLoad(None),
-                    // [byte, h[3], h[2], h[1], h[0], len - 1, data_ptr]
-                    encoder::Instruction::Push(0),
-                    encoder::Instruction::Push(0),
-                    encoder::Instruction::Push(0),
-                    // [0, 0, 0, byte, h[3], h[2], h[1], h[0], len - 1, data_ptr]
-                    encoder::Instruction::HMerge,
-                    // [h[3], h[2], h[1], h[0], len - 1, data_ptr]
-                    encoder::Instruction::MovUp(5),
-                    // [data_ptr, h[3], h[2], h[1], h[0], len - 1]
-                    encoder::Instruction::Push(1),
-                    // [1, data_ptr, h[3], h[2], h[1], h[0], len - 1]
-                    encoder::Instruction::U32CheckedAdd,
-                    // [data_ptr + 1, h[3], h[2], h[1], h[0], len - 1]
-                    encoder::Instruction::MovUp(5),
-                    // [len - 1, data_ptr + 1, h[3], h[2], h[1], h[0]]
-                ],
-            });
-
-            // [len, data_ptr, h[3], h[2], h[1], h[0]]
-            compiler.instructions.push(encoder::Instruction::Drop);
-            // [data_ptr, h[3], h[2], h[1], h[0]]
-            compiler.instructions.push(encoder::Instruction::Drop);
-            // [h[3], h[2], h[1], h[0]]
-
-            compiler.memory.write(
-                &mut compiler.instructions,
-                result.memory_addr,
-                &[ValueSource::Stack, ValueSource::Stack, ValueSource::Stack, ValueSource::Stack],
-            );
-
-            result
-         }));
-
-         builtins.push(("hashString".to_string(), hash_string.clone()));
+         builtins.push(("hashString".to_string(), Function::Builtin(Box::new(&|compiler, scope, args| hash_string(compiler, scope, args)))));
 
          // bytes and collection reference have the same layout as strings,
          // so we can reuse the hashing function
-         builtins.push(("hashBytes".to_owned(), hash_string.clone()));
-         builtins.push(("hashCollectionReference".to_owned(), hash_string.clone()));
+         builtins.push(("hashBytes".to_owned(), Function::Builtin(Box::new(&|compiler, scope, args| hash_string(compiler, scope, args)))));
+         builtins.push(("hashCollectionReference".to_owned(), Function::Builtin(Box::new(&|compiler, scope, args| hash_string(compiler, scope, args)))));
+
+         builtins.push(("hashArray".to_owned(), Function::Builtin(Box::new(&|compiler, scope, args| {
+            let arr = args.get(0).unwrap();
+
+            let Type::Array(t) = &arr.type_ else {
+                panic!("expected array type");
+            };
+
+            let casted_to_bytes = compiler
+                .memory
+                .allocate_symbol(Type::Bytes);
+
+            compiler.memory.read(
+                &mut compiler.instructions,
+                array::length(arr).memory_addr,
+                1,
+            );
+            compiler.instructions.push(encoder::Instruction::Push(t.miden_width()));
+            // length * width
+            compiler.instructions.push(encoder::Instruction::U32CheckedMul);
+
+            compiler.memory.write(
+                &mut compiler.instructions,
+                casted_to_bytes.memory_addr,
+                &[ValueSource::Stack],
+            );
+
+            compiler.memory.read(
+                &mut compiler.instructions,
+                array::data_ptr(arr).memory_addr,
+                1,
+            );
+
+            compiler.memory.write(
+                &mut compiler.instructions,
+                casted_to_bytes.memory_addr + 1,
+                &[ValueSource::Stack],
+            );
+
+            hash_string(compiler, scope, &[casted_to_bytes])
+        }))));
 
          builtins.push(("hashPublicKey".to_owned(), Function::Builtin(Box::new(&|compiler, _, args| {
             let public_key = args.get(0).unwrap();
@@ -840,6 +798,13 @@ lazy_static::lazy_static! {
             })),
         ));
 
+        builtins.push((
+            "arrayPush".to_string(),
+            Function::Builtin(Box::new(&|compiler, scope, args| {
+                array_push(compiler, scope, args)
+            })),
+        ));
+
         Box::leak(Box::new(builtins))
     };
 }
@@ -877,6 +842,7 @@ pub enum Type {
     CollectionReference {
         collection: String,
     },
+    Array(Box<Type>),
     /// A type that can contain a 4-field wide hash, such as one returned by `hmerge`
     Hash,
     PublicKey,
@@ -890,6 +856,7 @@ impl Type {
             Type::String => string::WIDTH,
             Type::Bytes => bytes::WIDTH,
             Type::CollectionReference { .. } => bytes::WIDTH,
+            Type::Array(_) => array::WIDTH,
             Type::Hash => 4,
             Type::PublicKey => publickey::WIDTH,
             Type::Struct(struct_) => struct_.fields.iter().map(|(_, t)| t.miden_width()).sum(),
@@ -2043,6 +2010,96 @@ fn log(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Symbol {
     }
 }
 
+fn hash_string(compiler: &mut Compiler, scope: &Scope, args: &[Symbol]) -> Symbol {
+    let string = args.get(0).unwrap();
+    assert!(matches!(
+        string.type_,
+        Type::String | Type::Bytes | Type::CollectionReference { .. }
+    ));
+
+    let result = compiler.memory.allocate_symbol(Type::Hash);
+
+    compiler.instructions.extend([
+        encoder::Instruction::Push(0),
+        encoder::Instruction::Push(0),
+        encoder::Instruction::Push(0),
+        encoder::Instruction::Push(0),
+    ]);
+    // [h[3], h[2], h[1], h[0]]
+    compiler.memory.read(
+        &mut compiler.instructions,
+        string::data_ptr(string).memory_addr,
+        string::data_ptr(string).type_.miden_width(),
+    );
+    // [data_ptr, h[3], h[2], h[1], h[0]]
+    compiler.memory.read(
+        &mut compiler.instructions,
+        string::length(string).memory_addr,
+        string::length(string).type_.miden_width(),
+    );
+    // [len, data_ptr, h[3], h[2], h[1], h[0]]
+
+    compiler.instructions.push(encoder::Instruction::While {
+        // len > 0
+        condition: vec![
+            encoder::Instruction::Dup(None),
+            // [len, len, data_ptr, h[3], h[2], h[1], h[0]]
+            encoder::Instruction::Push(0),
+            // [0, len, len, data_ptr, h[3], h[2], h[1], h[0]]
+            encoder::Instruction::U32CheckedGT,
+            // [len > 0, len, data_ptr, h[3], h[2], h[1], h[0]]
+        ],
+        body: vec![
+            // [len, data_ptr, h[3], h[2], h[1], h[0]]
+            encoder::Instruction::Push(1),
+            // [1, len, data_ptr, h[3], h[2], h[1], h[0]]
+            encoder::Instruction::U32CheckedSub,
+            // [len - 1, data_ptr, h[3], h[2], h[1], h[0]]
+            encoder::Instruction::MovDown(5),
+            // [data_ptr, h[3], h[2], h[1], h[0], len - 1]
+            encoder::Instruction::Dup(None),
+            // [data_ptr, data_ptr, h[3], h[2], h[1], h[0], len - 1]
+            encoder::Instruction::MovDown(6),
+            // [data_ptr, h[3], h[2], h[1], h[0], len - 1, data_ptr]
+            encoder::Instruction::MemLoad(None),
+            // [byte, h[3], h[2], h[1], h[0], len - 1, data_ptr]
+            encoder::Instruction::Push(0),
+            encoder::Instruction::Push(0),
+            encoder::Instruction::Push(0),
+            // [0, 0, 0, byte, h[3], h[2], h[1], h[0], len - 1, data_ptr]
+            encoder::Instruction::HMerge,
+            // [h[3], h[2], h[1], h[0], len - 1, data_ptr]
+            encoder::Instruction::MovUp(5),
+            // [data_ptr, h[3], h[2], h[1], h[0], len - 1]
+            encoder::Instruction::Push(1),
+            // [1, data_ptr, h[3], h[2], h[1], h[0], len - 1]
+            encoder::Instruction::U32CheckedAdd,
+            // [data_ptr + 1, h[3], h[2], h[1], h[0], len - 1]
+            encoder::Instruction::MovUp(5),
+            // [len - 1, data_ptr + 1, h[3], h[2], h[1], h[0]]
+        ],
+    });
+
+    // [len, data_ptr, h[3], h[2], h[1], h[0]]
+    compiler.instructions.push(encoder::Instruction::Drop);
+    // [data_ptr, h[3], h[2], h[1], h[0]]
+    compiler.instructions.push(encoder::Instruction::Drop);
+    // [h[3], h[2], h[1], h[0]]
+
+    compiler.memory.write(
+        &mut compiler.instructions,
+        result.memory_addr,
+        &[
+            ValueSource::Stack,
+            ValueSource::Stack,
+            ValueSource::Stack,
+            ValueSource::Stack,
+        ],
+    );
+
+    result
+}
+
 fn read_advice_collection_reference(compiler: &mut Compiler, collection: String) -> Symbol {
     let r = compile_function_call(
         compiler,
@@ -2057,6 +2114,222 @@ fn read_advice_collection_reference(compiler: &mut Compiler, collection: String)
         type_: Type::CollectionReference { collection },
         ..r
     }
+}
+
+fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
+    compiler.instructions.push(encoder::Instruction::AdvPush(1));
+    // [array_len]
+
+    compiler.instructions.push(encoder::Instruction::Dup(None));
+    // [array_len, array_len]
+    let array_len = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+    compiler.memory.write(
+        &mut compiler.instructions,
+        array_len.memory_addr,
+        &vec![ValueSource::Stack],
+    );
+    // [array_len]
+
+    let capacity = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+    compiler.instructions.push(encoder::Instruction::Push(2));
+    // [2, array_len]
+    // capacity is 2x the length, because reallocating is expensive
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedMul);
+    // [capacity = array_len * 2]
+    compiler.memory.write(
+        &mut compiler.instructions,
+        capacity.memory_addr,
+        &vec![ValueSource::Stack],
+    );
+    // []
+
+    let data_ptr = dynamic_alloc(compiler, &[capacity.clone()]);
+
+    compiler
+        .memory
+        .read(&mut compiler.instructions, array_len.memory_addr, 1);
+    compiler
+        .memory
+        .read(&mut compiler.instructions, data_ptr.memory_addr, 1);
+    // [data_ptr, array_len]
+
+    compiler.instructions.push(encoder::Instruction::Swap);
+    // [array_len, data_ptr]
+    compiler.instructions.push(encoder::Instruction::While {
+        condition: vec![
+            // [array_len, data_ptr]
+            encoder::Instruction::Dup(None),
+            // [array_len, array_len, data_ptr]
+            encoder::Instruction::Push(0),
+            // [0, array_len, array_len, data_ptr]
+            encoder::Instruction::U32CheckedGT,
+            // [array_len > 0, array_len, data_ptr]
+        ],
+        body: vec![
+            // [array_len, data_ptr]
+            encoder::Instruction::Push(1),
+            // [1, array_len, data_ptr]
+            encoder::Instruction::U32CheckedSub,
+            // [array_len - 1, data_ptr]
+            encoder::Instruction::Swap,
+            // [data_ptr, array_len - 1]
+            encoder::Instruction::Dup(None),
+            // [data_ptr, data_ptr, array_len - 1]
+            encoder::Instruction::AdvPush(1),
+            // [byte, data_ptr, data_ptr, array_len - 1]
+            encoder::Instruction::Swap,
+            // [data_ptr, byte, data_ptr, array_len - 1]
+            encoder::Instruction::MemStore(None),
+            // [data_ptr, array_len - 1]
+            encoder::Instruction::Push(1),
+            // [1, data_ptr, array_len - 1]
+            encoder::Instruction::U32CheckedAdd,
+            // [data_ptr + 1, array_len - 1]
+            encoder::Instruction::Swap,
+            // [array_len - 1, data_ptr + 1]
+        ],
+    });
+
+    // [0, end_data_ptr]
+    compiler.instructions.push(encoder::Instruction::Drop);
+    compiler.instructions.push(encoder::Instruction::Drop);
+    // []
+
+    let arr = compiler
+        .memory
+        .allocate_symbol(Type::Array(Box::new(element_type.clone())));
+
+    compiler.memory.write(
+        &mut compiler.instructions,
+        array::length(&arr).memory_addr,
+        &vec![ValueSource::Memory(array_len.memory_addr)],
+    );
+
+    compiler.memory.read(
+        &mut compiler.instructions,
+        array::length(&arr).memory_addr,
+        1,
+    );
+    // [array_len]
+    compiler.instructions.push(encoder::Instruction::Push(2));
+    // [2, array_len]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedMul);
+    // [capacity = array_len * 2]
+    compiler.memory.write(
+        &mut compiler.instructions,
+        array::capacity(&arr).memory_addr,
+        &vec![ValueSource::Stack],
+    );
+    // []
+
+    compiler.memory.write(
+        &mut compiler.instructions,
+        array::data_ptr(&arr).memory_addr,
+        &vec![ValueSource::Memory(data_ptr.memory_addr)],
+    );
+
+    arr
+}
+
+fn array_push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Symbol {
+    let arr = args.get(0).unwrap();
+    let element = args.get(1).unwrap();
+    assert_eq!(
+        arr.type_.clone(),
+        Type::Array(Box::new(element.type_.clone()))
+    );
+
+    compiler.memory.read(
+        &mut compiler.instructions,
+        array::length(&arr).memory_addr,
+        1,
+    );
+    // [len]
+    compiler.instructions.push(encoder::Instruction::Push(1));
+    // [1, len]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedAdd);
+    // [len + 1]
+    compiler.memory.write(
+        &mut compiler.instructions,
+        array::length(&arr).memory_addr,
+        &vec![ValueSource::Stack],
+    );
+    // []
+
+    compiler.memory.read(
+        &mut compiler.instructions,
+        array::capacity(&arr).memory_addr,
+        1,
+    );
+    // [capacity]
+    compiler.memory.read(
+        &mut compiler.instructions,
+        array::length(&arr).memory_addr,
+        1,
+    );
+    // [len + 1, capacity]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedGTE);
+    // [len + 1 >= capacity]
+
+    // TODO: if false, reallocate and copy
+    compiler.instructions.push(encoder::Instruction::Assert);
+    // []
+
+    compiler.memory.read(
+        &mut compiler.instructions,
+        array::data_ptr(&arr).memory_addr,
+        1,
+    );
+    // [data_ptr]
+    compiler.memory.read(
+        &mut compiler.instructions,
+        array::length(&arr).memory_addr,
+        1,
+    );
+    compiler.instructions.push(encoder::Instruction::Push(1));
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedSub);
+    // [len, data_ptr]
+    compiler
+        .instructions
+        .push(encoder::Instruction::Push(element.type_.miden_width()));
+    // [element_width, len, data_ptr]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedMul);
+    // [len * element_width, data_ptr]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedAdd);
+    // [data_ptr + len * element_width]
+    compiler.memory.read(
+        &mut compiler.instructions,
+        element.memory_addr,
+        element.type_.miden_width(),
+    );
+    // [element, data_ptr + len * element_width]
+    compiler.instructions.push(encoder::Instruction::Swap);
+    // [data_ptr + len * element_width, element]
+    compiler
+        .instructions
+        .push(encoder::Instruction::MemStore(None));
+    // []
+
+    // Return the element, same as push does in JS
+    element.clone()
 }
 
 /// A generic hash function that can hash any symbol by hashing each of it's field elements.
@@ -2120,6 +2393,12 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
             BUILTINS_SCOPE
                 .find_function("hashCollectionReference")
                 .unwrap(),
+            &[value],
+            None,
+        ),
+        Type::Array(_) => compile_function_call(
+            compiler,
+            BUILTINS_SCOPE.find_function("hashArray").unwrap(),
             &[value],
             None,
         ),
@@ -2211,6 +2490,7 @@ fn read_struct_from_advice_tape(
             Type::CollectionReference { collection } => {
                 read_advice_collection_reference(compiler, collection.clone())
             }
+            Type::Array(t) => read_advice_array(compiler, t),
             Type::PublicKey => compile_function_call(
                 compiler,
                 BUILTINS_SCOPE.find_function("readAdvicePublicKey").unwrap(),
@@ -2283,6 +2563,7 @@ fn read_collection_inputs(
             Type::CollectionReference { collection } => {
                 read_advice_collection_reference(compiler, collection.clone())
             }
+            Type::Array(t) => read_advice_array(compiler, t),
             Type::PublicKey => compile_function_call(
                 compiler,
                 BUILTINS_SCOPE.find_function("readAdvicePublicKey").unwrap(),
@@ -2322,28 +2603,9 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                 for item in &c.items {
                     match item {
                         ast::CollectionItem::Field(f) => {
-                            collection.fields.push((
-                                f.name.clone(),
-                                match &f.type_ {
-                                    ast::Type::String => Type::String,
-                                    ast::Type::Number => Type::PrimitiveType(PrimitiveType::UInt32),
-                                    ast::Type::Boolean => {
-                                        Type::PrimitiveType(PrimitiveType::Boolean)
-                                    }
-                                    ast::Type::Bytes => Type::Bytes,
-                                    ast::Type::PublicKey => Type::PublicKey,
-                                    ast::Type::ForeignRecord { collection } => {
-                                        Type::CollectionReference {
-                                            collection: collection.clone(),
-                                        }
-                                    }
-                                    ast::Type::Array(_) => {
-                                        todo!("Array fields are not implemented")
-                                    }
-                                    ast::Type::Map(_, _) => todo!("Map fields are not implemented"),
-                                    ast::Type::Object(_) => todo!(),
-                                },
-                            ));
+                            collection
+                                .fields
+                                .push((f.name.clone(), ast_type_to_type(&f.type_)));
                         }
                         ast::CollectionItem::Function(f) => {
                             collection.functions.push((f.name.clone(), &f));
@@ -2426,20 +2688,7 @@ pub fn compile(
             &function
                 .parameters
                 .iter()
-                .map(|p| match &p.type_ {
-                    ast::ParameterType::String => Type::String,
-                    ast::ParameterType::Number => Type::PrimitiveType(PrimitiveType::UInt32),
-                    ast::ParameterType::Record => Type::Struct(collection_struct.clone().unwrap()),
-                    ast::ParameterType::PublicKey => Type::PublicKey,
-                    ast::ParameterType::Bytes => Type::Bytes,
-                    ast::ParameterType::ForeignRecord { collection } => Type::CollectionReference {
-                        collection: collection.clone(),
-                    },
-                    ast::ParameterType::Boolean => todo!(),
-                    ast::ParameterType::Array(_) => todo!(),
-                    ast::ParameterType::Map(_, _) => todo!(),
-                    ast::ParameterType::Object(_) => todo!(),
-                })
+                .map(|p| ast_param_type_to_type(&p.type_, collection_struct.as_ref()))
                 .collect::<Vec<_>>(),
         );
 
@@ -2511,6 +2760,40 @@ pub fn compile(
             out_this_type: collection_struct.map(|s| Type::Struct(s)),
         },
     )
+}
+
+/// collection_struct is the type used for `record` types
+fn ast_param_type_to_type(type_: &ast::ParameterType, collection_struct: Option<&Struct>) -> Type {
+    match type_ {
+        ast::ParameterType::String => Type::String,
+        ast::ParameterType::Number => Type::PrimitiveType(PrimitiveType::UInt32),
+        ast::ParameterType::Record => Type::Struct(collection_struct.unwrap().clone()),
+        ast::ParameterType::PublicKey => Type::PublicKey,
+        ast::ParameterType::Bytes => Type::Bytes,
+        ast::ParameterType::ForeignRecord { collection } => Type::CollectionReference {
+            collection: collection.clone(),
+        },
+        ast::ParameterType::Array(t) => Type::Array(Box::new(ast_type_to_type(t))),
+        ast::ParameterType::Boolean => todo!(),
+        ast::ParameterType::Map(_, _) => todo!(),
+        ast::ParameterType::Object(_) => todo!(),
+    }
+}
+
+fn ast_type_to_type(type_: &ast::Type) -> Type {
+    match type_ {
+        ast::Type::String => Type::String,
+        ast::Type::Number => Type::PrimitiveType(PrimitiveType::UInt32),
+        ast::Type::PublicKey => Type::PublicKey,
+        ast::Type::Bytes => Type::Bytes,
+        ast::Type::ForeignRecord { collection } => Type::CollectionReference {
+            collection: collection.clone(),
+        },
+        ast::Type::Array(t) => Type::Array(Box::new(ast_type_to_type(t))),
+        ast::Type::Boolean => todo!(),
+        ast::Type::Map(_, _) => todo!(),
+        ast::Type::Object(_) => todo!(),
+    }
 }
 
 /// A function that takes in a struct type and generates a program that hashes a value of that type and returns the hash on the stack.
