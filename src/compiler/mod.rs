@@ -1185,16 +1185,42 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
             let a = compile_expression(a, compiler, scope);
             let b = compile_expression(b, compiler, scope);
 
-            assert_eq!(a.type_, b.type_);
+            match (&a.type_, &b.type_) {
+                (Type::Struct(a_struct), Type::Struct(b_struct)) => {
+                    for (field, ty) in &a_struct.fields {
+                        let a_field = struct_field(&a, field).unwrap();
+                        let b_field =
+                            struct_field(&b, field).expect(&format!("field {} not found", field));
 
-            compiler
-                .memory
-                .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
-            compiler.memory.write(
-                compiler.instructions,
-                a.memory_addr,
-                &vec![ValueSource::Stack; b.type_.miden_width() as usize],
-            );
+                        assert_eq!(ty, &b_field.type_);
+
+                        compiler.memory.read(
+                            compiler.instructions,
+                            b_field.memory_addr,
+                            ty.miden_width(),
+                        );
+                        compiler.memory.write(
+                            compiler.instructions,
+                            a_field.memory_addr,
+                            &vec![ValueSource::Stack; ty.miden_width() as usize],
+                        );
+                    }
+                }
+                (a_type, b_type) => {
+                    assert_eq!(a_type, b_type);
+
+                    compiler.memory.read(
+                        compiler.instructions,
+                        b.memory_addr,
+                        b_type.miden_width(),
+                    );
+                    compiler.memory.write(
+                        compiler.instructions,
+                        a.memory_addr,
+                        &vec![ValueSource::Stack; b_type.miden_width() as usize],
+                    );
+                }
+            }
 
             a
         }
@@ -1291,6 +1317,37 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
                 array
             }
+        }
+        Expression::Object(obj) => {
+            let mut types = Vec::new();
+            let mut values = Vec::new();
+            for (field, expr) in &obj.fields {
+                let symbol = compile_expression(expr, compiler, scope);
+                types.push((field.clone(), symbol.type_.clone()));
+                values.push((field, symbol));
+            }
+
+            let struct_type = Type::Struct(Struct {
+                name: "anonymous".to_owned(),
+                fields: types,
+            });
+
+            let symbol = compiler.memory.allocate_symbol(struct_type);
+            for (field, expr_symbol) in values {
+                let field = struct_field(&symbol, field).unwrap();
+                compiler.memory.read(
+                    compiler.instructions,
+                    expr_symbol.memory_addr,
+                    field.type_.miden_width(),
+                );
+                compiler.memory.write(
+                    compiler.instructions,
+                    field.memory_addr,
+                    &vec![ValueSource::Stack; field.type_.miden_width() as usize],
+                );
+            }
+
+            symbol
         }
         e => unimplemented!("{:?}", e),
     };
@@ -2532,6 +2589,11 @@ fn read_struct_from_advice_tape(
                 read_advice_collection_reference(compiler, collection.clone())
             }
             Type::Array(t) => read_advice_array(compiler, t),
+            Type::Struct(s) => {
+                let symbol = compiler.memory.allocate_symbol(type_.clone());
+                read_struct_from_advice_tape(compiler, &symbol, s);
+                symbol
+            }
             Type::PublicKey => compile_function_call(
                 compiler,
                 BUILTINS_SCOPE.find_function("readAdvicePublicKey").unwrap(),
@@ -2833,7 +2895,16 @@ fn ast_type_to_type(type_: &ast::Type) -> Type {
         ast::Type::Array(t) => Type::Array(Box::new(ast_type_to_type(t))),
         ast::Type::Boolean => todo!(),
         ast::Type::Map(_, _) => todo!(),
-        ast::Type::Object(_) => todo!(),
+        ast::Type::Object(o) => {
+            let mut fields = vec![];
+            for field in o {
+                fields.push((field.name.clone(), ast_type_to_type(&field.type_)));
+            }
+            Type::Struct(Struct {
+                name: "anonymous".to_owned(),
+                fields,
+            })
+        }
     }
 }
 
