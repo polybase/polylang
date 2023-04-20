@@ -20,16 +20,20 @@ pub(crate) enum Instruction<'a> {
     U32CheckedDiv,              // u32checked_div
     U32CheckedMul,              // u32checked_mul
     U32CheckedEq,               // u32checked_eq
+    U32CheckedNeq,              // u32checked_neq
     U32CheckedLTE,              // u32checked_lte
     U32CheckedLT,               // u32checked_lt
     U32CheckedGTE,              // u32checked_gte
     U32CheckedGT,               // u32checked_gt
     U32CheckedSHL(Option<u32>), // u32checked_shl
     U32CheckedSHR(Option<u32>), // u32checked_shr
+    U32CheckedAnd,              // u32checked_and
+    U32CheckedOr,               // u32checked_or
     U32CheckedXOR,              // u32checked_xor
     U32WrappingAdd,             // u32wrapping_add
     U32WrappingSub,             // u32wrapping_sub
     U32WrappingMul,             // u32wrapping_mul
+    U32OverflowingMul,          // u32overflowing_mul
     Exec(&'a str),              // exec.u64::checked_add
     MemStore(Option<u32>),      // mem_store.1234
     MemLoad(Option<u32>),       // mem_load.1234
@@ -95,6 +99,7 @@ impl Instruction<'_> {
             Instruction::U32CheckedDiv => write_indent!(f, "u32checked_div"),
             Instruction::U32CheckedMul => write_indent!(f, "u32checked_mul"),
             Instruction::U32CheckedEq => write_indent!(f, "u32checked_eq"),
+            Instruction::U32CheckedNeq => write_indent!(f, "u32checked_neq"),
             Instruction::U32CheckedLTE => write_indent!(f, "u32checked_lte"),
             Instruction::U32CheckedLT => write_indent!(f, "u32checked_lt"),
             Instruction::U32CheckedGTE => write_indent!(f, "u32checked_gte"),
@@ -103,10 +108,13 @@ impl Instruction<'_> {
             Instruction::U32CheckedSHL(None) => write_indent!(f, "u32checked_shl"),
             Instruction::U32CheckedSHR(Some(value)) => write_indent!(f, "u32checked_shr.{}", value),
             Instruction::U32CheckedSHR(None) => write_indent!(f, "u32checked_shr"),
+            Instruction::U32CheckedAnd => write_indent!(f, "u32checked_and"),
+            Instruction::U32CheckedOr => write_indent!(f, "u32checked_or"),
             Instruction::U32CheckedXOR => write_indent!(f, "u32checked_xor"),
             Instruction::U32WrappingAdd => write_indent!(f, "u32wrapping_add"),
             Instruction::U32WrappingSub => write_indent!(f, "u32wrapping_sub"),
             Instruction::U32WrappingMul => write_indent!(f, "u32wrapping_mul"),
+            Instruction::U32OverflowingMul => write_indent!(f, "u32overflowing_mul"),
             Instruction::Exec(name) => write_indent!(f, "exec.{}", name),
             Instruction::HMerge => write_indent!(f, "hmerge"),
             Instruction::While { condition, body } => {
