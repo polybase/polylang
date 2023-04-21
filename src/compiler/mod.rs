@@ -5,6 +5,7 @@ mod bytes;
 mod encoder;
 mod int32;
 mod ir;
+mod map;
 mod publickey;
 mod string;
 mod uint32;
@@ -805,6 +806,16 @@ lazy_static::lazy_static! {
             })),
         ));
 
+        builtins.push((
+            "mapLength".to_string(),
+            Function::Builtin(Box::new(&|compiler, scope, args| {
+                let m = &args[0];
+                assert!(matches!(m.type_, Type::Map(_, _)));
+
+                array::length(&map::keys_arr(m))
+            }))
+        ));
+
         Box::leak(Box::new(builtins))
     };
 }
@@ -843,6 +854,7 @@ pub enum Type {
         collection: String,
     },
     Array(Box<Type>),
+    Map(Box<Type>, Box<Type>),
     /// A type that can contain a 4-field wide hash, such as one returned by `hmerge`
     Hash,
     PublicKey,
@@ -857,6 +869,7 @@ impl Type {
             Type::Bytes => bytes::WIDTH,
             Type::CollectionReference { .. } => bytes::WIDTH,
             Type::Array(_) => array::WIDTH,
+            Type::Map(_, _) => map::WIDTH,
             Type::Hash => 4,
             Type::PublicKey => publickey::WIDTH,
             Type::Struct(struct_) => struct_.fields.iter().map(|(_, t)| t.miden_width()).sum(),
@@ -1182,6 +1195,64 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
             compile_function_call(compiler, func, &args_symbols, None)
         }
         Expression::Assign(a, b) => {
+            match (&**a, b) {
+                (Expression::Index(a, index), b) => {
+                    let a = compile_expression(a, compiler, scope);
+                    let b = compile_expression(b, compiler, scope);
+                    let index = compile_expression(index, compiler, scope);
+
+                    let (key, value, value_ptr, did_find) = map::get(compiler, &a, &index);
+
+                    let mut if_found_instructions = vec![];
+                    {
+                        std::mem::swap(compiler.instructions, &mut if_found_instructions);
+
+                        // write b to value_ptr
+                        for i in 0..b.type_.miden_width() {
+                            compiler
+                                .memory
+                                .read(compiler.instructions, b.memory_addr + i, 1);
+                            // [b[i]]
+                            compiler
+                                .memory
+                                .read(compiler.instructions, value_ptr.memory_addr, 1);
+                            // [value_ptr, b[i]]
+                            compiler.instructions.push(encoder::Instruction::Push(i));
+                            // [1, value_ptr, b[i]]
+                            compiler
+                                .instructions
+                                .push(encoder::Instruction::U32CheckedAdd);
+                            // [value_ptr + i, b[i]]
+                            compiler
+                                .instructions
+                                .push(encoder::Instruction::MemStore(None));
+                            // []
+                        }
+
+                        std::mem::swap(compiler.instructions, &mut if_found_instructions);
+                    }
+
+                    let mut if_not_found = vec![];
+                    {
+                        std::mem::swap(compiler.instructions, &mut if_not_found);
+
+                        array_push(compiler, scope, &[map::keys_arr(&a), index]);
+                        array_push(compiler, scope, &[map::values_arr(&a), b.clone()]);
+
+                        std::mem::swap(compiler.instructions, &mut if_not_found);
+                    }
+
+                    compiler.instructions.extend([encoder::Instruction::If {
+                        condition: vec![encoder::Instruction::MemLoad(Some(did_find.memory_addr))],
+                        then: if_found_instructions,
+                        else_: if_not_found,
+                    }]);
+
+                    return b;
+                }
+                _ => {}
+            }
+
             let a = compile_expression(a, compiler, scope);
             let b = compile_expression(b, compiler, scope);
 
@@ -1348,6 +1419,12 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
             }
 
             symbol
+        }
+        Expression::Index(a, b) => {
+            let a = compile_expression(a, compiler, scope);
+            let b = compile_expression(b, compiler, scope);
+
+            compile_index(compiler, &a, &b)
         }
         e => unimplemented!("{:?}", e),
     };
@@ -1844,6 +1921,7 @@ fn compile_eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             result
         }
         (Type::PublicKey, Type::PublicKey) => publickey::eq(compiler, a, b),
+        (Type::String, Type::String) => string::eq(compiler, a, b),
         e => unimplemented!("{:?}", e),
     }
 }
@@ -2032,6 +2110,18 @@ fn compile_shift_right(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbo
             uint64::shift_right(compiler, a, &b_u64)
         }
         e => unimplemented!("{:?}", e),
+    }
+}
+
+fn compile_index(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    match &a.type_ {
+        Type::Map(k, v) => {
+            assert_eq!(k.as_ref(), &b.type_);
+
+            let (key, value, value_ptr, found) = map::get(compiler, a, b);
+            value
+        }
+        x => todo!("can't index into {x:?}"),
     }
 }
 
@@ -2249,15 +2339,28 @@ fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
 
     let data_ptr = dynamic_alloc(compiler, &[capacity.clone()]);
 
-    compiler
-        .memory
-        .read(&mut compiler.instructions, array_len.memory_addr, 1);
+    let read_element_advice_insts = {
+        let mut insts = vec![];
+        std::mem::swap(compiler.instructions, &mut insts);
+
+        let el = read_advice_generic(compiler, element_type);
+        compiler.memory.read(
+            &mut compiler.instructions,
+            el.memory_addr,
+            element_type.miden_width(),
+        );
+
+        std::mem::swap(compiler.instructions, &mut insts);
+        insts
+    };
+
     compiler
         .memory
         .read(&mut compiler.instructions, data_ptr.memory_addr, 1);
-    // [data_ptr, array_len]
-
-    compiler.instructions.push(encoder::Instruction::Swap);
+    // [data_ptr]
+    compiler
+        .memory
+        .read(&mut compiler.instructions, array_len.memory_addr, 1);
     // [array_len, data_ptr]
     compiler.instructions.push(encoder::Instruction::While {
         condition: vec![
@@ -2269,7 +2372,7 @@ fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
             encoder::Instruction::U32CheckedGT,
             // [array_len > 0, array_len, data_ptr]
         ],
-        body: vec![
+        body: [
             // [array_len, data_ptr]
             encoder::Instruction::Push(1),
             // [1, array_len, data_ptr]
@@ -2277,21 +2380,38 @@ fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
             // [array_len - 1, data_ptr]
             encoder::Instruction::Swap,
             // [data_ptr, array_len - 1]
-            encoder::Instruction::Dup(None),
-            // [data_ptr, data_ptr, array_len - 1]
-            encoder::Instruction::AdvPush(1),
-            // [byte, data_ptr, data_ptr, array_len - 1]
-            encoder::Instruction::Swap,
-            // [data_ptr, byte, data_ptr, array_len - 1]
-            encoder::Instruction::MemStore(None),
+        ]
+        .into_iter()
+        .chain(read_element_advice_insts)
+        .chain({
+            // [bytes... (width), data_ptr, array_len - 1]
+            let mut v = vec![];
+
+            for i in 0..element_type.miden_width() {
+                v.push(encoder::Instruction::Dup(Some(
+                    element_type.miden_width() - i,
+                )));
+                // [data_ptr, bytes..., data_ptr, array_len - 1]
+                v.push(encoder::Instruction::Push(i as u32));
+                // [i, data_ptr, bytes..., data_ptr, array_len - 1]
+                v.push(encoder::Instruction::U32CheckedAdd);
+                // [data_ptr + i, bytes..., data_ptr, array_len - 1]
+                v.push(encoder::Instruction::MemStore(None));
+                // [bytes..., data_ptr, array_len - 1]
+            }
+
+            v.into_iter()
+        })
+        .chain([
             // [data_ptr, array_len - 1]
-            encoder::Instruction::Push(1),
-            // [1, data_ptr, array_len - 1]
+            encoder::Instruction::Push(element_type.miden_width()),
+            // [width, data_ptr, array_len - 1]
             encoder::Instruction::U32CheckedAdd,
-            // [data_ptr + 1, array_len - 1]
+            // [data_ptr + width, array_len - 1]
             encoder::Instruction::Swap,
-            // [array_len - 1, data_ptr + 1]
-        ],
+            // [array_len - 1, data_ptr + width]
+        ])
+        .collect(),
     });
 
     // [0, end_data_ptr]
@@ -2335,6 +2455,39 @@ fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
     );
 
     arr
+}
+
+fn read_advice_map(compiler: &mut Compiler, key_type: &Type, value_type: &Type) -> Symbol {
+    // Maps are serialized as [length, keys, length, values]
+    let result = compiler.memory.allocate_symbol(Type::Map(
+        Box::new(key_type.clone()),
+        Box::new(value_type.clone()),
+    ));
+
+    let key_array = read_advice_array(compiler, key_type);
+    let value_array = read_advice_array(compiler, value_type);
+
+    compiler.memory.write(
+        &mut compiler.instructions,
+        map::keys_arr(&result).memory_addr,
+        &vec![
+            ValueSource::Memory(array::capacity(&key_array).memory_addr),
+            ValueSource::Memory(array::length(&key_array).memory_addr),
+            ValueSource::Memory(array::data_ptr(&key_array).memory_addr),
+        ],
+    );
+
+    compiler.memory.write(
+        &mut compiler.instructions,
+        map::values_arr(&result).memory_addr,
+        &vec![
+            ValueSource::Memory(array::capacity(&value_array).memory_addr),
+            ValueSource::Memory(array::length(&value_array).memory_addr),
+            ValueSource::Memory(array::data_ptr(&value_array).memory_addr),
+        ],
+    );
+
+    result
 }
 
 fn array_push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Symbol {
@@ -2500,6 +2653,12 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
             &[value],
             None,
         ),
+        Type::Map(_, _) => compile_function_call(
+            compiler,
+            BUILTINS_SCOPE.find_function(todo!()).unwrap(),
+            &[value],
+            None,
+        ),
         Type::PublicKey => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("hashPublicKey").unwrap(),
@@ -2553,55 +2712,59 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
     result
 }
 
+fn read_advice_generic(compiler: &mut Compiler, type_: &Type) -> Symbol {
+    match type_ {
+        Type::PrimitiveType(PrimitiveType::Boolean) => compile_function_call(
+            compiler,
+            BUILTINS_SCOPE.find_function("readAdviceBoolean").unwrap(),
+            &[],
+            None,
+        ),
+        Type::PrimitiveType(PrimitiveType::UInt32) => compile_function_call(
+            compiler,
+            BUILTINS_SCOPE.find_function("readAdviceUInt32").unwrap(),
+            &[],
+            None,
+        ),
+        Type::PrimitiveType(PrimitiveType::UInt64) => todo!(),
+        Type::String => compile_function_call(
+            compiler,
+            BUILTINS_SCOPE.find_function("readAdviceString").unwrap(),
+            &[],
+            None,
+        ),
+        Type::Bytes => compile_function_call(
+            compiler,
+            BUILTINS_SCOPE.find_function("readAdviceBytes").unwrap(),
+            &[],
+            None,
+        ),
+        Type::CollectionReference { collection } => {
+            read_advice_collection_reference(compiler, collection.clone())
+        }
+        Type::Array(t) => read_advice_array(compiler, t),
+        Type::Struct(s) => {
+            let symbol = compiler.memory.allocate_symbol(type_.clone());
+            read_struct_from_advice_tape(compiler, &symbol, s);
+            symbol
+        }
+        Type::PublicKey => compile_function_call(
+            compiler,
+            BUILTINS_SCOPE.find_function("readAdvicePublicKey").unwrap(),
+            &[],
+            None,
+        ),
+        _ => unimplemented!("{:?}", type_),
+    }
+}
+
 fn read_struct_from_advice_tape(
     compiler: &mut Compiler,
     struct_symbol: &Symbol,
     struct_type: &Struct,
 ) {
     for (name, type_) in &struct_type.fields {
-        let symbol = match type_ {
-            Type::PrimitiveType(PrimitiveType::Boolean) => compile_function_call(
-                compiler,
-                BUILTINS_SCOPE.find_function("readAdviceBoolean").unwrap(),
-                &[],
-                None,
-            ),
-            Type::PrimitiveType(PrimitiveType::UInt32) => compile_function_call(
-                compiler,
-                BUILTINS_SCOPE.find_function("readAdviceUInt32").unwrap(),
-                &[],
-                None,
-            ),
-            Type::PrimitiveType(PrimitiveType::UInt64) => todo!(),
-            Type::String => compile_function_call(
-                compiler,
-                BUILTINS_SCOPE.find_function("readAdviceString").unwrap(),
-                &[],
-                None,
-            ),
-            Type::Bytes => compile_function_call(
-                compiler,
-                BUILTINS_SCOPE.find_function("readAdviceBytes").unwrap(),
-                &[],
-                None,
-            ),
-            Type::CollectionReference { collection } => {
-                read_advice_collection_reference(compiler, collection.clone())
-            }
-            Type::Array(t) => read_advice_array(compiler, t),
-            Type::Struct(s) => {
-                let symbol = compiler.memory.allocate_symbol(type_.clone());
-                read_struct_from_advice_tape(compiler, &symbol, s);
-                symbol
-            }
-            Type::PublicKey => compile_function_call(
-                compiler,
-                BUILTINS_SCOPE.find_function("readAdvicePublicKey").unwrap(),
-                &[],
-                None,
-            ),
-            _ => unimplemented!("{:?}", type_),
-        };
+        let symbol = read_advice_generic(compiler, type_);
 
         let sf = struct_field(struct_symbol, name).unwrap();
         compiler.memory.read(
@@ -2667,6 +2830,7 @@ fn read_collection_inputs(
                 read_advice_collection_reference(compiler, collection.clone())
             }
             Type::Array(t) => read_advice_array(compiler, t),
+            Type::Map(k, v) => read_advice_map(compiler, k, v),
             Type::PublicKey => compile_function_call(
                 compiler,
                 BUILTINS_SCOPE.find_function("readAdvicePublicKey").unwrap(),
@@ -2878,7 +3042,9 @@ fn ast_param_type_to_type(type_: &ast::ParameterType, collection_struct: Option<
         },
         ast::ParameterType::Array(t) => Type::Array(Box::new(ast_type_to_type(t))),
         ast::ParameterType::Boolean => todo!(),
-        ast::ParameterType::Map(_, _) => todo!(),
+        ast::ParameterType::Map(k, v) => {
+            Type::Map(Box::new(ast_type_to_type(k)), Box::new(ast_type_to_type(v)))
+        }
         ast::ParameterType::Object(_) => todo!(),
     }
 }

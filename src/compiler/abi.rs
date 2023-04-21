@@ -21,6 +21,7 @@ pub enum Value {
     Bytes(Vec<u8>),
     CollectionReference(Vec<u8>),
     Array(Vec<Value>),
+    Map(Vec<(Value, Value)>),
     PublicKey(publickey::Key),
     StructValue(Vec<(String, Value)>),
 }
@@ -122,6 +123,24 @@ impl TypeReader for Type {
                 }
 
                 Ok(Value::Array(values))
+            }
+            Type::Map(k, v) => {
+                let mut key_values = Vec::new();
+
+                let key_array_ptr = reader(addr).ok_or("invalid address for map key array ptr")?[0];
+                let value_array_ptr =
+                    reader(addr + 1).ok_or("invalid address for map value array ptr")?[0];
+                let length =
+                    reader(key_array_ptr + 1).ok_or("invalid address for map keys length")?[0];
+
+                for i in 0..length {
+                    let key = k.read(reader, key_array_ptr + i * k.miden_width() as u64)?;
+                    let value = v.read(reader, value_array_ptr + i * v.miden_width() as u64)?;
+
+                    key_values.push((key, value));
+                }
+
+                Ok(Value::Map(key_values))
             }
             Type::PublicKey => {
                 let kty = reader(addr)
@@ -232,6 +251,22 @@ impl Parser for Type {
                 }
                 Ok(Value::Array(values))
             }
+            Type::Map(k, v) => {
+                let mut key_values = vec![];
+                if !value.is_empty() {
+                    let mut parts = value.split(';');
+                    loop {
+                        let Some(key) = parts.next() else {
+                            break;
+                        };
+
+                        let value = parts.next().expect("Missing value in map");
+
+                        key_values.push((k.parse(key)?, v.parse(value)?));
+                    }
+                }
+                Ok(Value::Map(key_values))
+            }
             Type::PublicKey => {
                 let mut values = value.split(',');
                 let kty = values.next().ok_or("missing kty")?;
@@ -282,6 +317,14 @@ impl Value {
             Value::Array(values) => [values.len() as u64]
                 .into_iter()
                 .chain(values.iter().flat_map(|v| v.serialize()))
+                .collect(),
+            // Map is serialized as [length, keys, length, values] so that we can reuse read_advice_array
+            Value::Map(key_values) => [key_values.len() as u64]
+                .into_iter()
+                .chain([key_values.len() as u64])
+                .chain(key_values.iter().flat_map(|(k, _)| k.serialize()))
+                .chain([key_values.len() as u64])
+                .chain(key_values.iter().flat_map(|(_, v)| v.serialize()))
                 .collect(),
             Value::CollectionReference(cr) => [cr.len() as u64]
                 .into_iter()

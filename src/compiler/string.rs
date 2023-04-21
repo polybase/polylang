@@ -1,6 +1,6 @@
 use crate::validation::Value;
 
-use super::*;
+use super::{encoder::Instruction, *};
 
 pub(crate) const WIDTH: u32 = 2;
 
@@ -204,6 +204,98 @@ pub(crate) fn concat(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol 
 
     copy_str_stack(compiler);
     // []
+
+    result
+}
+
+pub(crate) fn eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+
+    compiler.memory.read(
+        &mut compiler.instructions,
+        length(a).memory_addr,
+        length(a).type_.miden_width(),
+    );
+    // [a_len]
+    compiler.memory.read(
+        &mut compiler.instructions,
+        length(b).memory_addr,
+        length(b).type_.miden_width(),
+    );
+    // [b_len, a_len]
+
+    compiler.instructions.extend([encoder::Instruction::If {
+        condition: vec![
+            encoder::Instruction::U32CheckedEq,
+            // [a_len == b_len]
+            encoder::Instruction::Dup(None),
+            // [a_len == b_len, a_len == b_len]
+            // Covers the case of '' == ''
+            encoder::Instruction::MemStore(Some(result.memory_addr)),
+            // [a_len == b_len]
+        ],
+        then: vec![
+            Instruction::MemLoad(Some(length(a).memory_addr)),
+            // [len]
+            Instruction::Push(0),
+            // [i = 0, len]
+            Instruction::Push(0),
+            // [0, i, len]
+            Instruction::Dup(Some(2)),
+            // [len, 0, i, len]
+            Instruction::U32CheckedLT,
+            // [0 < len, i, len]
+            Instruction::WhileTrueRaw {
+                instructions: vec![
+                    Instruction::MemLoad(Some(data_ptr(a).memory_addr)),
+                    // [a_data_ptr, i, len]
+                    Instruction::Dup(Some(1)),
+                    // [i, a_data_ptr, i, len]
+                    Instruction::U32CheckedAdd,
+                    // [a_data_ptr + i, i, len]
+                    Instruction::MemLoad(None),
+                    // [a_data_ptr[i], i, len]
+                    Instruction::MemLoad(Some(data_ptr(b).memory_addr)),
+                    // [b_data_ptr, a_data_ptr[i], i, len]
+                    Instruction::Dup(Some(2)),
+                    // [i, b_data_ptr, a_data_ptr[i], i, len]
+                    Instruction::U32CheckedAdd,
+                    // [b_data_ptr + i, a_data_ptr[i], i, len]
+                    Instruction::MemLoad(None),
+                    // [b_data_ptr[i], a_data_ptr[i], i, len]
+                    Instruction::U32CheckedEq,
+                    // [a_data_ptr[i] == b_data_ptr[i], i, len]
+                    Instruction::Dup(None),
+                    Instruction::MemStore(Some(result.memory_addr)),
+                    // [a_data_ptr[i] == b_data_ptr[i], i, len]
+                    Instruction::Swap,
+                    // [i, a_data_ptr[i] == b_data_ptr[i], len]
+                    Instruction::Push(1),
+                    // [1, i, a_data_ptr[i] == b_data_ptr[i], len]
+                    Instruction::U32CheckedAdd,
+                    // [i + 1, a_data_ptr[i] == b_data_ptr[i], len]
+                    Instruction::MovDown(2),
+                    // [a_data_ptr[i] == b_data_ptr[i], i + 1, len]
+                    Instruction::Dup(Some(1)),
+                    // [i + 1, a_data_ptr[i] == b_data_ptr[i], i + 1, len]
+                    Instruction::Dup(Some(3)),
+                    // [len, i + 1, a_data_ptr[i] == b_data_ptr[i], i + 1, len]
+                    Instruction::U32CheckedLT,
+                    // [i + 1 < len, a_data_ptr[i] == b_data_ptr[i], i + 1, len]
+                    Instruction::And,
+                    // [a_data_ptr[i] == b_data_ptr[i] && i + 1 < len, i + 1, len]
+                ],
+            },
+            // [i, len]
+            Instruction::Drop,
+            // [len]
+            Instruction::Drop,
+            // []
+        ],
+        else_: vec![],
+    }]);
 
     result
 }

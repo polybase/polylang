@@ -40,6 +40,9 @@ pub(crate) enum Instruction<'a> {
         condition: Vec<Instruction<'a>>,
         body: Vec<Instruction<'a>>,
     },
+    WhileTrueRaw {
+        instructions: Vec<Instruction<'a>>,
+    },
     If {
         condition: Vec<Instruction<'a>>,
         then: Vec<Instruction<'a>>,
@@ -119,6 +122,15 @@ impl Instruction<'_> {
                     f.write(b"\n")?;
                 }
                 for instruction in condition {
+                    instruction.encode(f, depth + 1)?;
+                    f.write(b"\n")?;
+                }
+                write_indent!(f, "end");
+            }
+            Instruction::WhileTrueRaw { instructions } => {
+                write_indent!(f, "while.true");
+                f.write(b"\n")?;
+                for instruction in instructions {
                     instruction.encode(f, depth + 1)?;
                     f.write(b"\n")?;
                 }
