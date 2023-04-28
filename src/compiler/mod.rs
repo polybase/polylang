@@ -6,12 +6,13 @@ mod encoder;
 mod int32;
 mod ir;
 mod map;
+mod nullable;
 mod publickey;
 mod string;
 mod uint32;
 mod uint64;
 
-use std::{collections::HashMap, ops::Deref};
+use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc};
 
 use serde::{Deserialize, Serialize};
 
@@ -207,6 +208,7 @@ lazy_static::lazy_static! {
                 Symbol {
                     type_: Type::PrimitiveType(PrimitiveType::UInt32),
                     memory_addr: 0,
+                    ..Default::default()
                 }
             })),
         ));
@@ -577,6 +579,7 @@ lazy_static::lazy_static! {
                 Symbol {
                     type_: Type::PrimitiveType(PrimitiveType::Boolean),
                     memory_addr: 0,
+                    ..Default::default()
                 }
             })),
         ));
@@ -769,6 +772,7 @@ lazy_static::lazy_static! {
             Symbol {
                 type_: Type::PrimitiveType(PrimitiveType::Boolean),
                 memory_addr: 0,
+                ..Default::default()
             }
         }))));
 
@@ -845,9 +849,11 @@ pub struct Struct {
     pub fields: Vec<(String, Type)>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub enum Type {
+    Nullable(Box<Type>),
     PrimitiveType(PrimitiveType),
+    #[default]
     String,
     Bytes,
     CollectionReference {
@@ -864,6 +870,7 @@ pub enum Type {
 impl Type {
     fn miden_width(&self) -> u32 {
         match self {
+            Type::Nullable(t) => nullable::width(&t),
             Type::PrimitiveType(pt) => pt.miden_width(),
             Type::String => string::WIDTH,
             Type::Bytes => bytes::WIDTH,
@@ -875,12 +882,6 @@ impl Type {
             Type::Struct(struct_) => struct_.fields.iter().map(|(_, t)| t.miden_width()).sum(),
         }
     }
-}
-
-fn new_struct(compiler: &mut Compiler, struct_: Struct) -> Symbol {
-    let symbol = compiler.memory.allocate_symbol(Type::Struct(struct_));
-
-    symbol
 }
 
 fn struct_field(struct_symbol: &Symbol, field_name: &str) -> Option<Symbol> {
@@ -895,6 +896,7 @@ fn struct_field(struct_symbol: &Symbol, field_name: &str) -> Option<Symbol> {
             return Some(Symbol {
                 type_: field_type.clone(),
                 memory_addr: struct_symbol.memory_addr + offset,
+                ..Default::default()
             });
         }
 
@@ -904,7 +906,22 @@ fn struct_field(struct_symbol: &Symbol, field_name: &str) -> Option<Symbol> {
     None
 }
 
-#[derive(Debug, Clone)]
+/// Calls `f` for each field in `struct_`, passing the offset, name, and type of the field.
+/// Fields of fields are also passed to `f`.
+fn struct_each_field(struct_: &Struct, f: &mut impl FnMut(u32, &str, &Type), mut offset: u32) {
+    for (name, field_type) in &struct_.fields {
+        match field_type {
+            Type::Struct(s) => {
+                struct_each_field(s, f, offset);
+            }
+            _ => f(offset, name, field_type),
+        }
+
+        offset += field_type.miden_width();
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub(crate) struct Symbol {
     type_: Type,
     memory_addr: u32,
@@ -936,6 +953,7 @@ impl std::fmt::Debug for Function<'_> {
 struct Scope<'ast, 'b> {
     parent: Option<&'b Scope<'ast, 'b>>,
     symbols: Vec<(String, Symbol)>,
+    non_null_symbol_addrs: Vec<u32>,
     functions: Vec<(String, Function<'ast>)>,
     collections: Vec<(String, Collection<'ast>)>,
 }
@@ -945,6 +963,7 @@ impl<'ast> Scope<'ast, '_> {
         Scope {
             parent: None,
             symbols: vec![],
+            non_null_symbol_addrs: vec![],
             functions: vec![],
             collections: vec![],
         }
@@ -954,6 +973,7 @@ impl<'ast> Scope<'ast, '_> {
         let scope = Scope {
             parent: Some(self),
             symbols: vec![],
+            non_null_symbol_addrs: vec![],
             functions: vec![],
             collections: vec![],
         };
@@ -965,7 +985,7 @@ impl<'ast> Scope<'ast, '_> {
         self.symbols.push((name, symbol));
     }
 
-    fn find_symbol(&self, name: &str) -> Option<&Symbol> {
+    fn find_symbol(&self, name: &str) -> Option<Symbol> {
         if let Some(symbol) = self
             .symbols
             .iter()
@@ -973,7 +993,7 @@ impl<'ast> Scope<'ast, '_> {
             .find(|(n, _)| n == name)
             .map(|(_, s)| s)
         {
-            return Some(symbol);
+            return Some(symbol.clone());
         }
 
         if let Some(parent) = self.parent.as_ref() {
@@ -1073,6 +1093,7 @@ impl Memory {
         Symbol {
             type_,
             memory_addr: addr,
+            ..Default::default()
         }
     }
 
@@ -1277,8 +1298,28 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
                         );
                     }
                 }
+                (Type::Nullable(a_inner_type), b_type) if !matches!(b_type, Type::Nullable(_)) => {
+                    assert_eq!(a_inner_type.as_ref(), b_type);
+
+                    compiler.memory.write(
+                        compiler.instructions,
+                        nullable::is_not_null(&a).memory_addr,
+                        &[ValueSource::Immediate(1)],
+                    );
+
+                    compiler.memory.read(
+                        compiler.instructions,
+                        b.memory_addr,
+                        b_type.miden_width(),
+                    );
+                    compiler.memory.write(
+                        compiler.instructions,
+                        nullable::value(a.clone()).memory_addr,
+                        &vec![ValueSource::Stack; b_type.miden_width() as usize],
+                    );
+                }
                 (a_type, b_type) => {
-                    assert_eq!(a_type, b_type);
+                    assert!(a_type == b_type);
 
                     compiler.memory.read(
                         compiler.instructions,
@@ -1429,6 +1470,19 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
         e => unimplemented!("{:?}", e),
     };
 
+    let symbol = match &symbol.type_ {
+        Type::Nullable(_)
+            if scope
+                .non_null_symbol_addrs
+                .iter()
+                .find(|addr| **addr == symbol.memory_addr)
+                .is_some() =>
+        {
+            nullable::value(symbol)
+        }
+        _ => symbol,
+    };
+
     comment!(
         compiler,
         "Compiled expression {expr:?} to symbol {symbol:?}",
@@ -1478,10 +1532,19 @@ fn compile_statement(
                 compiler.root_scope,
             );
             let condition_symbol = compile_expression(condition, &mut condition_compiler, &scope);
-            assert_eq!(
-                condition_symbol.type_,
-                Type::PrimitiveType(PrimitiveType::Boolean)
-            );
+            // let mut then_cleanup = None;
+            let mut then_scope = scope.deeper();
+            let condition_symbol = match condition_symbol.type_ {
+                Type::PrimitiveType(PrimitiveType::Boolean) => condition_symbol,
+                Type::Nullable(ref t) => {
+                    then_scope
+                        .non_null_symbol_addrs
+                        .push(condition_symbol.memory_addr);
+
+                    nullable::is_not_null(&condition_symbol)
+                }
+                _ => panic!("if condition must be a boolean or optional"),
+            };
             condition_compiler.memory.read(
                 &mut condition_compiler.instructions,
                 condition_symbol.memory_addr,
@@ -1492,8 +1555,14 @@ fn compile_statement(
             let mut body_compiler =
                 Compiler::new(&mut body_instructions, compiler.memory, compiler.root_scope);
             for statement in then_statements {
-                compile_statement(statement, &mut body_compiler, &mut scope, return_result);
+                compile_statement(
+                    statement,
+                    &mut body_compiler,
+                    &mut then_scope,
+                    return_result,
+                );
             }
+            // then_cleanup.map(|f| f());
 
             let mut else_body_instructions = vec![];
             let mut else_body_compiler = Compiler::new(
@@ -2195,6 +2264,7 @@ fn log(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Symbol {
     Symbol {
         type_: Type::PrimitiveType(PrimitiveType::Boolean),
         memory_addr: 0,
+        ..Default::default()
     }
 }
 
@@ -2490,6 +2560,62 @@ fn read_advice_map(compiler: &mut Compiler, key_type: &Type, value_type: &Type) 
     result
 }
 
+fn read_advice_nullable(compiler: &mut Compiler, type_: Type) -> Symbol {
+    assert!(matches!(type_, Type::Nullable(_)));
+
+    let value_type = match &type_ {
+        Type::Nullable(value_type) => value_type,
+        _ => unreachable!(),
+    };
+
+    let is_not_null = compile_function_call(
+        compiler,
+        BUILTINS_SCOPE.find_function("readAdviceBoolean").unwrap(),
+        &[],
+        None,
+    );
+
+    let (value, read_value_insts) = {
+        let mut insts = vec![];
+        std::mem::swap(compiler.instructions, &mut insts);
+
+        let value = read_advice_generic(compiler, value_type);
+        std::mem::swap(compiler.instructions, &mut insts);
+
+        (value, insts)
+    };
+
+    compiler.instructions.push(encoder::Instruction::If {
+        condition: vec![encoder::Instruction::MemLoad(Some(is_not_null.memory_addr))],
+        then: read_value_insts,
+        else_: vec![],
+    });
+
+    let s = compiler.memory.allocate_symbol(type_);
+    compiler.memory.read(
+        &mut compiler.instructions,
+        is_not_null.memory_addr,
+        is_not_null.type_.miden_width(),
+    );
+    compiler.memory.write(
+        &mut compiler.instructions,
+        nullable::is_not_null(&s).memory_addr,
+        &vec![ValueSource::Stack; is_not_null.type_.miden_width() as _],
+    );
+    compiler.memory.read(
+        &mut compiler.instructions,
+        value.memory_addr,
+        value.type_.miden_width(),
+    );
+    compiler.memory.write(
+        &mut compiler.instructions,
+        nullable::value(s.clone()).memory_addr,
+        &vec![ValueSource::Stack; value.type_.miden_width() as _],
+    );
+
+    s
+}
+
 fn array_push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Symbol {
     let arr = args.get(0).unwrap();
     let element = args.get(1).unwrap();
@@ -2625,6 +2751,44 @@ fn generic_hash(compiler: &mut Compiler, value: &Symbol) -> Symbol {
 
 fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
     let result = match &value.type_ {
+        Type::Nullable(_) => {
+            let h = compiler.memory.allocate_symbol(Type::Hash);
+
+            let mut hash_value_instructions = vec![];
+            std::mem::swap(compiler.instructions, &mut hash_value_instructions);
+            let non_null_value_hash = hash(compiler, nullable::value(value.clone()));
+            std::mem::swap(compiler.instructions, &mut hash_value_instructions);
+
+            compiler.instructions.extend([encoder::Instruction::If {
+                condition: vec![encoder::Instruction::MemLoad(Some(
+                    nullable::is_not_null(&value).memory_addr,
+                ))],
+                then: hash_value_instructions
+                    .into_iter()
+                    .chain({
+                        let mut instructions = vec![];
+                        compiler.memory.read(
+                            &mut instructions,
+                            non_null_value_hash.memory_addr,
+                            non_null_value_hash.type_.miden_width(),
+                        );
+                        compiler.memory.write(
+                            &mut instructions,
+                            h.memory_addr,
+                            &vec![
+                                ValueSource::Stack;
+                                non_null_value_hash.type_.miden_width() as usize
+                            ],
+                        );
+                        instructions
+                    })
+                    .collect(),
+                // leave h at 0 if value is null
+                else_: vec![],
+            }]);
+
+            h
+        }
         Type::PrimitiveType(_) => generic_hash(compiler, &value),
         Type::Hash => generic_hash(compiler, &value),
         Type::String => compile_function_call(
@@ -2673,6 +2837,7 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
                 let field = Symbol {
                     type_: field_type.clone(),
                     memory_addr: value.memory_addr + offset,
+                    ..Default::default()
                 };
                 offset += width;
 
@@ -2714,6 +2879,7 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
 
 fn read_advice_generic(compiler: &mut Compiler, type_: &Type) -> Symbol {
     match type_ {
+        Type::Nullable(_) => read_advice_nullable(compiler, type_.clone()),
         Type::PrimitiveType(PrimitiveType::Boolean) => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("readAdviceBoolean").unwrap(),
@@ -2801,6 +2967,7 @@ fn read_collection_inputs(
     let mut args_symbols = Vec::new();
     for arg in args {
         let symbol = match arg {
+            Type::Nullable(_) => read_advice_nullable(compiler, arg.clone()),
             Type::PrimitiveType(PrimitiveType::Boolean) => compile_function_call(
                 compiler,
                 BUILTINS_SCOPE.find_function("readAdviceBoolean").unwrap(),
@@ -2872,7 +3039,7 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                         ast::CollectionItem::Field(f) => {
                             collection
                                 .fields
-                                .push((f.name.clone(), ast_type_to_type(&f.type_)));
+                                .push((f.name.clone(), ast_type_to_type(f.required, &f.type_)));
                         }
                         ast::CollectionItem::Function(f) => {
                             collection.functions.push((f.name.clone(), &f));
@@ -2955,7 +3122,7 @@ pub fn compile(
             &function
                 .parameters
                 .iter()
-                .map(|p| ast_param_type_to_type(&p.type_, collection_struct.as_ref()))
+                .map(|p| ast_param_type_to_type(p.required, &p.type_, collection_struct.as_ref()))
                 .collect::<Vec<_>>(),
         );
 
@@ -3030,8 +3197,12 @@ pub fn compile(
 }
 
 /// collection_struct is the type used for `record` types
-fn ast_param_type_to_type(type_: &ast::ParameterType, collection_struct: Option<&Struct>) -> Type {
-    match type_ {
+fn ast_param_type_to_type(
+    required: bool,
+    type_: &ast::ParameterType,
+    collection_struct: Option<&Struct>,
+) -> Type {
+    let t = match type_ {
         ast::ParameterType::String => Type::String,
         ast::ParameterType::Number => Type::PrimitiveType(PrimitiveType::UInt32),
         ast::ParameterType::Record => Type::Struct(collection_struct.unwrap().clone()),
@@ -3040,17 +3211,26 @@ fn ast_param_type_to_type(type_: &ast::ParameterType, collection_struct: Option<
         ast::ParameterType::ForeignRecord { collection } => Type::CollectionReference {
             collection: collection.clone(),
         },
-        ast::ParameterType::Array(t) => Type::Array(Box::new(ast_type_to_type(t))),
+        ast::ParameterType::Array(t) => Type::Array(Box::new(ast_type_to_type(true, t))),
         ast::ParameterType::Boolean => todo!(),
-        ast::ParameterType::Map(k, v) => {
-            Type::Map(Box::new(ast_type_to_type(k)), Box::new(ast_type_to_type(v)))
-        }
+        ast::ParameterType::Map(k, v) => Type::Map(
+            Box::new(ast_type_to_type(true, k)),
+            Box::new(ast_type_to_type(true, v)),
+        ),
         ast::ParameterType::Object(_) => todo!(),
-    }
+    };
+
+    let t = if !required {
+        Type::Nullable(Box::new(t))
+    } else {
+        t
+    };
+
+    t
 }
 
-fn ast_type_to_type(type_: &ast::Type) -> Type {
-    match type_ {
+fn ast_type_to_type(required: bool, type_: &ast::Type) -> Type {
+    let t = match type_ {
         ast::Type::String => Type::String,
         ast::Type::Number => Type::PrimitiveType(PrimitiveType::UInt32),
         ast::Type::PublicKey => Type::PublicKey,
@@ -3058,20 +3238,31 @@ fn ast_type_to_type(type_: &ast::Type) -> Type {
         ast::Type::ForeignRecord { collection } => Type::CollectionReference {
             collection: collection.clone(),
         },
-        ast::Type::Array(t) => Type::Array(Box::new(ast_type_to_type(t))),
+        ast::Type::Array(t) => Type::Array(Box::new(ast_type_to_type(true, t))),
         ast::Type::Boolean => todo!(),
         ast::Type::Map(_, _) => todo!(),
         ast::Type::Object(o) => {
             let mut fields = vec![];
             for field in o {
-                fields.push((field.name.clone(), ast_type_to_type(&field.type_)));
+                fields.push((
+                    field.name.clone(),
+                    ast_type_to_type(field.required, &field.type_),
+                ));
             }
             Type::Struct(Struct {
                 name: "anonymous".to_owned(),
                 fields,
             })
         }
-    }
+    };
+
+    let t = if !required {
+        Type::Nullable(Box::new(t))
+    } else {
+        t
+    };
+
+    t
 }
 
 /// A function that takes in a struct type and generates a program that hashes a value of that type and returns the hash on the stack.

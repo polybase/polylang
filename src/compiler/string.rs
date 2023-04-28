@@ -36,6 +36,7 @@ pub(crate) fn length(string: &Symbol) -> Symbol {
     Symbol {
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
         memory_addr: string.memory_addr,
+        ..Default::default()
     }
 }
 
@@ -43,6 +44,7 @@ pub(crate) fn data_ptr(string: &Symbol) -> Symbol {
     Symbol {
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
         memory_addr: string.memory_addr + 1,
+        ..Default::default()
     }
 }
 

@@ -17,6 +17,7 @@ pub(crate) fn new_map(
     let map_symbol = Symbol {
         memory_addr: compiler.memory.allocate(WIDTH),
         type_: Type::Map(Box::new(key_type), Box::new(value_type)),
+        ..Default::default()
     };
 
     let map_keys_ptr = keys_arr(&map_symbol);
@@ -44,6 +45,7 @@ pub(crate) fn keys_arr(map_symbol: &Symbol) -> Symbol {
             Type::Map(key_type, _) => Type::Array(key_type.clone()),
             _ => panic!("Expected map type"),
         },
+        ..Default::default()
     }
 }
 
@@ -52,6 +54,7 @@ pub(crate) fn values_arr(map_symbol: &Symbol) -> Symbol {
         Type::Map(_, value_type) => Symbol {
             memory_addr: map_symbol.memory_addr + array::WIDTH,
             type_: Type::Array(value_type.clone()),
+            ..Default::default()
         },
         _ => panic!("Expected map type"),
     }
@@ -72,6 +75,7 @@ pub(crate) fn get(
             Type::Array(t) => *t.clone(),
             x => panic!("Expected array type, got {x:?}"),
         },
+        ..Default::default()
     };
 
     let current_key_symbol = compiler.memory.allocate_symbol(result.type_.clone());

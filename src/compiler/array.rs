@@ -8,6 +8,7 @@ pub(crate) fn new(compiler: &mut Compiler, len: u32, element_type: Type) -> (Sym
     let symbol = Symbol {
         memory_addr: compiler.memory.allocate(WIDTH),
         type_: Type::Array(Box::new(element_type)),
+        ..Default::default()
     };
 
     let symbol_capacity = capacity(&symbol);
@@ -42,6 +43,7 @@ pub(crate) fn capacity(symbol: &Symbol) -> Symbol {
     Symbol {
         memory_addr: symbol.memory_addr,
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
+        ..Default::default()
     }
 }
 
@@ -49,6 +51,7 @@ pub(crate) fn length(symbol: &Symbol) -> Symbol {
     Symbol {
         memory_addr: symbol.memory_addr + 1,
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
+        ..Default::default()
     }
 }
 
@@ -56,5 +59,6 @@ pub(crate) fn data_ptr(symbol: &Symbol) -> Symbol {
     Symbol {
         memory_addr: symbol.memory_addr + 2,
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
+        ..Default::default()
     }
 }

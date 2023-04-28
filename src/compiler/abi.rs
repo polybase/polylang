@@ -12,6 +12,7 @@ pub trait TypeReader {
 
 #[derive(Debug)]
 pub enum Value {
+    Nullable(Option<Box<Value>>),
     Boolean(bool),
     UInt32(u32),
     UInt64(u64),
@@ -66,6 +67,14 @@ impl TypeReader for Struct {
 impl TypeReader for Type {
     fn read(&self, reader: &MemoryReader, addr: u64) -> Result<Value, Box<dyn std::error::Error>> {
         match self {
+            Type::Nullable(t) => {
+                let [is_null, _, _, _] = reader(addr).ok_or("invalid address for nullable")?;
+                if is_null == 0 {
+                    Ok(Value::Nullable(None))
+                } else {
+                    Ok(Value::Nullable(Some(Box::new(t.read(reader, addr + 1)?))))
+                }
+            }
             Type::PrimitiveType(pt) => pt.read(reader, addr),
             Type::Struct(s) => s.read(reader, addr),
             Type::Hash => Ok(reader(addr)
@@ -216,6 +225,13 @@ impl Parser for Struct {
 impl Parser for Type {
     fn parse(&self, value: &str) -> Result<Value, Box<dyn std::error::Error>> {
         match self {
+            Type::Nullable(t) => {
+                if value == "null" {
+                    Ok(Value::Nullable(None))
+                } else {
+                    Ok(Value::Nullable(Some(Box::new(t.parse(value)?))))
+                }
+            }
             Type::PrimitiveType(pt) => pt.parse(value),
             Type::Struct(s) => s.parse(value),
             Type::Hash => {
@@ -301,6 +317,10 @@ impl Parser for Type {
 impl Value {
     pub fn serialize(&self) -> Vec<u64> {
         match self {
+            Value::Nullable(opt) => match opt {
+                None => vec![0],
+                Some(v) => [1].into_iter().chain(v.serialize().into_iter()).collect(),
+            },
             Value::Boolean(b) => vec![*b as u64],
             Value::UInt32(x) => vec![u64::from(*x)],
             Value::UInt64(x) => vec![*x >> 32, *x & 0xffffffff],

@@ -183,6 +183,7 @@ pub(crate) fn kty(symbol: &Symbol) -> Symbol {
     Symbol {
         memory_addr: symbol.memory_addr,
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
+        ..Default::default()
     }
 }
 
@@ -190,6 +191,7 @@ pub(crate) fn crv(symbol: &Symbol) -> Symbol {
     Symbol {
         memory_addr: symbol.memory_addr + 1,
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
+        ..Default::default()
     }
 }
 
@@ -197,6 +199,7 @@ pub(crate) fn alg(symbol: &Symbol) -> Symbol {
     Symbol {
         memory_addr: symbol.memory_addr + 2,
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
+        ..Default::default()
     }
 }
 
@@ -204,6 +207,7 @@ pub(crate) fn use_(symbol: &Symbol) -> Symbol {
     Symbol {
         memory_addr: symbol.memory_addr + 3,
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
+        ..Default::default()
     }
 }
 
@@ -211,6 +215,7 @@ pub(crate) fn extra_ptr(symbol: &Symbol) -> Symbol {
     Symbol {
         memory_addr: symbol.memory_addr + 4,
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
+        ..Default::default()
     }
 }
 
