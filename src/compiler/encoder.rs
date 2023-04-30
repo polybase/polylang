@@ -159,6 +159,18 @@ impl Instruction<'_> {
                 }
                 write_indent!(f, "end");
             }
+            Instruction::Repeat {
+                count,
+                instructions,
+            } => {
+                write_indent!(f, "repeat.{}", count);
+                f.write(b"\n")?;
+                for instruction in instructions {
+                    instruction.encode(f, depth + 1)?;
+                    f.write(b"\n")?;
+                }
+                write_indent!(f, "end");
+            }
             Instruction::MemStore(Some(addr)) => write_indent!(f, "mem_store.{}", addr),
             Instruction::MemStore(None) => write_indent!(f, "mem_store"),
             Instruction::MemLoad(Some(addr)) => write_indent!(f, "mem_load.{}", addr),
@@ -274,6 +286,23 @@ pub(crate) fn unabstract<'a>(
                             true,
                         );
                         result.push(Instruction::While { condition, body });
+                    }
+                    Instruction::Repeat {
+                        count,
+                        instructions,
+                    } => {
+                        let instructions = unabstract(
+                            instructions,
+                            allocate,
+                            &mut None,
+                            return_ptr,
+                            ptr_value_might_have_been_flipped,
+                            true,
+                        );
+                        result.push(Instruction::Repeat {
+                            count,
+                            instructions,
+                        });
                     }
                     Instruction::Repeat {
                         count,
