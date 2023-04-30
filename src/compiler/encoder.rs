@@ -46,6 +46,10 @@ pub(crate) enum Instruction<'a> {
     WhileTrueRaw {
         instructions: Vec<Instruction<'a>>,
     },
+    Repeat {
+        count: u32,
+        instructions: Vec<Instruction<'a>>,
+    },
     If {
         condition: Vec<Instruction<'a>>,
         then: Vec<Instruction<'a>>,
@@ -140,6 +144,18 @@ impl Instruction<'_> {
                 for instruction in instructions {
                     instruction.encode(f, depth + 1)?;
                     f.write_all(b"\n")?;
+                }
+                write_indent!(f, "end");
+            }
+            Instruction::Repeat {
+                count,
+                instructions,
+            } => {
+                write_indent!(f, "repeat.{}", count);
+                f.write(b"\n")?;
+                for instruction in instructions {
+                    instruction.encode(f, depth + 1)?;
+                    f.write(b"\n")?;
                 }
                 write_indent!(f, "end");
             }
@@ -258,6 +274,23 @@ pub(crate) fn unabstract<'a>(
                             true,
                         );
                         result.push(Instruction::While { condition, body });
+                    }
+                    Instruction::Repeat {
+                        count,
+                        instructions,
+                    } => {
+                        let instructions = unabstract(
+                            instructions,
+                            allocate,
+                            &mut None,
+                            return_ptr,
+                            ptr_value_might_have_been_flipped,
+                            true,
+                        );
+                        result.push(Instruction::Repeat {
+                            count,
+                            instructions,
+                        });
                     }
                     Instruction::If {
                         condition,
