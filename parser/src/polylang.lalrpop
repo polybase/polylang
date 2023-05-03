@@ -87,6 +87,7 @@ BasicType: Type = {
 
 ArrayInnerType: Type = {
     <t:BasicType> => t,
+    "PublicKey" => Type::PublicKey,
     <i:Ident> => Type::ForeignRecord {
         collection: i,
     },
