@@ -1,5 +1,6 @@
 use std::{collections::HashMap, io::Read};
 
+use miden_processor::math::Felt;
 use polylang::compiler::abi::{self, Parser, TypeReader};
 
 // Copied from https://github.com/novifinancial/winterfell/blob/1a1815adb51757e57f8f3844c51ff538e6c17a32/math/src/field/f64/mod.rs#L572
@@ -105,6 +106,8 @@ impl Args {
 
 fn hash(struct_type: polylang::compiler::Struct, value: &abi::Value) -> Vec<u64> {
     let hasher_program = polylang::compiler::compile_struct_hasher(struct_type);
+    // println!("{}", hasher_program);
+    // panic!();
 
     let assembler = miden::Assembler::default()
         .with_library(&miden_stdlib::StdLibrary::default())
@@ -145,7 +148,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         eprintln!(
             "Hash of input this: {:?}",
-            this_hash.iter().take(4).rev().collect::<Vec<_>>()
+            this_hash.iter().take(4).collect::<Vec<_>>()
         );
 
         stack.extend(this_hash.iter().take(4).rev());

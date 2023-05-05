@@ -48,6 +48,73 @@ pub(crate) fn data_ptr(string: &Symbol) -> Symbol {
     }
 }
 
+/// Loops over the string contents, running `body` for each character (stack at call: [index, byte]).
+/// The stack needs to be restored to the same state after each iteration.
+pub(crate) fn loop_bytes<'ast, 'c, 's>(
+    compiler: &mut Compiler<'ast, 'c, 's>,
+    s: &Symbol,
+    body: Vec<Instruction<'ast>>,
+) {
+    compiler
+        .memory
+        .read(&mut compiler.instructions, data_ptr(s).memory_addr, 1);
+    // [src_ptr]
+    compiler
+        .memory
+        .read(&mut compiler.instructions, length(s).memory_addr, 1);
+    // [len, src_ptr]
+
+    // [len, src_ptr]
+    compiler.instructions.push(encoder::Instruction::While {
+        // len > 0
+        condition: vec![
+            encoder::Instruction::Dup(None),
+            // [len, len, src_ptr]
+            encoder::Instruction::Push(0),
+            // [0, len, len, src_ptr]
+            encoder::Instruction::U32CheckedGT,
+            // [len > 0, len, src_ptr]
+        ],
+        // len--; <body>; src_ptr++;;
+        body: [
+            // [len, src_ptr]
+            encoder::Instruction::Push(1),
+            // [1, len, src_ptr]
+            encoder::Instruction::U32CheckedSub,
+            // [len - 1, src_ptr]
+            encoder::Instruction::Swap,
+            // [src_ptr, len - 1]
+            encoder::Instruction::Dup(None),
+            // [src_ptr, src_ptr, len - 1]
+            encoder::Instruction::MemLoad(None),
+            // [*src_ptr, src_ptr, len - 1]
+            encoder::Instruction::MovUp(2),
+            // [len - 1, *src_ptr, src_ptr]
+        ]
+        .into_iter()
+        .chain(body)
+        .chain([
+            encoder::Instruction::MovDown(2),
+            // [*src_ptr, src_ptr, len - 1]
+            encoder::Instruction::Drop,
+            // [src_ptr, len - 1]
+            encoder::Instruction::Push(1),
+            // [1, src_ptr, len - 1]
+            encoder::Instruction::U32CheckedAdd,
+            // [src_ptr + 1, len - 1]
+            encoder::Instruction::Swap,
+            // [len - 1, src_ptr + 1]
+        ])
+        .collect(),
+    });
+
+    // [len, src_ptr]
+    compiler.instructions.push(encoder::Instruction::Drop);
+    // [src_ptr]
+    compiler.instructions.push(encoder::Instruction::Drop);
+    // []
+}
+
 /// Expects the stack to be: [len, src_ptr, dest_ptr]
 fn copy_str_stack(compiler: &mut Compiler) {
     // [len, src_ptr, dest_ptr]

@@ -232,11 +232,6 @@ lazy_static::lazy_static! {
         ));
 
         builtins.push((
-            "readAdviceIntoString".to_string(),
-            Function::AST(&READ_ADVICE_INTO_STRING),
-        ));
-
-        builtins.push((
             "unsafeToString".to_string(),
             Function::Builtin(Box::new(&|compiler, _, args| {
                 let length = args.get(0).unwrap();
@@ -598,12 +593,8 @@ lazy_static::lazy_static! {
 
         builtins.push((
             "readAdviceString".to_string(),
-            Function::Builtin(Box::new(&|compiler, _, args| {
-                let old_root_scope = compiler.root_scope;
-                compiler.root_scope = &BUILTINS_SCOPE;
-                let result = compile_ast_function_call(&READ_ADVICE_STRING, compiler, args, None);
-                compiler.root_scope = old_root_scope;
-                result
+            Function::Builtin(Box::new(&|compiler, _, _| {
+                read_advice_string(compiler)
             })),
         ));
 
@@ -2357,7 +2348,6 @@ fn hash_string(compiler: &mut Compiler, scope: &Scope, args: &[Symbol]) -> Symbo
 
     result
 }
-
 fn read_advice_collection_reference(compiler: &mut Compiler, collection: String) -> Symbol {
     let r = compile_function_call(
         compiler,
@@ -2372,6 +2362,17 @@ fn read_advice_collection_reference(compiler: &mut Compiler, collection: String)
         type_: Type::CollectionReference { collection },
         ..r
     }
+}
+
+fn read_advice_string(compiler: &mut Compiler) -> Symbol {
+    let arr = read_advice_array(compiler, &Type::PrimitiveType(PrimitiveType::UInt32));
+    let string = Symbol {
+        type_: Type::String,
+        memory_addr: arr.memory_addr + 1,
+        ..arr
+    };
+
+    string
 }
 
 fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
@@ -3129,19 +3130,14 @@ pub fn compile(
         this_addr = this_symbol.as_ref().map(|ts| ts.memory_addr);
 
         if let Some(this_symbol) = &this_symbol {
-            // let this_hash = hash(&mut compiler, this_symbol.clone());
-            // compiler.memory.read(
-            //     &mut compiler.instructions,
-            //     this_hash.memory_addr,
-            //     this_hash.type_.miden_width(),
-            // );
-            // let is_eq = compile_eq(&mut compiler, &this_hash, expected_hash.as_ref().unwrap());
-            // let assert_fn = compiler.root_scope.find_function("assert").unwrap();
-            // let error_str = string::new(
-            //     &mut compiler,
-            //     "Hash of this does not match the expected hash",
-            // );
-            // compile_function_call(&mut compiler, assert_fn, &[is_eq, error_str], None);
+            let this_hash = hash(&mut compiler, this_symbol.clone());
+            let is_eq = compile_eq(&mut compiler, &this_hash, expected_hash.as_ref().unwrap());
+            let assert_fn = compiler.root_scope.find_function("assert").unwrap();
+            let error_str = string::new(
+                &mut compiler,
+                "Hash of this does not match the expected hash",
+            );
+            compile_function_call(&mut compiler, assert_fn, &[is_eq, error_str], None);
         }
 
         let result =
@@ -3239,8 +3235,11 @@ fn ast_type_to_type(required: bool, type_: &ast::Type) -> Type {
             collection: collection.clone(),
         },
         ast::Type::Array(t) => Type::Array(Box::new(ast_type_to_type(true, t))),
-        ast::Type::Boolean => todo!(),
-        ast::Type::Map(_, _) => todo!(),
+        ast::Type::Boolean => Type::PrimitiveType(PrimitiveType::Boolean),
+        ast::Type::Map(k, v) => Type::Map(
+            Box::new(ast_type_to_type(true, k)),
+            Box::new(ast_type_to_type(true, v)),
+        ),
         ast::Type::Object(o) => {
             let mut fields = vec![];
             for field in o {
