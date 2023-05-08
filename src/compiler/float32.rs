@@ -988,6 +988,73 @@ pub(crate) fn eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     result
 }
 
+pub(crate) fn ne(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+    prepare_stack_for_arithmetic(compiler, a, b);
+    // [a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
+
+    add_is_zero(compiler, 0);
+    // [a_is_zero, b_is_zero, ..]
+
+    compiler.instructions.push(Instruction::U32CheckedAnd);
+
+    add_is_nan(compiler, 4);
+    // [a_is_nan || b_is_nan, a_is_zero && b_is_zero, ..]
+
+    compiler.instructions.extend([Instruction::If {
+        condition: vec![
+            // [a_is_nan || b_is_nan]
+        ],
+        then: vec![
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Push(0),
+        ],
+        else_: vec![Instruction::If {
+            condition: vec![
+                // [a_is_zero && b_is_zero]
+            ],
+            then: vec![
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Push(0),
+            ],
+            else_: vec![
+                // [a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
+                Instruction::U32CheckedNeq,
+                Instruction::MovDown(4),
+                Instruction::U32CheckedNeq,
+                Instruction::Swap,
+                Instruction::U32CheckedNeq,
+                // [a_mant == b_mant, a_sign^ == b_sign^, a_exp == b_exp]
+                Instruction::U32CheckedAnd,
+                Instruction::U32CheckedAnd,
+            ],
+        }],
+    }]);
+
+    compiler.memory.write(
+        &mut compiler.instructions,
+        result.memory_addr,
+        &[ValueSource::Stack],
+    );
+
+    result
+}
+
 pub(crate) fn lt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     let result = compiler
         .memory
@@ -1048,7 +1115,7 @@ pub(crate) fn lt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
                     Instruction::Drop,
                     Instruction::Push(0),
                     Instruction::U32CheckedEq,
-                    // b_sign% == 0
+                    // b_sign^ == 0
                 ],
                 else_: vec![
                     Instruction::Drop,
@@ -1068,6 +1135,103 @@ pub(crate) fn lt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
                             // b_mant > a_mant
                             Instruction::U32CheckedXOR,
                             // a_sign^ != 0 ^ b > a
+                        ],
+                        else_: vec![Instruction::Drop, Instruction::Drop],
+                    },
+                ],
+            }],
+        }],
+    }]);
+
+    compiler.memory.write(
+        &mut compiler.instructions,
+        result.memory_addr,
+        &[ValueSource::Stack],
+    );
+
+    result
+}
+
+pub(crate) fn lte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+    prepare_stack_for_arithmetic(compiler, a, b);
+    // [a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
+
+    add_nan_inf_zero(compiler);
+    // [a_is_nan || b_is_nan, a_is_inf, b_is_inf, a_is_zero, b_is_zero, a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
+
+    compiler.instructions.extend([Instruction::If {
+        condition: vec![
+            Instruction::MovUp(4),
+            Instruction::MovUp(4),
+            Instruction::U32CheckedAnd,
+            Instruction::U32CheckedOr,
+            // [a_is_zero & b_is_zero | a_is_nan || b_is_nan]
+        ],
+        then: vec![
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Push(1),
+        ],
+        // [a_is_inf, b_is_inf, a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
+        else_: vec![Instruction::If {
+            condition: vec![
+                // a_is_inf
+            ],
+            then: vec![
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::MovDown(3),
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Push(0),
+                Instruction::U32CheckedNeq,
+                // a_sign^ != 0
+            ],
+            else_: vec![Instruction::If {
+                condition: vec![
+                    // b_is_inf
+                ],
+                then: vec![
+                    Instruction::Drop,
+                    Instruction::Drop,
+                    Instruction::MovDown(3),
+                    Instruction::Drop,
+                    Instruction::Drop,
+                    Instruction::Drop,
+                    Instruction::Push(0),
+                    Instruction::U32CheckedEq,
+                    // b_sign^ == 0
+                ],
+                else_: vec![
+                    Instruction::Drop,
+                    Instruction::Drop,
+                    Instruction::Dup(Some(0)),
+                    Instruction::Push(0),
+                    Instruction::U32CheckedNeq,
+                    Instruction::MovDown(4),
+                    // [a_sign^, b_sign^, a_mant, b_mant, a_sign^ != 0]
+                    Instruction::If {
+                        condition: vec![
+                            Instruction::U32CheckedEq,
+                            // a_sign^ == b_sign^
+                        ],
+                        then: vec![
+                            Instruction::U32CheckedGTE,
+                            // b_mant >= a_mant
+                            Instruction::U32CheckedXOR,
+                            // a_sign^ != 0 ^ b >= a
                         ],
                         else_: vec![Instruction::Drop, Instruction::Drop],
                     },
@@ -1173,6 +1337,103 @@ pub(crate) fn gt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
                             Instruction::Push(0),
                             Instruction::U32CheckedEq,
                         ],
+                    },
+                ],
+            }],
+        }],
+    }]);
+
+    compiler.memory.write(
+        &mut compiler.instructions,
+        result.memory_addr,
+        &[ValueSource::Stack],
+    );
+
+    result
+}
+
+pub(crate) fn gte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+    prepare_stack_for_arithmetic(compiler, a, b);
+    // [a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
+
+    add_nan_inf_zero(compiler);
+    // [a_is_nan || b_is_nan, a_is_inf, b_is_inf, a_is_zero, b_is_zero, a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
+
+    compiler.instructions.extend([Instruction::If {
+        condition: vec![
+            Instruction::MovUp(4),
+            Instruction::MovUp(4),
+            Instruction::U32CheckedAnd,
+            Instruction::U32CheckedOr,
+            // [a_is_zero & b_is_zero | a_is_nan || b_is_nan]
+        ],
+        then: vec![
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Push(1),
+        ],
+        // [a_is_inf, b_is_inf, a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
+        else_: vec![Instruction::If {
+            condition: vec![
+                // a_is_inf
+            ],
+            then: vec![
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::MovDown(3),
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Push(0),
+                Instruction::U32CheckedNeq,
+                // a_sign^ != 0
+            ],
+            else_: vec![Instruction::If {
+                condition: vec![
+                    // b_is_inf
+                ],
+                then: vec![
+                    Instruction::Drop,
+                    Instruction::Drop,
+                    Instruction::MovDown(3),
+                    Instruction::Drop,
+                    Instruction::Drop,
+                    Instruction::Drop,
+                    Instruction::Push(0),
+                    Instruction::U32CheckedEq,
+                    // b_sign^ == 0
+                ],
+                else_: vec![
+                    Instruction::Drop,
+                    Instruction::Drop,
+                    Instruction::Dup(Some(0)),
+                    Instruction::Push(0),
+                    Instruction::U32CheckedNeq,
+                    Instruction::MovDown(4),
+                    // [a_sign^, b_sign^, a_mant, b_mant, a_sign^ != 0]
+                    Instruction::If {
+                        condition: vec![
+                            Instruction::U32CheckedEq,
+                            // a_sign^ == b_sign^
+                        ],
+                        then: vec![
+                            Instruction::U32CheckedLTE,
+                            // b_mant <= a_mant
+                            Instruction::U32CheckedXOR,
+                            // a_sign^ != 0 ^ b <= a
+                        ],
+                        else_: vec![Instruction::Drop, Instruction::Drop],
                     },
                 ],
             }],
@@ -1326,6 +1587,22 @@ mod tests {
         const VM_FN: fn(&mut Compiler, &Symbol, &Symbol) -> Symbol = super::eq;
     }
 
+    fn ne(a: f32, b: f32) -> f32 {
+        if a != b {
+            f32::from_bits(1)
+        } else {
+            f32::from_bits(0)
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    struct Ne;
+    impl BinaryOp for Ne {
+        const STR: &'static str = "!=";
+        const RUST_FN: fn(f32, f32) -> f32 = self::ne;
+        const VM_FN: fn(&mut Compiler, &Symbol, &Symbol) -> Symbol = super::ne;
+    }
+
     fn lt(a: f32, b: f32) -> f32 {
         if a < b {
             f32::from_bits(1)
@@ -1342,6 +1619,22 @@ mod tests {
         const VM_FN: fn(&mut Compiler, &Symbol, &Symbol) -> Symbol = super::lt;
     }
 
+    fn lte(a: f32, b: f32) -> f32 {
+        if a <= b {
+            f32::from_bits(1)
+        } else {
+            f32::from_bits(0)
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    struct Lte;
+    impl BinaryOp for Lte {
+        const STR: &'static str = "<=";
+        const RUST_FN: fn(f32, f32) -> f32 = self::lte;
+        const VM_FN: fn(&mut Compiler, &Symbol, &Symbol) -> Symbol = super::lte;
+    }
+
     fn gt(a: f32, b: f32) -> f32 {
         if a > b {
             f32::from_bits(1)
@@ -1356,6 +1649,22 @@ mod tests {
         const STR: &'static str = ">";
         const RUST_FN: fn(f32, f32) -> f32 = self::gt;
         const VM_FN: fn(&mut Compiler, &Symbol, &Symbol) -> Symbol = super::gt;
+    }
+
+    fn gte(a: f32, b: f32) -> f32 {
+        if a >= b {
+            f32::from_bits(1)
+        } else {
+            f32::from_bits(0)
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    struct Gte;
+    impl BinaryOp for Gte {
+        const STR: &'static str = ">=";
+        const RUST_FN: fn(f32, f32) -> f32 = self::gte;
+        const VM_FN: fn(&mut Compiler, &Symbol, &Symbol) -> Symbol = super::gte;
     }
 
     fn assert_bin_op<T: BinaryOp>(a: f32, b: f32, bin_op: T) {
@@ -1377,8 +1686,11 @@ mod tests {
     #[test_case(Add; "add")]
     #[test_case(Sub; "sub")]
     #[test_case(Eq; "eq")]
+    #[test_case(Ne; "ne")]
     #[test_case(Lt; "lt")]
+    #[test_case(Lte; "lte")]
     #[test_case(Gt; "gt")]
+    #[test_case(Gte; "gte")]
     fn test_edge_cases(bin_op: impl BinaryOp) {
         TEST_EDGE_CASES
             .iter()
@@ -1413,12 +1725,27 @@ mod tests {
     }
 
     #[quickcheck_macros::quickcheck]
+    fn test_ne(a: f32, b: f32) {
+        assert_bin_op(a, b, Ne)
+    }
+
+    #[quickcheck_macros::quickcheck]
     fn test_lt(a: f32, b: f32) {
         assert_bin_op(a, b, Lt)
     }
 
     #[quickcheck_macros::quickcheck]
+    fn test_lte(a: f32, b: f32) {
+        assert_bin_op(a, b, Lte)
+    }
+
+    #[quickcheck_macros::quickcheck]
     fn test_gt(a: f32, b: f32) {
         assert_bin_op(a, b, Gt)
+    }
+
+    #[quickcheck_macros::quickcheck]
+    fn test_gte(a: f32, b: f32) {
+        assert_bin_op(a, b, Gte)
     }
 }
