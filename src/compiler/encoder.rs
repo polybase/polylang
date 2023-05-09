@@ -209,12 +209,10 @@ pub(crate) fn unabstract<'a>(
                                 *ptr_value_might_have_been_flipped = true;
                                 result.push(Instruction::Push(1));
                                 result.push(Instruction::MemStore(Some(*break_ptr)));
-                                result.push(Instruction::Drop);
                             } else {
                                 result.push(Instruction::Push(1));
                                 let ptr = allocate(1);
                                 result.push(Instruction::MemStore(Some(ptr)));
-                                result.push(Instruction::Drop);
                                 break_ptr.replace(ptr);
                             }
                         }
@@ -223,12 +221,10 @@ pub(crate) fn unabstract<'a>(
                                 *ptr_value_might_have_been_flipped = true;
                                 result.push(Instruction::Push(1));
                                 result.push(Instruction::MemStore(Some(*ptr)));
-                                result.push(Instruction::Drop);
                             } else {
                                 result.push(Instruction::Push(1));
                                 let ptr = allocate(1);
                                 result.push(Instruction::MemStore(Some(ptr)));
-                                result.push(Instruction::Drop);
                                 return_ptr.replace(ptr);
                             }
                         }
@@ -386,7 +382,6 @@ mod test {
                     then: vec![
                         Instruction::Push(1),
                         Instruction::MemStore(Some(1)),
-                        Instruction::Drop,
                         Instruction::If {
                             condition: vec![Instruction::MemLoad(Some(1))],
                             then: vec![],
@@ -448,11 +443,7 @@ mod test {
             Instruction::Push(1),
             Instruction::If {
                 condition: vec![Instruction::Push(1)],
-                then: vec![
-                    Instruction::Push(1),
-                    Instruction::MemStore(Some(1)),
-                    Instruction::Drop,
-                ],
+                then: vec![Instruction::Push(1), Instruction::MemStore(Some(1))],
                 else_: vec![],
             },
             Instruction::If {
@@ -491,7 +482,6 @@ mod test {
             Instruction::Push(199),
             Instruction::Push(1),
             Instruction::MemStore(Some(1)),
-            Instruction::Drop,
             Instruction::If {
                 condition: vec![Instruction::MemLoad(Some(1))],
                 then: vec![],
@@ -499,7 +489,6 @@ mod test {
                     Instruction::Push(200),
                     Instruction::Push(1),
                     Instruction::MemStore(Some(1)),
-                    Instruction::Drop,
                 ],
             },
             Instruction::If {
@@ -538,11 +527,7 @@ mod test {
         let expected = vec![
             Instruction::If {
                 condition: vec![Instruction::Push(1)],
-                then: vec![
-                    Instruction::Push(1),
-                    Instruction::MemStore(Some(1)),
-                    Instruction::Drop,
-                ],
+                then: vec![Instruction::Push(1), Instruction::MemStore(Some(1))],
                 else_: vec![],
             },
             Instruction::If {
@@ -585,7 +570,6 @@ mod test {
             Instruction::Push(199),
             Instruction::Push(1),
             Instruction::MemStore(Some(1)),
-            Instruction::Drop,
             Instruction::If {
                 condition: vec![Instruction::MemLoad(Some(1))],
                 then: vec![],
@@ -597,11 +581,7 @@ mod test {
                             // TODO: this if is not needed
                             condition: vec![Instruction::MemLoad(Some(1))],
                             then: vec![],
-                            else_: vec![
-                                Instruction::Push(1),
-                                Instruction::MemStore(Some(1)),
-                                Instruction::Drop,
-                            ],
+                            else_: vec![Instruction::Push(1), Instruction::MemStore(Some(1))],
                         }],
                         else_: vec![],
                     },

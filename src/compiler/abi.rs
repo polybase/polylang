@@ -236,8 +236,10 @@ impl Parser for Type {
             Type::Struct(s) => s.parse(value),
             Type::Hash => {
                 let mut bytes = vec![];
-                for byte in value.split(',') {
-                    bytes.push(byte.parse()?);
+                if !value.is_empty() {
+                    for byte in value.split(',') {
+                        bytes.push(byte.parse()?);
+                    }
                 }
                 let mut hash = [0; 4];
                 hash.copy_from_slice(&bytes);
@@ -246,15 +248,19 @@ impl Parser for Type {
             Type::String => Ok(Value::String(value.to_string())),
             Type::Bytes => {
                 let mut bytes = vec![];
-                for byte in value.split(',') {
-                    bytes.push(byte.parse()?);
+                if !value.is_empty() {
+                    for byte in value.split(',') {
+                        bytes.push(byte.parse()?);
+                    }
                 }
                 Ok(Value::Bytes(bytes))
             }
             Type::CollectionReference { .. } => {
                 let mut bytes = vec![];
-                for byte in value.split(',') {
-                    bytes.push(byte.parse()?);
+                if !value.is_empty() {
+                    for byte in value.split(',') {
+                        bytes.push(byte.parse()?);
+                    }
                 }
                 Ok(Value::CollectionReference(bytes))
             }

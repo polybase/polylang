@@ -54,6 +54,8 @@ lazy_static::lazy_static! {
     static ref READ_ADVICE_BYTES: ast::Function = polylang_parser::parse_function(r#"
         function readAdviceBytes(): bytes {
             let length = readAdvice();
+            if (length == 0) return unsafeToBytes(length, 0);
+
             let dataPtr = dynamicAlloc(length);
 
             let i = 0;
@@ -193,17 +195,17 @@ lazy_static::lazy_static! {
                     value.memory_addr,
                     value.type_.miden_width(),
                 );
+                // [value]
                 compiler.memory.read(
                     &mut compiler.instructions,
                     address.memory_addr,
                     address.type_.miden_width(),
                 );
+                // [address, value]
                 compiler
                     .instructions
                     .push(encoder::Instruction::MemStore(None));
-                compiler
-                    .instructions
-                    .push(encoder::Instruction::Drop);
+                // []
 
                 Symbol {
                     type_: Type::PrimitiveType(PrimitiveType::UInt32),
@@ -284,9 +286,7 @@ lazy_static::lazy_static! {
                 assert_eq!(length.type_, Type::PrimitiveType(PrimitiveType::UInt32));
                 assert_eq!(address_ptr.type_, Type::PrimitiveType(PrimitiveType::UInt32));
 
-                let two = uint32::new(compiler, 2);
-                let mut s = dynamic_alloc(compiler, &[two]);
-                s.type_ = Type::Bytes;
+                let s = compiler.memory.allocate_symbol(Type::Bytes);
 
                 compiler.memory.read(
                     &mut compiler.instructions,
@@ -3129,19 +3129,19 @@ pub fn compile(
         this_addr = this_symbol.as_ref().map(|ts| ts.memory_addr);
 
         if let Some(this_symbol) = &this_symbol {
-            // let this_hash = hash(&mut compiler, this_symbol.clone());
+            let this_hash = hash(&mut compiler, this_symbol.clone());
             // compiler.memory.read(
             //     &mut compiler.instructions,
             //     this_hash.memory_addr,
             //     this_hash.type_.miden_width(),
             // );
-            // let is_eq = compile_eq(&mut compiler, &this_hash, expected_hash.as_ref().unwrap());
-            // let assert_fn = compiler.root_scope.find_function("assert").unwrap();
-            // let error_str = string::new(
-            //     &mut compiler,
-            //     "Hash of this does not match the expected hash",
-            // );
-            // compile_function_call(&mut compiler, assert_fn, &[is_eq, error_str], None);
+            let is_eq = compile_eq(&mut compiler, &this_hash, expected_hash.as_ref().unwrap());
+            let assert_fn = compiler.root_scope.find_function("assert").unwrap();
+            let error_str = string::new(
+                &mut compiler,
+                "Hash of this does not match the expected hash",
+            );
+            compile_function_call(&mut compiler, assert_fn, &[is_eq, error_str], None);
         }
 
         let result =
