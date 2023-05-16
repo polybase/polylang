@@ -52,7 +52,7 @@ export interface Parameter {
   directives: Directive[]
 }
 
-export type Type = Primitive
+export type Type = Primitive | Object | Array | Map | ForeignRecord | PublicKey
 
 export interface Primitive {
   kind: 'primitive',
@@ -61,13 +61,13 @@ export interface Primitive {
 
 export interface Array {
   kind: 'array',
-  value: Type[]
+  value: Primitive[]
 }
 
 export interface Map {
   kind: 'map',
-  key: Type
-  value: Type
+  key: Primitive
+  value: Primitive | ForeignRecord
 }
 
 export interface Object {
@@ -81,7 +81,7 @@ export interface ObjectField {
   required: boolean
 }
 
-export interface ForeignRecod {
+export interface ForeignRecord {
   kind: 'foreignrecord',
   collection: string
 }
