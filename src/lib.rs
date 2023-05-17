@@ -306,7 +306,7 @@ mod tests {
         };
 
         assert!(
-            matches!(function.statements[0], ast::Statement::Return(ast::Expression::Primitive(ast::Primitive::Number(number))) if number == 42.0)
+            matches!(function.statements[0], ast::Statement::Return(ast::Expression::Primitive(ast::Primitive::Number(number, has_decimal_point))) if number == 42.0 && !has_decimal_point)
         );
         assert!(
             matches!(&function.parameters[0], ast::Parameter{ name, type_, required } if *required && name == "a" && *type_ == ast::ParameterType::Number)
@@ -323,7 +323,29 @@ mod tests {
         assert!(number.is_ok());
         assert_eq!(
             number.unwrap(),
-            ast::Expression::Primitive(ast::Primitive::Number(42.0))
+            ast::Expression::Primitive(ast::Primitive::Number(42.0, false))
+        );
+    }
+
+    #[test]
+    fn test_number_decimal() {
+        let number = polylang_parser::parse_expression("42.0");
+
+        assert!(number.is_ok());
+        assert_eq!(
+            number.unwrap(),
+            ast::Expression::Primitive(ast::Primitive::Number(42.0, true))
+        );
+    }
+
+    #[test]
+    fn test_number_decimal_2() {
+        let number = polylang_parser::parse_expression("42.5");
+
+        assert!(number.is_ok());
+        assert_eq!(
+            number.unwrap(),
+            ast::Expression::Primitive(ast::Primitive::Number(42.5, true))
         );
     }
 
@@ -344,8 +366,8 @@ mod tests {
 
         assert!(matches!(
             comparison.unwrap(),
-            ast::Expression::GreaterThan(left, right) if *left == ast::Expression::Primitive(ast::Primitive::Number(1.0))
-                && *right == ast::Expression::Primitive(ast::Primitive::Number(2.0)),
+            ast::Expression::GreaterThan(left, right) if *left == ast::Expression::Primitive(ast::Primitive::Number(1.0, false))
+                && *right == ast::Expression::Primitive(ast::Primitive::Number(2.0, false)),
         ));
     }
 
@@ -958,7 +980,7 @@ function x() {
         assert_eq!(
             expr,
             ast::Expression::Array(vec![ast::Expression::Primitive(ast::Primitive::Number(
-                1.0
+                1.0, false
             ))])
         );
     }
@@ -970,9 +992,9 @@ function x() {
         assert_eq!(
             expr,
             ast::Expression::Array(vec![
-                ast::Expression::Primitive(ast::Primitive::Number(1.0)),
-                ast::Expression::Primitive(ast::Primitive::Number(2.0)),
-                ast::Expression::Primitive(ast::Primitive::Number(3.0)),
+                ast::Expression::Primitive(ast::Primitive::Number(1.0, false)),
+                ast::Expression::Primitive(ast::Primitive::Number(2.0, false)),
+                ast::Expression::Primitive(ast::Primitive::Number(3.0, false)),
             ])
         );
     }
@@ -985,11 +1007,11 @@ function x() {
             expr,
             ast::Expression::Array(vec![
                 ast::Expression::Array(vec![ast::Expression::Primitive(ast::Primitive::Number(
-                    1.0
+                    1.0, false
                 ))]),
                 ast::Expression::Array(vec![
-                    ast::Expression::Primitive(ast::Primitive::Number(2.0)),
-                    ast::Expression::Primitive(ast::Primitive::Number(3.0)),
+                    ast::Expression::Primitive(ast::Primitive::Number(2.0, false)),
+                    ast::Expression::Primitive(ast::Primitive::Number(3.0, false)),
                 ]),
             ])
         );

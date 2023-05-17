@@ -16,7 +16,7 @@ pub(crate) enum Instruction<'a> {
     Eq,                         // Eq
     U32CheckedAdd,              // u32checked_add
     U32CheckedSub,              // u32checked_sub
-    U32CheckedMod,              // u32checked_mod
+    U32CheckedMod(Option<u32>), // u32checked_mod
     U32CheckedDiv,              // u32checked_div
     U32CheckedMul,              // u32checked_mul
     U32CheckedEq,               // u32checked_eq
@@ -30,6 +30,8 @@ pub(crate) enum Instruction<'a> {
     U32CheckedAnd,              // u32checked_and
     U32CheckedOr,               // u32checked_or
     U32CheckedXOR,              // u32checked_xor
+    U32CheckedNot,              // u32checked_not
+    U32CheckedMin,              // u32checked_min
     U32WrappingAdd,             // u32wrapping_add
     U32WrappingSub,             // u32wrapping_sub
     U32WrappingMul,             // u32wrapping_mul
@@ -99,7 +101,8 @@ impl Instruction<'_> {
             Instruction::Eq => write_indent!(f, "eq"),
             Instruction::U32CheckedAdd => write_indent!(f, "u32checked_add"),
             Instruction::U32CheckedSub => write_indent!(f, "u32checked_sub"),
-            Instruction::U32CheckedMod => write_indent!(f, "u32checked_mod"),
+            Instruction::U32CheckedMod(None) => write_indent!(f, "u32checked_mod"),
+            Instruction::U32CheckedMod(Some(value)) => write_indent!(f, "u32checked_mod.{}", value),
             Instruction::U32CheckedDiv => write_indent!(f, "u32checked_div"),
             Instruction::U32CheckedMul => write_indent!(f, "u32checked_mul"),
             Instruction::U32CheckedEq => write_indent!(f, "u32checked_eq"),
@@ -115,6 +118,8 @@ impl Instruction<'_> {
             Instruction::U32CheckedAnd => write_indent!(f, "u32checked_and"),
             Instruction::U32CheckedOr => write_indent!(f, "u32checked_or"),
             Instruction::U32CheckedXOR => write_indent!(f, "u32checked_xor"),
+            Instruction::U32CheckedNot => write_indent!(f, "u32checked_not"),
+            Instruction::U32CheckedMin => write_indent!(f, "u32checked_min"),
             Instruction::U32WrappingAdd => write_indent!(f, "u32wrapping_add"),
             Instruction::U32WrappingSub => write_indent!(f, "u32wrapping_sub"),
             Instruction::U32WrappingMul => write_indent!(f, "u32wrapping_mul"),

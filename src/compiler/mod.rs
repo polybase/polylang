@@ -3,6 +3,7 @@ mod array;
 mod boolean;
 mod bytes;
 mod encoder;
+mod float32;
 mod int32;
 mod ir;
 mod map;
@@ -11,7 +12,6 @@ mod publickey;
 mod string;
 mod uint32;
 mod uint64;
-mod float32;
 
 use std::{collections::HashMap, ops::Deref};
 
@@ -853,6 +853,20 @@ lazy_static::lazy_static! {
             }))
         ));
 
+        builtins.push((
+            "uintToFloat".to_string(),
+            Function::Builtin(Box::new(&|compiler, scope, args| {
+                float32::from_uint32(compiler, &args[0])
+            }))
+        ));
+
+        builtins.push((
+            "intToFloat".to_string(),
+            Function::Builtin(Box::new(&|compiler, scope, args| {
+                float32::from_int32(compiler, &args[0])
+            }))
+        ));
+
         Box::leak(Box::new(builtins))
     };
 }
@@ -863,6 +877,7 @@ pub enum PrimitiveType {
     UInt32,
     UInt64,
     Int32,
+    Float32,
 }
 
 impl PrimitiveType {
@@ -872,6 +887,7 @@ impl PrimitiveType {
             PrimitiveType::UInt32 => uint32::WIDTH,
             PrimitiveType::UInt64 => uint64::WIDTH,
             PrimitiveType::Int32 => int32::WIDTH,
+            PrimitiveType::Float32 => float32::WIDTH,
         }
     }
 }
@@ -1166,12 +1182,25 @@ impl<'ast, 'c, 's> Compiler<'ast, 'c, 's> {
     }
 }
 
+/// Returns None if converting would result in silent truncation
+fn convert_f64_to_f32(n: f64) -> Option<f32> {
+    if n as f32 as f64 != n {
+        None
+    } else {
+        Some(n as f32)
+    }
+}
+
 fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope) -> Symbol {
     comment!(compiler, "Compiling expression {expr:?}");
 
     let symbol = match expr {
         Expression::Ident(id) => scope.find_symbol(id).unwrap(),
-        Expression::Primitive(ast::Primitive::Number(n)) => uint32::new(compiler, *n as u32),
+        Expression::Primitive(ast::Primitive::Number(n, has_decimal_point)) => {
+            let n = convert_f64_to_f32(*n).expect("silent truncation");
+
+            float32::new(compiler, n)
+        }
         Expression::Primitive(ast::Primitive::String(s)) => string::new(compiler, s),
         Expression::Boolean(b) => boolean::new(compiler, *b),
         Expression::Add(a, b) => {
@@ -1838,6 +1867,10 @@ fn compile_add(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
             uint64::add(compiler, a, &b_u64)
         }
+        (
+            Type::PrimitiveType(PrimitiveType::Float32),
+            Type::PrimitiveType(PrimitiveType::Float32),
+        ) => float32::add(compiler, a, b),
         (Type::String, Type::String) => string::concat(compiler, a, b),
         e => unimplemented!("{:?}", e),
     }
@@ -1867,6 +1900,10 @@ fn compile_sub(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
             uint64::sub(compiler, a, &b_u64)
         }
+        (
+            Type::PrimitiveType(PrimitiveType::Float32),
+            Type::PrimitiveType(PrimitiveType::Float32),
+        ) => float32::sub(compiler, a, b),
         e => unimplemented!("{:?}", e),
     }
 }
@@ -1923,6 +1960,10 @@ fn compile_div(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
             uint64::div(compiler, a, &b_u64)
         }
+        (
+            Type::PrimitiveType(PrimitiveType::Float32),
+            Type::PrimitiveType(PrimitiveType::Float32),
+        ) => float32::div(compiler, a, b),
         e => unimplemented!("{:?}", e),
     }
 }
@@ -1951,6 +1992,10 @@ fn compile_mul(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
             uint64::mul(compiler, a, &b_u64)
         }
+        (
+            Type::PrimitiveType(PrimitiveType::Float32),
+            Type::PrimitiveType(PrimitiveType::Float32),
+        ) => float32::mul(compiler, a, b),
         e => unimplemented!("{:?}", e),
     }
 }
@@ -1976,6 +2021,10 @@ fn compile_eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
             uint64::eq(compiler, a, &b_u64)
         }
+        (
+            Type::PrimitiveType(PrimitiveType::Float32),
+            Type::PrimitiveType(PrimitiveType::Float32),
+        ) => float32::eq(compiler, a, b),
         (Type::Hash, Type::Hash) => {
             let result = compiler
                 .memory
@@ -2050,6 +2099,10 @@ fn compile_gte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
             uint64::gte(compiler, a, &b_u64)
         }
+        (
+            Type::PrimitiveType(PrimitiveType::Float32),
+            Type::PrimitiveType(PrimitiveType::Float32),
+        ) => float32::gte(compiler, a, b),
         e => unimplemented!("{:?}", e),
     }
 }
@@ -2078,6 +2131,10 @@ fn compile_gt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
             uint64::gt(compiler, a, &b_u64)
         }
+        (
+            Type::PrimitiveType(PrimitiveType::Float32),
+            Type::PrimitiveType(PrimitiveType::Float32),
+        ) => float32::gt(compiler, a, b),
         e => unimplemented!("{:?}", e),
     }
 }
@@ -2106,6 +2163,10 @@ fn compile_lte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
             uint64::lte(compiler, a, &b_u64)
         }
+        (
+            Type::PrimitiveType(PrimitiveType::Float32),
+            Type::PrimitiveType(PrimitiveType::Float32),
+        ) => float32::lte(compiler, a, b),
         e => unimplemented!("{:?}", e),
     }
 }
@@ -2134,6 +2195,10 @@ fn compile_lt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
             uint64::lt(compiler, a, &b_u64)
         }
+        (
+            Type::PrimitiveType(PrimitiveType::Float32),
+            Type::PrimitiveType(PrimitiveType::Float32),
+        ) => float32::lt(compiler, a, b),
         e => unimplemented!("{:?}", e),
     }
 }
@@ -3309,4 +3374,21 @@ pub fn compile_struct_hasher(struct_: Struct) -> String {
     miden_code.push_str("end\n");
 
     miden_code
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_convert_f64_to_f32() {
+        convert_f64_to_f32(0.0).unwrap();
+        convert_f64_to_f32(1.0).unwrap();
+
+        assert_eq!(convert_f64_to_f32(3.14159265359), None);
+        assert_eq!(convert_f64_to_f32(-3.14159265359), None);
+
+        assert_eq!(convert_f64_to_f32(std::f64::MAX), None);
+        assert_eq!(convert_f64_to_f32(std::f64::MIN), None);
+    }
 }

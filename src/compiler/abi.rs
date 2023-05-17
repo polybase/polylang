@@ -14,6 +14,7 @@ pub enum Value {
     Boolean(bool),
     UInt32(u32),
     UInt64(u64),
+    Float32(f32),
     Hash([u64; 4]),
     Int32(i32),
     String(String),
@@ -44,6 +45,10 @@ impl TypeReader for PrimitiveType {
             PrimitiveType::UInt64 => {
                 let [high, low, _, _] = reader(addr).ok_or("invalid address for uint64")?;
                 Value::UInt64((high << 32) | low)
+            }
+            PrimitiveType::Float32 => {
+                let [bits, _, _, _] = reader(addr).ok_or("invalid address for float32")?;
+                Value::Float32(f32::from_bits(bits as u32))
             }
         })
     }
@@ -208,6 +213,7 @@ impl Parser for PrimitiveType {
             PrimitiveType::UInt32 => Value::UInt32(value.parse()?),
             PrimitiveType::Int32 => Value::Int32(value.parse()?),
             PrimitiveType::UInt64 => Value::UInt64(value.parse()?),
+            PrimitiveType::Float32 => Value::Float32(value.parse()?),
         })
     }
 }
@@ -334,6 +340,7 @@ impl Value {
             Value::UInt32(x) => vec![u64::from(*x)],
             Value::UInt64(x) => vec![*x >> 32, *x & 0xffffffff],
             Value::Int32(x) => vec![*x as u64],
+            Value::Float32(x) => vec![x.to_bits() as u64],
             Value::Hash(h) => h.to_vec(),
             Value::String(s) => [s.len() as u64]
                 .into_iter()
