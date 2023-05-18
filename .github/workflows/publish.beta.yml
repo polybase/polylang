@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - eng-688-fix-ci-release-process
 
 jobs:
   publish:
@@ -30,10 +29,6 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
-
-      - name: Yarn Version
-        working-directory: ./js
-        run: yarn --version
 
       - name: Install packages
         working-directory: ./js
