@@ -22,6 +22,7 @@ jobs:
         with:
           node-version: 18.x
           cache: 'yarn'
+          cache-dependency-path: ./js/yarn.lock
 
       - name: "NPM Identity"
         working-directory: ./js
@@ -44,4 +45,4 @@ jobs:
 
       - name: "Publish"
         working-directory: ./js
-        run: yarn lerna publish --canary --preid beta --dist-tag beta --yes --loglevel verbose
+        run: yarn lerna publish --canary --preid beta --dist-tag beta --yes

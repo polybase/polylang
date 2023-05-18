@@ -39,6 +39,7 @@ jobs:
           node-version: 16.x
 
       - name: "NPM Identity"
+        working-directory: ./js
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
