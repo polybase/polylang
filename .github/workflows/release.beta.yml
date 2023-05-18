@@ -1,21 +1,20 @@
-name: Publish (Stable)
+name: Release (Beta)
 
 on:
-  release:
-    types: [published]
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-16-cores
+    if: github.event.pull_request.merged == true && !startsWith(github.event.pull_request.head.ref, 'release-')
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          ref: main
-          token: ${{ secrets.ADMIN_TOKEN }}
-
-      - run: git config --global user.email "hello@polybase.xyz"
-      - run: git config --global user.name "Polybase CI"
 
       - uses: jetli/wasm-pack-action@v0.4.0
         with:
@@ -44,4 +43,6 @@ jobs:
 
       - name: "Publish"
         working-directory: ./js
-        run: yarn lerna publish ${{ github.ref_name }} --force-git-tag --yes --force-publish
+        run: yarn lerna publish --canary --preid beta --dist-tag beta --yes
+
+      # TODO trigger update dependencies in other repos
