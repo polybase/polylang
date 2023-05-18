@@ -3,8 +3,6 @@ name: Publish (Stable)
 on:
   release:
     types: [published]
-    tags:
-      - "*"
 
 jobs:
   publish:
@@ -25,9 +23,12 @@ jobs:
 
       - uses: actions/setup-node@v3
         with:
-          node-version: 16.x
+          node-version: 18.x
+          cache: 'yarn'
+          cache-dependency-path: ./js/yarn.lock
 
       - name: "NPM Identity"
+        working-directory: ./js
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
