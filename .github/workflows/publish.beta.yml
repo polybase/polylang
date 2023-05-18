@@ -23,6 +23,7 @@ jobs:
           node-version: 18.x
 
       - name: "NPM Identity"
+        working-directory: ./js
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
@@ -54,4 +55,4 @@ jobs:
 
       - name: "Publish"
         working-directory: ./js
-        run: yarn lerna publish --canary --preid beta --dist-tag beta --yes
+        run: yarn lerna publish --canary --preid beta --dist-tag beta --yes --loglevel verbose
