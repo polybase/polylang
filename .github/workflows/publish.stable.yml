@@ -1,20 +1,31 @@
-name: Publish (Stable)
+name: Publish (Release)
 
 on:
-  release:
-    types: [published]
-    tags:
-      - "*"
+  pull_request:
+    types:
+      - closed
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'release'
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
           ref: main
           token: ${{ secrets.ADMIN_TOKEN }}
+
+      - name: Get PR Info
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_DESC="${{ github.event.pull_request.body }}"
+          PR_VERSION="${PR_TITLE#*Release v}"
+  
+          echo "PR Title: $PR_TITLE"
+          echo "PR Description: $PR_DESC"
+          echo "PR Version: $PR_VERSION"
+          echo "PR_VERSION=$PR_VERSION" >> $GITHUB_ENV
 
       - run: git config --global user.email "hello@polybase.xyz"
       - run: git config --global user.name "Polybase CI"
@@ -43,4 +54,17 @@ jobs:
 
       - name: "Publish"
         working-directory: ./js
-        run: yarn lerna publish ${{ github.ref_name }} --force-git-tag --yes --force-publish
+        run: yarn lerna publish $PR_VERSION --yes
+      
+      - name: Set Release Notes
+        env:
+          GH_PAT: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          curl \
+          -X PATCH \
+          -H "Authorization: token $GH_PAT" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/${{ github.repository }}/releases/tags/$PR_VERSION \
+          -d '{
+            "body": "'"$PR_DESC"'"
+          }'
