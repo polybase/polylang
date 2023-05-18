@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+      
+jobs:
+  my_job:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release-')
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ secrets.ADMIN_TOKEN }}
+
+      - run: git config --global user.email "hello@polybase.xyz"
+      - run: git config --global user.name "Polybase CI"
+
+      - name: Get PR Info
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_DESC="${{ github.event.pull_request.body }}"
+          PR_BRANCH="${{ github.event.pull_request.head.ref }}"
+          PR_VERSION="${PR_BRANCH#*release-v}"
+  
+          echo "PR Title: $PR_TITLE"
+          echo "PR Description: $PR_DESC"
+          echo "PR Branch: $PR_BRANCH"
+          echo "PR Version: $PR_VERSION"
+          echo "PR_VERSION=$PR_VERSION" >> $GITHUB_ENV  
+
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: "latest"
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18.x
+          cache: 'yarn'
+          cache-dependency-path: ./js/yarn.lock
+
+      - name: "NPM Identity"
+        working-directory: ./js
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
+
+      - name: Install packages
+        working-directory: ./js
+        run: yarn
+
+      - name: Build packages
+        working-directory: ./js
+        run: yarn lerna run build
+
+      - name: "Publish"
+        working-directory: ./js
+        run: yarn lerna publish $PR_VERSION --yes
+
+      - name: Set Release Notes
+        env:
+          GH_PAT: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          curl \
+          -X PATCH \
+          -H "Authorization: token $GH_PAT" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/${{ github.repository }}/releases/tags/v$PR_VERSION \
+          -d '{
+            "body": "'"$PR_DESC"'"
+          }'
+
+      # TODO trigger update dependencies in other repos
