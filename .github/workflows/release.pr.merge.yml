@@ -62,20 +62,19 @@ jobs:
 
       - name: "Publish"
         working-directory: ./js
-        run: yarn lerna publish v$PR_VERSION --yes
+        run: yarn lerna publish from-package --yes
 
-
-      - name: Set Release Notes
-        env:
-          GH_PAT: ${{ secrets.ADMIN_TOKEN }}
-        run: |
-          curl \
-          -X PATCH \
-          -H "Authorization: token $GH_PAT" \
-          -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com/repos/${{ github.repository }}/releases/tags/v$PR_VERSION \
-          -d '{
-            "body": "'"$PR_DESC"'"
-          }'
+      # - name: Set Release Notes
+      #   env:
+      #     GH_PAT: ${{ secrets.ADMIN_TOKEN }}
+      #   run: |
+      #     curl \
+      #     -X PATCH \
+      #     -H "Authorization: token $GH_PAT" \
+      #     -H "Accept: application/vnd.github.v3+json" \
+      #     https://api.github.com/repos/${{ github.repository }}/releases/tags/v$PR_VERSION \
+      #     -d '{
+      #       "body": "'"$PR_DESC"'"
+      #     }'
 
       # TODO trigger update dependencies in other repos
