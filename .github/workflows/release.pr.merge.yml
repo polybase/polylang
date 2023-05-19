@@ -19,8 +19,10 @@ jobs:
           ref: main
           token: ${{ secrets.ADMIN_TOKEN }}
 
-      - run: git config --global user.email "hello@polybase.xyz"
-      - run: git config --global user.name "Polybase CI"
+      - name: Configure Git
+        run: |
+          git config --global user.email "hello@polybase.xyz"
+          git config --global user.name "Polybase CI"
 
       - name: Get PR Info
         run: |
@@ -64,17 +66,18 @@ jobs:
         working-directory: ./js
         run: yarn lerna publish from-package --yes
 
-      - name: Set Release Notes
+      - name: "Create Release"
         env:
-          GH_PAT: ${{ secrets.ADMIN_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.ADMIN_TOKEN }}
         run: |
-          curl \
-          -X PATCH \
-          -H "Authorization: token $GH_PAT" \
-          -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com/repos/${{ github.repository }}/releases/tags/v$PR_VERSION \
-          -d '{
-            "body": "'"$PR_DESC"'"
-          }'
+          curl -X POST \
+          --url https://api.github.com/repos/${{ github.repository }}/releases \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
+          -H 'Content-Type: application/json' \
+          -d "{
+            "tag_name": "v'$PR_VERSION'",
+            "name": \"Release v'$PR_VERSION'",
+            "body": \"Release notes for v'$PR_VERSION'"
+          }"
 
       # TODO trigger update dependencies in other repos

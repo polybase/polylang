@@ -29,7 +29,8 @@ jobs:
 
       - name: Run Lerna version
         working-directory: ./js
-        run: npx lerna version v$VERSION --no-git-tag-version --yes
+
+        run: npx lerna version v$VERSION --no-git-tag-version --force-publish --tag-version-prefix='' --yes
 
       - name: Commit changes
         run: |
