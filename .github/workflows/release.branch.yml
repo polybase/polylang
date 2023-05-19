@@ -20,6 +20,24 @@ jobs:
           branch_name=$(echo ${{ github.ref }} | sed 's/refs\/heads\///')
           VERSION=${branch_name#release-}
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18.x
+          cache: 'yarn'
+          cache-dependency-path: ./js/yarn.lock
+
+      - name: Run Lerna version
+        working-directory: ./js
+        run: npx lerna version v$VERSION --no-git-tag-version --yes
+
+      - name: Commit changes
+        run: |
+          git config --local user.email user.email "hello@polybase.xyz"
+          git config --local user.name "Polybase CI"
+          git add .
+          git commit -m "Bump versions" || echo "No changes to commit"
+          git push
   
       - name: Create Pull Request
         env:

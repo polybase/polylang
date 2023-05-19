@@ -43,6 +43,6 @@ jobs:
 
       - name: "Publish"
         working-directory: ./js
-        run: yarn lerna publish --canary --preid beta --dist-tag beta --yes
+        run: yarn lerna publish --canary --preid beta --dist-tag beta --tag-version-prefix beta --yes
 
       # TODO trigger update dependencies in other repos

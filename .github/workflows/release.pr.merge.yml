@@ -62,8 +62,7 @@ jobs:
 
       - name: "Publish"
         working-directory: ./js
-        run: yarn lerna publish v$PR_VERSION --yes
-
+        run: yarn lerna publish from-package --yes
 
       - name: Set Release Notes
         env:
