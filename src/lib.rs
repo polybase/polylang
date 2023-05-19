@@ -1076,6 +1076,43 @@ function x() {
         );
     }
 
+    #[test]
+    fn test_public_key_array_decl() {
+        let code = r#"
+            collection PublicKeyArrayDemo {
+              publicKeys: PublicKey[];
+
+              constructor () {
+                this.publicKeys = [];
+                this.publicKeys.push(ctx.publicKey);
+                this.publicKeys.push(ctx.publicKey);
+              }
+            }
+        "#;
+
+        let mut program = None;
+        let (program, _) = parse(code, "", &mut program).unwrap();
+        assert_eq!(program.nodes.len(), 1);
+
+        let collection = match &program.nodes[0] {
+            ast::RootNode::Collection(c) => c,
+            _ => panic!("expected collection"),
+        };
+
+        assert_eq!(collection.items.len(), 2);
+
+        let field = match &collection.items[0] {
+            ast::CollectionItem::Field(f) => f,
+            _ => panic!("expected publicKeys"),
+        };
+
+        assert_eq!(field.name, "publicKeys");
+        assert_eq!(
+            field.type_,
+            ast::Type::Array(Box::new(ast::Type::PublicKey))
+        );
+    }
+
     /// Tests that collections from the filesystem directory 'test-collections' parse without an error
     #[test]
     fn test_fs_collections() {
