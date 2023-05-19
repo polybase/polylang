@@ -8,6 +8,7 @@ on:
       - main
       
 jobs:
+
   release:
     runs-on: ubuntu-latest
     if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release-')
@@ -62,6 +63,7 @@ jobs:
       - name: "Publish"
         working-directory: ./js
         run: yarn lerna publish v$PR_VERSION --yes
+
 
       - name: Set Release Notes
         env:
