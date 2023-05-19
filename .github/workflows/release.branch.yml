@@ -6,7 +6,7 @@ on:
       - '**'
        
 jobs:
-  my_job:
+  create_release_branch:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/heads/release-')
     steps:
@@ -32,7 +32,7 @@ jobs:
             https://api.github.com/repos/${{ github.repository }}/pulls \
             -d '{
               "title": "Release 'v$VERSION'",
-              "body": "This is an automated PR for branch '$branch_name'",
+              "body": "This is an automated PR for release '$VERSION'",
               "head": "'$branch_name'",
               "base": "main"
             }'

@@ -8,7 +8,8 @@ on:
       - main
       
 jobs:
-  my_job:
+
+  release:
     runs-on: ubuntu-latest
     if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release-')
     steps:
@@ -26,7 +27,7 @@ jobs:
           PR_TITLE="${{ github.event.pull_request.title }}"
           PR_DESC="${{ github.event.pull_request.body }}"
           PR_BRANCH="${{ github.event.pull_request.head.ref }}"
-          PR_VERSION="${PR_BRANCH#*release-v}"
+          PR_VERSION="${PR_BRANCH#*release-}"
   
           echo "PR Title: $PR_TITLE"
           echo "PR Description: $PR_DESC"
@@ -61,7 +62,8 @@ jobs:
 
       - name: "Publish"
         working-directory: ./js
-        run: yarn lerna publish $PR_VERSION --yes
+        run: yarn lerna publish v$PR_VERSION --yes
+
 
       - name: Set Release Notes
         env:
