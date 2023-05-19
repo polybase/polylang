@@ -22,7 +22,8 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Run Lerna version
-        run: npx lerna version v$VERSION --no-git-tag-version --yes
+        working-directory: ./js
+        run: yarn lerna version v$VERSION --no-git-tag-version --yes
 
       - name: Commit changes
         run: |
