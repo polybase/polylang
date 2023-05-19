@@ -8,7 +8,7 @@ on:
       - main
 
 jobs:
-  publish:
+  release_beta:
     runs-on: ubuntu-latest-16-cores
     if: github.event.pull_request.merged == true && !startsWith(github.event.pull_request.head.ref, 'release-')
     steps:
