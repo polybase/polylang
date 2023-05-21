@@ -1109,8 +1109,8 @@ pub(crate) fn lt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
                 then: vec![
                     Instruction::Drop,
                     Instruction::Drop,
-                    Instruction::MovDown(3),
                     Instruction::Drop,
+                    Instruction::MovDown(2),
                     Instruction::Drop,
                     Instruction::Drop,
                     Instruction::Push(0),
@@ -1118,25 +1118,39 @@ pub(crate) fn lt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
                     // b_sign^ == 0
                 ],
                 else_: vec![
-                    Instruction::Drop,
-                    Instruction::Drop,
+                    // [a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
+                    Instruction::U32CheckedSHL(Some(EXP_SHIFT)),
+                    Instruction::MovDown(3),
+                    // [b_exp, a_sign^, b_sign^, a_mant, a_exp^, b_mant]
+                    Instruction::U32CheckedSHL(Some(EXP_SHIFT)),
+                    Instruction::MovDown(5),
+                    // [a_sign^, b_sign^, a_mant, a_exp^, b_mant, b_exp^]
                     Instruction::Dup(Some(0)),
                     Instruction::Push(0),
                     Instruction::U32CheckedNeq,
-                    Instruction::MovDown(4),
-                    // [a_sign^, b_sign^, a_mant, b_mant, a_sign^ != 0]
+                    Instruction::MovDown(6),
+                    // [a_sign^, b_sign^, a_mant, a_exp^, b_mant, b_exp^, a_sign^ != 0]
                     Instruction::If {
                         condition: vec![
                             Instruction::U32CheckedEq,
                             // a_sign^ == b_sign^
                         ],
                         then: vec![
-                            Instruction::U32CheckedGT,
-                            // b_mant > a_mant
+                            Instruction::U32CheckedOr,
+                            Instruction::MovDown(2),
+                            Instruction::U32CheckedOr,
+                            // [b_mant | b_exp^, a_mant | a_exp^, a_sign^ != 0]
+                            Instruction::U32CheckedLT,
+                            // a < b
                             Instruction::U32CheckedXOR,
-                            // a_sign^ != 0 ^ b > a
+                            // a_sign^ != 0 ^ a < b
                         ],
-                        else_: vec![Instruction::Drop, Instruction::Drop],
+                        else_: vec![
+                            Instruction::Drop,
+                            Instruction::Drop,
+                            Instruction::Drop,
+                            Instruction::Drop,
+                        ],
                     },
                 ],
             }],
@@ -1165,11 +1179,7 @@ pub(crate) fn lte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
     compiler.instructions.extend([Instruction::If {
         condition: vec![
-            Instruction::MovUp(4),
-            Instruction::MovUp(4),
-            Instruction::U32CheckedAnd,
-            Instruction::U32CheckedOr,
-            // [a_is_zero & b_is_zero | a_is_nan || b_is_nan]
+            // [a_is_nan || b_is_nan]
         ],
         then: vec![
             Instruction::Drop,
@@ -1180,30 +1190,48 @@ pub(crate) fn lte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             Instruction::Drop,
             Instruction::Drop,
             Instruction::Drop,
-            Instruction::Push(1),
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Push(0),
         ],
-        // [a_is_inf, b_is_inf, a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
+        // [a_is_inf, b_is_inf, a_is_zero, b_is_zero, a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
         else_: vec![Instruction::If {
             condition: vec![
-                // a_is_inf
+                Instruction::Dup(Some(5)),
+                Instruction::Dup(Some(5)),
+                Instruction::U32CheckedEq,
+                // [a_exp == b_exp]
+                Instruction::Dup(Some(8)),
+                Instruction::Dup(Some(8)),
+                Instruction::U32CheckedEq,
+                Instruction::U32CheckedAnd,
+                // [a_sign^ == b_sign^ & a_exp == b_exp]
+                Instruction::Dup(Some(10)),
+                Instruction::Dup(Some(10)),
+                Instruction::U32CheckedEq,
+                Instruction::U32CheckedAnd,
+                // [a_mant == b_mant & a_sign^ == b_sign^ & a_exp == b_exp]
             ],
             then: vec![
                 Instruction::Drop,
                 Instruction::Drop,
                 Instruction::Drop,
-                Instruction::MovDown(3),
                 Instruction::Drop,
                 Instruction::Drop,
                 Instruction::Drop,
-                Instruction::Push(0),
-                Instruction::U32CheckedNeq,
-                // a_sign^ != 0
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Push(1),
             ],
             else_: vec![Instruction::If {
                 condition: vec![
-                    // b_is_inf
+                    // a_is_inf
                 ],
                 then: vec![
+                    Instruction::Drop,
+                    Instruction::Drop,
+                    Instruction::Drop,
                     Instruction::Drop,
                     Instruction::Drop,
                     Instruction::MovDown(3),
@@ -1211,31 +1239,80 @@ pub(crate) fn lte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
                     Instruction::Drop,
                     Instruction::Drop,
                     Instruction::Push(0),
-                    Instruction::U32CheckedEq,
-                    // b_sign^ == 0
-                ],
-                else_: vec![
-                    Instruction::Drop,
-                    Instruction::Drop,
-                    Instruction::Dup(Some(0)),
-                    Instruction::Push(0),
                     Instruction::U32CheckedNeq,
-                    Instruction::MovDown(4),
-                    // [a_sign^, b_sign^, a_mant, b_mant, a_sign^ != 0]
-                    Instruction::If {
+                    // a_sign^ != 0
+                ],
+                else_: vec![Instruction::If {
+                    condition: vec![
+                        // b_is_inf
+                    ],
+                    then: vec![
+                        Instruction::Drop,
+                        Instruction::Drop,
+                        Instruction::Drop,
+                        Instruction::Drop,
+                        Instruction::Drop,
+                        Instruction::MovDown(2),
+                        // [a_mant, b_mant, b_sign^]
+                        Instruction::Drop,
+                        Instruction::Drop,
+                        Instruction::Push(0),
+                        Instruction::U32CheckedEq,
+                        // b_sign^ == 0
+                    ],
+                    else_: vec![Instruction::If {
+                        // [a_is_zero, b_is_zero, a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
                         condition: vec![
-                            Instruction::U32CheckedEq,
-                            // a_sign^ == b_sign^
+                            Instruction::U32CheckedAnd,
+                            // a_is_zero && b_is_zero
                         ],
                         then: vec![
-                            Instruction::U32CheckedGTE,
-                            // b_mant >= a_mant
-                            Instruction::U32CheckedXOR,
-                            // a_sign^ != 0 ^ b >= a
+                            Instruction::Drop,
+                            Instruction::Drop,
+                            Instruction::Drop,
+                            Instruction::Drop,
+                            Instruction::Drop,
+                            Instruction::Drop,
+                            Instruction::Push(1),
                         ],
-                        else_: vec![Instruction::Drop, Instruction::Drop],
-                    },
-                ],
+                        else_: vec![
+                            // [a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
+                            Instruction::U32CheckedSHL(Some(EXP_SHIFT)),
+                            Instruction::MovDown(3),
+                            // [b_exp, a_sign^, b_sign^, a_mant, a_exp^, b_mant]
+                            Instruction::U32CheckedSHL(Some(EXP_SHIFT)),
+                            Instruction::MovDown(5),
+                            // [a_sign^, b_sign^, a_mant, a_exp^, b_mant, b_exp^]
+                            Instruction::Dup(Some(0)),
+                            Instruction::Push(0),
+                            Instruction::U32CheckedNeq,
+                            Instruction::MovDown(6),
+                            // [a_sign^, b_sign^, a_mant, a_exp^, b_mant, b_exp^, a_sign^ != 0]
+                            Instruction::If {
+                                condition: vec![
+                                    Instruction::U32CheckedEq,
+                                    // a_sign^ == b_sign^
+                                ],
+                                then: vec![
+                                    Instruction::U32CheckedOr,
+                                    Instruction::MovDown(2),
+                                    Instruction::U32CheckedOr,
+                                    // [b_mant | b_exp^, a_mant | a_exp^, a_sign^ != 0]
+                                    Instruction::U32CheckedLT,
+                                    // a < b
+                                    Instruction::U32CheckedXOR,
+                                    // a_sign^ != 0 ^ a < b
+                                ],
+                                else_: vec![
+                                    Instruction::Drop,
+                                    Instruction::Drop,
+                                    Instruction::Drop,
+                                    Instruction::Drop,
+                                ],
+                            },
+                        ],
+                    }],
+                }],
             }],
         }],
     }]);
@@ -1303,8 +1380,8 @@ pub(crate) fn gt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
                 then: vec![
                     Instruction::Drop,
                     Instruction::Drop,
-                    Instruction::MovDown(3),
                     Instruction::Drop,
+                    Instruction::MovDown(2),
                     Instruction::Drop,
                     Instruction::Drop,
                     Instruction::Push(0),
@@ -1312,19 +1389,28 @@ pub(crate) fn gt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
                     // b_sign^ != 0
                 ],
                 else_: vec![
-                    Instruction::Drop,
-                    Instruction::Drop,
+                    // [a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
+                    Instruction::U32CheckedSHL(Some(EXP_SHIFT)),
+                    Instruction::MovDown(3),
+                    // [b_exp, a_sign^, b_sign^, a_mant, a_exp^, b_mant]
+                    Instruction::U32CheckedSHL(Some(EXP_SHIFT)),
+                    Instruction::MovDown(5),
+                    // [a_sign^, b_sign^, a_mant, a_exp^, b_mant, b_exp^]
                     Instruction::Dup(Some(0)),
-                    Instruction::MovDown(4),
-                    // [a_sign^, b_sign^, a_mant, b_mant, a_sign^]
+                    Instruction::MovDown(6),
+                    // [a_sign^, b_sign^, a_mant, a_exp^, b_mant, b_exp^, a_sign^ != 0]
                     Instruction::If {
                         condition: vec![
                             Instruction::U32CheckedEq,
                             // a_sign^ == b_sign^
                         ],
                         then: vec![
-                            Instruction::U32CheckedLT,
-                            // b_mant < a_mant
+                            Instruction::U32CheckedOr,
+                            Instruction::MovDown(2),
+                            Instruction::U32CheckedOr,
+                            // [b_mant | b_exp^, a_mant | a_exp^, a_sign^ != 0]
+                            Instruction::U32CheckedGT,
+                            // a_mant > b_mant
                             Instruction::Swap,
                             Instruction::Push(0),
                             Instruction::U32CheckedNeq,
@@ -1332,6 +1418,8 @@ pub(crate) fn gt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
                             // a_sign^ != 0 ^ b < a
                         ],
                         else_: vec![
+                            Instruction::Drop,
+                            Instruction::Drop,
                             Instruction::Drop,
                             Instruction::Drop,
                             Instruction::Push(0),
@@ -1365,11 +1453,7 @@ pub(crate) fn gte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
     compiler.instructions.extend([Instruction::If {
         condition: vec![
-            Instruction::MovUp(4),
-            Instruction::MovUp(4),
-            Instruction::U32CheckedAnd,
-            Instruction::U32CheckedOr,
-            // [a_is_zero & b_is_zero | a_is_nan || b_is_nan]
+            // [a_is_nan || b_is_nan]
         ],
         then: vec![
             Instruction::Drop,
@@ -1380,30 +1464,48 @@ pub(crate) fn gte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             Instruction::Drop,
             Instruction::Drop,
             Instruction::Drop,
-            Instruction::Push(1),
+            Instruction::Drop,
+            Instruction::Drop,
+            Instruction::Push(0),
         ],
-        // [a_is_inf, b_is_inf, a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
+        // [a_is_inf, b_is_inf, a_is_zero, b_is_zero, a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
         else_: vec![Instruction::If {
             condition: vec![
-                // a_is_inf
+                Instruction::Dup(Some(5)),
+                Instruction::Dup(Some(5)),
+                Instruction::U32CheckedEq,
+                // [a_exp == b_exp]
+                Instruction::Dup(Some(8)),
+                Instruction::Dup(Some(8)),
+                Instruction::U32CheckedEq,
+                Instruction::U32CheckedAnd,
+                // [a_sign^ == b_sign^ & a_exp == b_exp]
+                Instruction::Dup(Some(10)),
+                Instruction::Dup(Some(10)),
+                Instruction::U32CheckedEq,
+                Instruction::U32CheckedAnd,
+                // [a_mant == b_mant & a_sign^ == b_sign^ & a_exp == b_exp]
             ],
             then: vec![
                 Instruction::Drop,
                 Instruction::Drop,
                 Instruction::Drop,
-                Instruction::MovDown(3),
                 Instruction::Drop,
                 Instruction::Drop,
                 Instruction::Drop,
-                Instruction::Push(0),
-                Instruction::U32CheckedNeq,
-                // a_sign^ != 0
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Drop,
+                Instruction::Push(1),
             ],
             else_: vec![Instruction::If {
                 condition: vec![
-                    // b_is_inf
+                    // a_is_inf
                 ],
                 then: vec![
+                    Instruction::Drop,
+                    Instruction::Drop,
+                    Instruction::Drop,
                     Instruction::Drop,
                     Instruction::Drop,
                     Instruction::MovDown(3),
@@ -1412,30 +1514,82 @@ pub(crate) fn gte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
                     Instruction::Drop,
                     Instruction::Push(0),
                     Instruction::U32CheckedEq,
-                    // b_sign^ == 0
+                    // a_sign^ == 0
                 ],
-                else_: vec![
-                    Instruction::Drop,
-                    Instruction::Drop,
-                    Instruction::Dup(Some(0)),
-                    Instruction::Push(0),
-                    Instruction::U32CheckedNeq,
-                    Instruction::MovDown(4),
-                    // [a_sign^, b_sign^, a_mant, b_mant, a_sign^ != 0]
-                    Instruction::If {
+                else_: vec![Instruction::If {
+                    condition: vec![
+                        // b_is_inf
+                    ],
+                    then: vec![
+                        Instruction::Drop,
+                        Instruction::Drop,
+                        Instruction::Drop,
+                        Instruction::Drop,
+                        Instruction::Drop,
+                        Instruction::MovDown(2),
+                        // [a_mant, b_mant, b_sign^]
+                        Instruction::Drop,
+                        Instruction::Drop,
+                        Instruction::Push(0),
+                        Instruction::U32CheckedNeq,
+                        // b_sign^ == 0
+                    ],
+                    else_: vec![Instruction::If {
+                        // [a_is_zero, b_is_zero, a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
                         condition: vec![
-                            Instruction::U32CheckedEq,
-                            // a_sign^ == b_sign^
+                            Instruction::U32CheckedAnd,
+                            // a_is_zero && b_is_zero
                         ],
                         then: vec![
-                            Instruction::U32CheckedLTE,
-                            // b_mant <= a_mant
-                            Instruction::U32CheckedXOR,
-                            // a_sign^ != 0 ^ b <= a
+                            Instruction::Drop,
+                            Instruction::Drop,
+                            Instruction::Drop,
+                            Instruction::Drop,
+                            Instruction::Drop,
+                            Instruction::Drop,
+                            Instruction::Push(1),
                         ],
-                        else_: vec![Instruction::Drop, Instruction::Drop],
-                    },
-                ],
+                        else_: vec![
+                            // [a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
+                            Instruction::U32CheckedSHL(Some(EXP_SHIFT)),
+                            Instruction::MovDown(3),
+                            // [b_exp, a_sign^, b_sign^, a_mant, a_exp^, b_mant]
+                            Instruction::U32CheckedSHL(Some(EXP_SHIFT)),
+                            Instruction::MovDown(5),
+                            // [a_sign^, b_sign^, a_mant, a_exp^, b_mant, b_exp^]
+                            Instruction::Dup(Some(0)),
+                            Instruction::MovDown(6),
+                            // [a_sign^, b_sign^, a_mant, a_exp^, b_mant, b_exp^, a_sign^]
+                            Instruction::If {
+                                condition: vec![
+                                    Instruction::U32CheckedEq,
+                                    // a_sign^ == b_sign^
+                                ],
+                                then: vec![
+                                    Instruction::U32CheckedOr,
+                                    Instruction::MovDown(2),
+                                    Instruction::U32CheckedOr,
+                                    // [b_mant | b_exp^, a_mant | a_exp^, a_sign^ != 0]
+                                    Instruction::U32CheckedGT,
+                                    // a > b
+                                    Instruction::Swap,
+                                    Instruction::Push(0),
+                                    Instruction::U32CheckedNeq,
+                                    Instruction::U32CheckedXOR,
+                                    // a_sign^ != 0 ^ a < b
+                                ],
+                                else_: vec![
+                                    Instruction::Drop,
+                                    Instruction::Drop,
+                                    Instruction::Drop,
+                                    Instruction::Drop,
+                                    Instruction::Push(0),
+                                    Instruction::U32CheckedEq,
+                                ],
+                            },
+                        ],
+                    }],
+                }],
             }],
         }],
     }]);
@@ -1537,6 +1691,8 @@ mod tests {
         const STR: &'static str;
         const RUST_FN: fn(f32, f32) -> f32;
         const VM_FN: fn(&mut Compiler, &Symbol, &Symbol) -> Symbol;
+
+        const INACCURATE: bool = true;
     }
 
     #[derive(Clone, Copy)]
@@ -1585,6 +1741,8 @@ mod tests {
         const STR: &'static str = "==";
         const RUST_FN: fn(f32, f32) -> f32 = self::eq;
         const VM_FN: fn(&mut Compiler, &Symbol, &Symbol) -> Symbol = super::eq;
+
+        const INACCURATE: bool = false;
     }
 
     fn ne(a: f32, b: f32) -> f32 {
@@ -1601,6 +1759,8 @@ mod tests {
         const STR: &'static str = "!=";
         const RUST_FN: fn(f32, f32) -> f32 = self::ne;
         const VM_FN: fn(&mut Compiler, &Symbol, &Symbol) -> Symbol = super::ne;
+
+        const INACCURATE: bool = false;
     }
 
     fn lt(a: f32, b: f32) -> f32 {
@@ -1617,6 +1777,8 @@ mod tests {
         const STR: &'static str = "<";
         const RUST_FN: fn(f32, f32) -> f32 = self::lt;
         const VM_FN: fn(&mut Compiler, &Symbol, &Symbol) -> Symbol = super::lt;
+
+        const INACCURATE: bool = false;
     }
 
     fn lte(a: f32, b: f32) -> f32 {
@@ -1633,6 +1795,8 @@ mod tests {
         const STR: &'static str = "<=";
         const RUST_FN: fn(f32, f32) -> f32 = self::lte;
         const VM_FN: fn(&mut Compiler, &Symbol, &Symbol) -> Symbol = super::lte;
+
+        const INACCURATE: bool = false;
     }
 
     fn gt(a: f32, b: f32) -> f32 {
@@ -1649,6 +1813,8 @@ mod tests {
         const STR: &'static str = ">";
         const RUST_FN: fn(f32, f32) -> f32 = self::gt;
         const VM_FN: fn(&mut Compiler, &Symbol, &Symbol) -> Symbol = super::gt;
+
+        const INACCURATE: bool = false;
     }
 
     fn gte(a: f32, b: f32) -> f32 {
@@ -1665,6 +1831,8 @@ mod tests {
         const STR: &'static str = ">=";
         const RUST_FN: fn(f32, f32) -> f32 = self::gte;
         const VM_FN: fn(&mut Compiler, &Symbol, &Symbol) -> Symbol = super::gte;
+
+        const INACCURATE: bool = false;
     }
 
     fn assert_bin_op<T: BinaryOp>(a: f32, b: f32, bin_op: T) {
@@ -1674,8 +1842,12 @@ mod tests {
         assert!(
             result.is_nan() && expected.is_nan()
                 || result == expected
-                || (result - expected).abs()
-                    < TEST_RUST_NATIVE_F32_ACCURACY * (1.0 + expected.abs()),
+                || if T::INACCURATE {
+                    (result - expected).abs()
+                        <= TEST_RUST_NATIVE_F32_ACCURACY * (1.0 + expected.abs())
+                } else {
+                    result == expected
+                },
             "{a} {} {b}, result: {result}, expected: {expected}",
             T::STR
         );
