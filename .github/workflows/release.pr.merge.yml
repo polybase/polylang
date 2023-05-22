@@ -76,8 +76,8 @@ jobs:
           -H 'Content-Type: application/json' \
           -d "{
             "tag_name": "v'$PR_VERSION'",
-            "name": \"Release v'$PR_VERSION'",
-            "body": \"Release notes for v'$PR_VERSION'"
+            "name": "Release v'$PR_VERSION'",
+            "body": "Release notes for v'$PR_VERSION'"
           }"
 
       # TODO trigger update dependencies in other repos
