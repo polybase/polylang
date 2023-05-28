@@ -410,11 +410,14 @@ impl<'input> Lexer<'input> {
     }
 
     /// parses 'hello' as Tok::String("'hello'")
+    /// or "hello" as Tok::String("\"hello\"")
     fn lex_string(&mut self) -> Option<LexerItem<'input>> {
         let (start, c) = self.peek_char()?;
-        if c != '\'' {
-            return None;
-        }
+        let is_double_quoted = match c {
+            '\'' => false,
+            '"' => true,
+            _ => return None,
+        };
         self.next_char();
 
         let mut end = start;
@@ -424,10 +427,13 @@ impl<'input> Lexer<'input> {
                 break false;
             };
 
-            if c == '\'' {
-                end = i;
-                self.next_char();
-                break true;
+            match (is_double_quoted, c) {
+                (true, '"') | (false, '\'') => {
+                    end = i;
+                    self.next_char();
+                    break true;
+                }
+                _ => {}
             }
 
             end = i;

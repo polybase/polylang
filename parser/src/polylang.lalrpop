@@ -83,6 +83,7 @@ BasicType: Type = {
     "number" => Type::Number,
     "boolean" => Type::Boolean,
     "bytes" => Type::Bytes,
+    "PublicKey" => Type::PublicKey,
 };
 
 ArrayInnerType: Type = {
@@ -97,7 +98,6 @@ Type: Type = {
     <t:ArrayInnerType> "[" "]" => Type::Array(Box::new(t)),
     "map" "<" <kt:BasicType> "," <vt:Type> ">" => Type::Map(Box::new(kt), Box::new(vt)),
     "{" <fields:(Field ";")*> "}" => Type::Object(fields.into_iter().map(|(f, _)| f).collect()),
-    "PublicKey" => Type::PublicKey,
     <i:Ident> => Type::ForeignRecord {
         collection: i,
     },
@@ -149,6 +149,7 @@ ObjectFieldValues: Vec<(String, Expression)> = {
         fs.insert(0, (id, e));
         fs
     },
+    => vec![],
 };
 
 Array: Vec<Expression> = {
@@ -291,7 +292,7 @@ Statement: Statement = {
 };
 
 StatementsOrSimpleStatement: Vec<Statement> = {
-    "{" <s:Statement*> "}" => s,
+    "{" <s:Statement+> "}" => s,
     <s:SimpleStatement> => vec![s],
 };
 
