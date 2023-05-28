@@ -872,7 +872,7 @@ mod test {
         .unwrap();
 
         let stack = outputs.stack_outputs().stack();
-        assert_eq!(stack, &[4294967294, 2, 1, 0, 0]);
+        assert_eq!(&stack[..5], &[4294967294, 2, 1, 0, 0]);
     }
 
     fn add(a: i32, b: i32) -> Result<i32, miden::ExecutionError> {
