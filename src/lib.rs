@@ -1009,6 +1009,7 @@ function x() {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
             Err(e) => panic!("Error reading directory: {}", e),
         };
+        let mut results = vec![];
         for entry in entries {
             let entry = entry.unwrap();
             let path = entry.path();
@@ -1019,11 +1020,15 @@ function x() {
             let code = std::fs::read_to_string(&path).unwrap();
             let mut program = None::<ast::Program>;
             let result = parse(&code, "", &mut program);
-            if result.is_err() {
+            if let Err(err) = result {
                 eprintln!("Error parsing collection: {}", path.display());
-                eprintln!("{}", result.as_ref().unwrap_err().message);
+                eprintln!("{}", err.message);
+                results.push(err);
             }
-            assert!(result.is_ok());
+        }
+
+        if !results.is_empty() {
+            panic!("found {} failed tests", results.len());
         }
     }
 }
