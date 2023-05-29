@@ -1006,7 +1006,8 @@ pub(crate) fn ne(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
     compiler.instructions.extend([Instruction::If {
         condition: vec![
-            // [a_is_nan || b_is_nan]
+            Instruction::U32CheckedOr,
+            // [a_is_nan || b_is_nan | a_is_zero && b_is_zero]
         ],
         then: vec![
             Instruction::Drop,
@@ -1018,32 +1019,17 @@ pub(crate) fn ne(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             Instruction::Drop,
             Instruction::Push(0),
         ],
-        else_: vec![Instruction::If {
-            condition: vec![
-                // [a_is_zero && b_is_zero]
-            ],
-            then: vec![
-                Instruction::Drop,
-                Instruction::Drop,
-                Instruction::Drop,
-                Instruction::Drop,
-                Instruction::Drop,
-                Instruction::Drop,
-                Instruction::Drop,
-                Instruction::Push(0),
-            ],
-            else_: vec![
-                // [a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
-                Instruction::U32CheckedNeq,
-                Instruction::MovDown(4),
-                Instruction::U32CheckedNeq,
-                Instruction::Swap,
-                Instruction::U32CheckedNeq,
-                // [a_mant == b_mant, a_sign^ == b_sign^, a_exp == b_exp]
-                Instruction::U32CheckedAnd,
-                Instruction::U32CheckedAnd,
-            ],
-        }],
+        else_: vec![
+            // [a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
+            Instruction::U32CheckedNeq,
+            Instruction::MovDown(4),
+            Instruction::U32CheckedNeq,
+            Instruction::MovDown(2),
+            Instruction::U32CheckedNeq,
+            // [a_mant == b_mant, a_sign^ == b_sign^, a_exp == b_exp]
+            Instruction::U32CheckedOr,
+            Instruction::U32CheckedOr,
+        ],
     }]);
 
     compiler.memory.write(
