@@ -44,7 +44,7 @@ where
         let column = column - (line_len_before_trim - line.len());
 
         message.push_str(line);
-        message.push_str("\n");
+        message.push('\n');
         message.push_str(&" ".repeat(column));
         message.push_str(&"^".repeat(if start_byte == end_byte {
             1
@@ -105,11 +105,8 @@ pub fn parse<'a>(
 
     Ok((
         program_holder.as_ref().unwrap(),
-        stableast::Root::from_ast(namespace, program_holder.as_ref().unwrap()).map_err(|e| {
-            Error {
-                message: e.to_string(),
-            }
-        })?,
+        stableast::Root::from_ast(namespace, program_holder.as_ref().unwrap())
+            .map_err(|e| Error { message: e })?,
     ))
 }
 
@@ -300,7 +297,7 @@ mod tests {
                 statements,
                 statements_code,
                 return_type,
-            }) if name == "get_age" && decorators.is_empty() && parameters.len() == 2 && statements.len() == 1 && statements_code == "return 42;" && return_type == &None)
+            }) if name == "get_age" && decorators.is_empty() && parameters.len() == 2 && statements.len() == 1 && statements_code == "return 42;" && return_type.is_none())
         );
 
         let function = match &collection.items[0] {
@@ -312,10 +309,10 @@ mod tests {
             matches!(function.statements[0], ast::Statement::Return(ast::Expression::Primitive(ast::Primitive::Number(number))) if number == 42.0)
         );
         assert!(
-            matches!(&function.parameters[0], ast::Parameter{ name, type_, required } if *required == true && name == "a" && *type_ == ast::ParameterType::Number)
+            matches!(&function.parameters[0], ast::Parameter{ name, type_, required } if *required && name == "a" && *type_ == ast::ParameterType::Number)
         );
         assert!(
-            matches!(&function.parameters[1], ast::Parameter{ name, type_, required } if *required == false && name == "b" && *type_ == ast::ParameterType::String)
+            matches!(&function.parameters[1], ast::Parameter{ name, type_, required } if !(*required) && name == "b" && *type_ == ast::ParameterType::String)
         );
     }
 
@@ -407,7 +404,7 @@ mod tests {
 
         assert!(matches!(
             dot,
-            ast::Expression::Dot(left, right) if *left == ast::Expression::Ident("a".to_owned()) && right == "b".to_owned()
+            ast::Expression::Dot(left, right) if *left == ast::Expression::Ident("a".to_owned()) && right == *"b"
         ));
     }
 
@@ -507,7 +504,7 @@ mod tests {
                     Box::new(ast::Expression::Ident("$auth".to_owned())),
                     "publicKey".to_owned(),
                 )),
-            ) && then_statements.len() == 1 && else_statements.len() == 0
+            ) && then_statements.len() == 1 && else_statements.is_empty()
         ));
 
         assert!(matches!(

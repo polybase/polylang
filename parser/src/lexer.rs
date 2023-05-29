@@ -1,5 +1,3 @@
-use std::f32::consts::E;
-
 pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -282,7 +280,7 @@ impl<'input> Lexer<'input> {
 
         if let Some((_, '/')) = self.peek_char() {
             match self.peek_char_nth(1) {
-                Some((i, '/')) => {
+                Some((_, '/')) => {
                     self.next_char();
                     self.next_char();
 
@@ -670,7 +668,7 @@ impl<'input> Iterator for Lexer<'input> {
                 _ => None,
             })
             .or_else(|| {
-                if let Some((i, c)) = self.peek_char() {
+                if let Some((i, _)) = self.peek_char() {
                     self.next_char();
                     Some(Err(LexicalError::InvalidToken { start: i, end: i }))
                 } else {

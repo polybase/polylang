@@ -163,7 +163,7 @@ impl Display for Type<'_> {
             Type::Map(m) => write!(f, "map<{}, {}>", m.key, m.value),
             Type::Object(o) => {
                 write!(f, "{{ ")?;
-                for (i, field) in o.fields.iter().enumerate() {
+                for (_i, field) in o.fields.iter().enumerate() {
                     write!(
                         f,
                         "{}{}: {}",
@@ -273,7 +273,7 @@ impl<'a> Root<'a> {
                                     directives: f
                                         .decorators
                                         .iter()
-                                        .map(|d| Directive::from_decorator_ast(d))
+                                        .map(Directive::from_decorator_ast)
                                         .collect(),
                                     required: f.required,
                                 })
@@ -437,7 +437,7 @@ impl<'a> Directive<'a> {
                 .iter()
                 .map(|a| {
                     DirectiveArgument::FieldReference(FieldReference {
-                        path: a.split('.').map(|s| Cow::Borrowed(s)).collect(),
+                        path: a.split('.').map(Cow::Borrowed).collect(),
                     })
                 })
                 .collect(),

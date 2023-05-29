@@ -10,9 +10,9 @@ pub(crate) fn new(compiler: &mut Compiler, value: u32) -> Symbol {
     // memory is zero-initialized, so we don't need to write for 0
     if value > 0 {
         compiler.memory.write(
-            &mut compiler.instructions,
+            compiler.instructions,
             symbol.memory_addr,
-            &[ValueSource::Immediate(value as u32)],
+            &[ValueSource::Immediate(value)],
         );
     }
 
@@ -23,21 +23,17 @@ pub(crate) fn add(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     compiler
         .instructions
         .push(encoder::Instruction::U32CheckedAdd);
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -49,21 +45,17 @@ pub(crate) fn sub(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     compiler
         .instructions
         .push(encoder::Instruction::U32CheckedSub);
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -75,21 +67,17 @@ pub(crate) fn eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     compiler
         .instructions
         .push(encoder::Instruction::U32CheckedEq);
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -101,21 +89,17 @@ pub(crate) fn gte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     compiler
         .instructions
         .push(encoder::Instruction::U32CheckedGTE);
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -127,21 +111,17 @@ pub(crate) fn gt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     compiler
         .instructions
         .push(encoder::Instruction::U32CheckedGT);
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -153,21 +133,17 @@ pub(crate) fn lte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     compiler
         .instructions
         .push(encoder::Instruction::U32CheckedLTE);
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -179,21 +155,17 @@ pub(crate) fn lt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     compiler
         .instructions
         .push(encoder::Instruction::U32CheckedLT);
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -205,21 +177,17 @@ pub(crate) fn modulo(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol 
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     compiler
         .instructions
         .push(encoder::Instruction::U32CheckedMod);
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -231,21 +199,17 @@ pub(crate) fn div(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     compiler
         .instructions
         .push(encoder::Instruction::U32CheckedDiv);
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -257,21 +221,17 @@ pub(crate) fn mul(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     compiler
         .instructions
         .push(encoder::Instruction::U32CheckedMul);
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -283,22 +243,18 @@ pub(crate) fn shift_left(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Sym
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     // TODO: SHL with Some is an order of magnitude faster, optimize this for constants
     compiler
         .instructions
         .push(encoder::Instruction::U32CheckedSHL(None));
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -310,22 +266,18 @@ pub(crate) fn shift_right(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Sy
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     // TODO: SHR with Some is an order of magnitude faster, optimize this for constants
     compiler
         .instructions
         .push(encoder::Instruction::U32CheckedSHR(None));
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );

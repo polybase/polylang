@@ -12,14 +12,11 @@ mod string;
 mod uint32;
 mod uint64;
 
-use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc};
+use std::{collections::HashMap, ops::Deref};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    ast::{self, Expression, Statement},
-    validation::Value,
-};
+use crate::ast::{self, Expression, Statement};
 
 macro_rules! comment {
     ($compiler:expr, $($arg:tt)*) => {
@@ -177,7 +174,7 @@ lazy_static::lazy_static! {
 
         builtins.push((
             "dynamicAlloc".to_string(),
-            Function::Builtin(Box::new(&|compiler, scope, args| dynamic_alloc(compiler, args))),
+            Function::Builtin(Box::new(&|compiler, _scope, args| dynamic_alloc(compiler, args))),
         ));
 
         builtins.push((
@@ -191,13 +188,13 @@ lazy_static::lazy_static! {
                 assert_eq!(value.type_, Type::PrimitiveType(PrimitiveType::UInt32));
 
                 compiler.memory.read(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     value.memory_addr,
                     value.type_.miden_width(),
                 );
                 // [value]
                 compiler.memory.read(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     address.memory_addr,
                     address.type_.miden_width(),
                 );
@@ -210,7 +207,7 @@ lazy_static::lazy_static! {
                 Symbol {
                     type_: Type::PrimitiveType(PrimitiveType::UInt32),
                     memory_addr: 0,
-                    ..Default::default()
+
                 }
             })),
         ));
@@ -224,9 +221,9 @@ lazy_static::lazy_static! {
 
                 compiler.instructions.push(encoder::Instruction::AdvPush(1));
                 compiler.memory.write(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     symbol.memory_addr,
-                    &vec![ValueSource::Stack],
+                    &[ValueSource::Stack],
                 );
 
                 symbol
@@ -235,7 +232,7 @@ lazy_static::lazy_static! {
 
         builtins.push((
             "readAdviceIntoString".to_string(),
-            Function::AST(&READ_ADVICE_INTO_STRING),
+            Function::Ast(&READ_ADVICE_INTO_STRING),
         ));
 
         builtins.push((
@@ -252,23 +249,23 @@ lazy_static::lazy_static! {
                 s.type_ = Type::String;
 
                 compiler.memory.read(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     length.memory_addr,
                     length.type_.miden_width(),
                 );
                 compiler.memory.write(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     string::length(&s).memory_addr,
                     &vec![ValueSource::Stack; length.type_.miden_width() as _],
                 );
 
                 compiler.memory.read(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     address_ptr.memory_addr,
                     address_ptr.type_.miden_width(),
                 );
                 compiler.memory.write(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     string::data_ptr(&s).memory_addr,
                     &vec![ValueSource::Stack; address_ptr.type_.miden_width() as _],
                 );
@@ -289,23 +286,23 @@ lazy_static::lazy_static! {
                 let s = compiler.memory.allocate_symbol(Type::Bytes);
 
                 compiler.memory.read(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     length.memory_addr,
                     length.type_.miden_width(),
                 );
                 compiler.memory.write(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     string::length(&s).memory_addr,
                     &vec![ValueSource::Stack; length.type_.miden_width() as _],
                 );
 
                 compiler.memory.read(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     address_ptr.memory_addr,
                     address_ptr.type_.miden_width(),
                 );
                 compiler.memory.write(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     string::data_ptr(&s).memory_addr,
                     &vec![ValueSource::Stack; address_ptr.type_.miden_width() as _],
                 );
@@ -333,61 +330,61 @@ lazy_static::lazy_static! {
                 let pk = compiler.memory.allocate_symbol(Type::PublicKey);
 
                 compiler.memory.read(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     kty.memory_addr,
                     kty.type_.miden_width(),
                 );
 
                 compiler.memory.write(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     publickey::kty(&pk).memory_addr,
                     &vec![ValueSource::Stack; kty.type_.miden_width() as _],
                 );
 
                 compiler.memory.read(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     crv.memory_addr,
                     crv.type_.miden_width(),
                 );
 
                 compiler.memory.write(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     publickey::crv(&pk).memory_addr,
                     &vec![ValueSource::Stack; crv.type_.miden_width() as _],
                 );
 
                 compiler.memory.read(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     alg.memory_addr,
                     alg.type_.miden_width(),
                 );
 
                 compiler.memory.write(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     publickey::alg(&pk).memory_addr,
                     &vec![ValueSource::Stack; alg.type_.miden_width() as _],
                 );
 
                 compiler.memory.read(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     use_.memory_addr,
                     use_.type_.miden_width(),
                 );
 
                 compiler.memory.write(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     publickey::use_(&pk).memory_addr,
                     &vec![ValueSource::Stack; use_.type_.miden_width() as _],
                 );
 
                 compiler.memory.read(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     extra_ptr.memory_addr,
                     extra_ptr.type_.miden_width(),
                 );
 
                 compiler.memory.write(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     publickey::extra_ptr(&pk).memory_addr,
                     &vec![ValueSource::Stack; extra_ptr.type_.miden_width() as _],
                 );
@@ -406,13 +403,13 @@ lazy_static::lazy_static! {
                 .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
 
             compiler.memory.read(
-                &mut compiler.instructions,
+                compiler.instructions,
                 address.memory_addr,
                 address.type_.miden_width(),
             );
             compiler.instructions.push(encoder::Instruction::MemLoad(None));
             compiler.memory.write(
-                &mut compiler.instructions,
+                compiler.instructions,
                 result.memory_addr,
                 &[ValueSource::Stack],
             );
@@ -423,9 +420,9 @@ lazy_static::lazy_static! {
          builtins.push(("addressOf".to_string(), Function::Builtin(Box::new(&|compiler, _, args| {
             let a = args.get(0).unwrap();
 
-            let result = uint32::new(compiler, a.memory_addr);
 
-            result
+
+            uint32::new(compiler, a.memory_addr)
          }))));
 
 
@@ -448,7 +445,7 @@ lazy_static::lazy_static! {
                 .allocate_symbol(Type::Bytes);
 
             compiler.memory.read(
-                &mut compiler.instructions,
+                compiler.instructions,
                 array::length(arr).memory_addr,
                 1,
             );
@@ -457,19 +454,19 @@ lazy_static::lazy_static! {
             compiler.instructions.push(encoder::Instruction::U32CheckedMul);
 
             compiler.memory.write(
-                &mut compiler.instructions,
+                compiler.instructions,
                 casted_to_bytes.memory_addr,
                 &[ValueSource::Stack],
             );
 
             compiler.memory.read(
-                &mut compiler.instructions,
+                compiler.instructions,
                 array::data_ptr(arr).memory_addr,
                 1,
             );
 
             compiler.memory.write(
-                &mut compiler.instructions,
+                compiler.instructions,
                 casted_to_bytes.memory_addr + 1,
                 &[ValueSource::Stack],
             );
@@ -493,7 +490,7 @@ lazy_static::lazy_static! {
             ]);
             // [h[3], h[2], h[1], h[0]]
             compiler.memory.read(
-                &mut compiler.instructions,
+                compiler.instructions,
                 public_key.memory_addr,
                 4,
             );
@@ -506,7 +503,7 @@ lazy_static::lazy_static! {
             for i in (0..32).step_by(4) {
                 // [h[3], h[2], h[1], h[0]]
                 compiler.memory.read(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     extra_ptr.memory_addr + i,
                     4,
                 );
@@ -517,7 +514,7 @@ lazy_static::lazy_static! {
             for i in (32..64).step_by(4) {
                 // [h[3], h[2], h[1], h[0]]
                 compiler.memory.read(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     extra_ptr.memory_addr + i,
                     4,
                 );
@@ -525,7 +522,7 @@ lazy_static::lazy_static! {
             }
 
             compiler.memory.write(
-                &mut compiler.instructions,
+                compiler.instructions,
                 result.memory_addr,
                 &[ValueSource::Stack, ValueSource::Stack, ValueSource::Stack, ValueSource::Stack],
             );
@@ -548,18 +545,16 @@ lazy_static::lazy_static! {
                 assert_eq!(message.type_, Type::String);
 
                 let mut failure_branch = vec![];
-                let mut failure_compiler = Compiler::new(&mut failure_branch, compiler.memory, compiler.root_scope);
+                let failure_compiler = Compiler::new(&mut failure_branch, compiler.memory, compiler.root_scope);
 
                 let str_len = string::length(message);
                 let str_data_ptr = string::data_ptr(message);
 
                 failure_compiler.memory.write(
-                    &mut failure_compiler.instructions,
+                    failure_compiler.instructions,
                     1,
-                    &vec![
-                        ValueSource::Memory(str_len.memory_addr),
-                        ValueSource::Memory(str_data_ptr.memory_addr),
-                    ],
+                    &[ValueSource::Memory(str_len.memory_addr),
+                        ValueSource::Memory(str_data_ptr.memory_addr)],
                 );
 
                 failure_compiler
@@ -579,7 +574,7 @@ lazy_static::lazy_static! {
                 Symbol {
                     type_: Type::PrimitiveType(PrimitiveType::Boolean),
                     memory_addr: 0,
-                    ..Default::default()
+
                 }
             })),
         ));
@@ -627,12 +622,12 @@ lazy_static::lazy_static! {
                 let result = compile_ast_function_call(&READ_ADVICE_BYTES, compiler, args, None);
                 compiler.root_scope = old_root_scope;
 
-                let result = Symbol {
+
+
+                Symbol {
                     type_: Type::CollectionReference { collection: "".to_owned() },
                     ..result
-                };
-
-                result
+                }
             })),
         ));
 
@@ -653,7 +648,7 @@ lazy_static::lazy_static! {
             compiler.instructions.push(encoder::Instruction::AdvPush(1));
             // TODO: assert that the number is actually a u32
             let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
-            compiler.memory.write(&mut compiler.instructions, symbol.memory_addr, &vec![ValueSource::Stack]);
+            compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
             symbol
         }))));
 
@@ -663,7 +658,7 @@ lazy_static::lazy_static! {
             compiler.instructions.push(encoder::Instruction::AdvPush(1));
             // TODO: assert that the number is actually a boolean
             let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
-            compiler.memory.write(&mut compiler.instructions, symbol.memory_addr, &vec![ValueSource::Stack]);
+            compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
             symbol
         }))));
 
@@ -684,17 +679,17 @@ lazy_static::lazy_static! {
             let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
 
             compiler.memory.read(
-                &mut compiler.instructions,
+                compiler.instructions,
                 a.memory_addr,
                 a.type_.miden_width(),
             );
             compiler.memory.read(
-                &mut compiler.instructions,
+                compiler.instructions,
                 b.memory_addr,
                 b.type_.miden_width(),
             );
             compiler.instructions.push(encoder::Instruction::U32WrappingAdd);
-            compiler.memory.write(&mut compiler.instructions, result.memory_addr, &vec![ValueSource::Stack]);
+            compiler.memory.write(compiler.instructions, result.memory_addr, &[ValueSource::Stack]);
             result
         }))));
 
@@ -707,17 +702,17 @@ lazy_static::lazy_static! {
             let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
 
             compiler.memory.read(
-                &mut compiler.instructions,
+                compiler.instructions,
                 a.memory_addr,
                 a.type_.miden_width(),
             );
             compiler.memory.read(
-                &mut compiler.instructions,
+                compiler.instructions,
                 b.memory_addr,
                 b.type_.miden_width(),
             );
             compiler.instructions.push(encoder::Instruction::U32WrappingSub);
-            compiler.memory.write(&mut compiler.instructions, result.memory_addr, &vec![ValueSource::Stack]);
+            compiler.memory.write(compiler.instructions, result.memory_addr, &[ValueSource::Stack]);
             result
         }))));
 
@@ -730,17 +725,17 @@ lazy_static::lazy_static! {
             let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
 
             compiler.memory.read(
-                &mut compiler.instructions,
+                compiler.instructions,
                 a.memory_addr,
                 a.type_.miden_width(),
             );
             compiler.memory.read(
-                &mut compiler.instructions,
+                compiler.instructions,
                 b.memory_addr,
                 b.type_.miden_width(),
             );
             compiler.instructions.push(encoder::Instruction::U32WrappingMul);
-            compiler.memory.write(&mut compiler.instructions, result.memory_addr, &vec![ValueSource::Stack]);
+            compiler.memory.write(compiler.instructions, result.memory_addr, &[ValueSource::Stack]);
             result
         }))));
 
@@ -753,17 +748,17 @@ lazy_static::lazy_static! {
             let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
 
             compiler.memory.read(
-                &mut compiler.instructions,
+                compiler.instructions,
                 a.memory_addr,
                 a.type_.miden_width(),
             );
             compiler.memory.read(
-                &mut compiler.instructions,
+                compiler.instructions,
                 b.memory_addr,
                 b.type_.miden_width(),
             );
             compiler.instructions.push(encoder::Instruction::U32CheckedXOR);
-            compiler.memory.write(&mut compiler.instructions, result.memory_addr, &vec![ValueSource::Stack]);
+            compiler.memory.write(compiler.instructions, result.memory_addr, &[ValueSource::Stack]);
             result
         }))));
 
@@ -772,7 +767,7 @@ lazy_static::lazy_static! {
             Symbol {
                 type_: Type::PrimitiveType(PrimitiveType::Boolean),
                 memory_addr: 0,
-                ..Default::default()
+
             }
         }))));
 
@@ -783,11 +778,11 @@ lazy_static::lazy_static! {
             let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Int32));
 
             compiler.memory.read(
-                &mut compiler.instructions,
+                compiler.instructions,
                 a.memory_addr,
                 a.type_.miden_width(),
             );
-            compiler.memory.write(&mut compiler.instructions, result.memory_addr, &vec![ValueSource::Stack]);
+            compiler.memory.write(compiler.instructions, result.memory_addr, &[ValueSource::Stack]);
 
             result
         }))));
@@ -812,7 +807,7 @@ lazy_static::lazy_static! {
 
         builtins.push((
             "mapLength".to_string(),
-            Function::Builtin(Box::new(&|compiler, scope, args| {
+            Function::Builtin(Box::new(&|_compiler, _scope, args| {
                 let m = &args[0];
                 assert!(matches!(m.type_, Type::Map(_, _)));
 
@@ -870,7 +865,7 @@ pub enum Type {
 impl Type {
     fn miden_width(&self) -> u32 {
         match self {
-            Type::Nullable(t) => nullable::width(&t),
+            Type::Nullable(t) => nullable::width(t),
             Type::PrimitiveType(pt) => pt.miden_width(),
             Type::String => string::WIDTH,
             Type::Bytes => bytes::WIDTH,
@@ -896,7 +891,6 @@ fn struct_field(struct_symbol: &Symbol, field_name: &str) -> Option<Symbol> {
             return Some(Symbol {
                 type_: field_type.clone(),
                 memory_addr: struct_symbol.memory_addr + offset,
-                ..Default::default()
             });
         }
 
@@ -904,21 +898,6 @@ fn struct_field(struct_symbol: &Symbol, field_name: &str) -> Option<Symbol> {
     }
 
     None
-}
-
-/// Calls `f` for each field in `struct_`, passing the offset, name, and type of the field.
-/// Fields of fields are also passed to `f`.
-fn struct_each_field(struct_: &Struct, f: &mut impl FnMut(u32, &str, &Type), mut offset: u32) {
-    for (name, field_type) in &struct_.fields {
-        match field_type {
-            Type::Struct(s) => {
-                struct_each_field(s, f, offset);
-            }
-            _ => f(offset, name, field_type),
-        }
-
-        offset += field_type.miden_width();
-    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -934,16 +913,18 @@ struct Collection<'ast> {
     functions: Vec<(String, &'ast ast::Function)>,
 }
 
+type BuiltinFn = Box<&'static (dyn Fn(&mut Compiler, &mut Scope, &[Symbol]) -> Symbol + Sync)>;
+
 #[derive(Clone)]
 enum Function<'ast> {
-    AST(&'ast ast::Function),
-    Builtin(Box<&'static (dyn Fn(&mut Compiler, &mut Scope, &[Symbol]) -> Symbol + Sync)>),
+    Ast(&'ast ast::Function),
+    Builtin(BuiltinFn),
 }
 
 impl std::fmt::Debug for Function<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Function::AST(ast) => write!(f, "Function::AST({:?})", ast),
+            Function::Ast(ast) => write!(f, "Function::AST({:?})", ast),
             Function::Builtin(_) => write!(f, "Function::Builtin"),
         }
     }
@@ -970,15 +951,13 @@ impl<'ast> Scope<'ast, '_> {
     }
 
     fn deeper<'b>(&'b self) -> Scope<'ast, 'b> {
-        let scope = Scope {
+        Scope {
             parent: Some(self),
             symbols: vec![],
             non_null_symbol_addrs: vec![],
             functions: vec![],
             collections: vec![],
-        };
-
-        scope
+        }
     }
 
     fn add_symbol(&mut self, name: String, symbol: Symbol) {
@@ -1093,7 +1072,6 @@ impl Memory {
         Symbol {
             type_,
             memory_addr: addr,
-            ..Default::default()
         }
     }
 
@@ -1154,7 +1132,7 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
     comment!(compiler, "Compiling expression {expr:?}");
 
     let symbol = match expr {
-        Expression::Ident(id) => scope.find_symbol(id).unwrap().clone(),
+        Expression::Ident(id) => scope.find_symbol(id).unwrap(),
         Expression::Primitive(ast::Primitive::Number(n)) => uint32::new(compiler, *n as u32),
         Expression::Primitive(ast::Primitive::String(s)) => string::new(compiler, s),
         Expression::Boolean(b) => boolean::new(compiler, *b),
@@ -1207,7 +1185,7 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
             };
             let func = scope
                 .find_function(func_name)
-                .expect(format!("function {} not found", func_name).as_str());
+                .unwrap_or_else(|| panic!("function {} not found", func_name));
             let mut args_symbols = vec![];
             for arg in args {
                 args_symbols.push(compile_expression(arg, compiler, scope));
@@ -1216,73 +1194,70 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
             compile_function_call(compiler, func, &args_symbols, None)
         }
         Expression::Assign(a, b) => {
-            match (&**a, b) {
-                (Expression::Index(a, index), b) => {
-                    let a = compile_expression(a, compiler, scope);
-                    let b = compile_expression(b, compiler, scope);
-                    let index = compile_expression(index, compiler, scope);
+            if let (Expression::Index(a, index), b) = (&**a, b) {
+                let a = compile_expression(a, compiler, scope);
+                let b = compile_expression(b, compiler, scope);
+                let index = compile_expression(index, compiler, scope);
 
-                    let (key, value, value_ptr, did_find) = map::get(compiler, &a, &index);
+                let (_key, _value, value_ptr, did_find) = map::get(compiler, &a, &index);
 
-                    let mut if_found_instructions = vec![];
-                    {
-                        std::mem::swap(compiler.instructions, &mut if_found_instructions);
+                let mut if_found_instructions = vec![];
+                {
+                    std::mem::swap(compiler.instructions, &mut if_found_instructions);
 
-                        // write b to value_ptr
-                        for i in 0..b.type_.miden_width() {
-                            compiler
-                                .memory
-                                .read(compiler.instructions, b.memory_addr + i, 1);
-                            // [b[i]]
-                            compiler
-                                .memory
-                                .read(compiler.instructions, value_ptr.memory_addr, 1);
-                            // [value_ptr, b[i]]
-                            compiler.instructions.push(encoder::Instruction::Push(i));
-                            // [1, value_ptr, b[i]]
-                            compiler
-                                .instructions
-                                .push(encoder::Instruction::U32CheckedAdd);
-                            // [value_ptr + i, b[i]]
-                            compiler
-                                .instructions
-                                .push(encoder::Instruction::MemStore(None));
-                            // []
-                        }
-
-                        std::mem::swap(compiler.instructions, &mut if_found_instructions);
+                    // write b to value_ptr
+                    for i in 0..b.type_.miden_width() {
+                        compiler
+                            .memory
+                            .read(compiler.instructions, b.memory_addr + i, 1);
+                        // [b[i]]
+                        compiler
+                            .memory
+                            .read(compiler.instructions, value_ptr.memory_addr, 1);
+                        // [value_ptr, b[i]]
+                        compiler.instructions.push(encoder::Instruction::Push(i));
+                        // [1, value_ptr, b[i]]
+                        compiler
+                            .instructions
+                            .push(encoder::Instruction::U32CheckedAdd);
+                        // [value_ptr + i, b[i]]
+                        compiler
+                            .instructions
+                            .push(encoder::Instruction::MemStore(None));
+                        // []
                     }
 
-                    let mut if_not_found = vec![];
-                    {
-                        std::mem::swap(compiler.instructions, &mut if_not_found);
-
-                        array_push(compiler, scope, &[map::keys_arr(&a), index]);
-                        array_push(compiler, scope, &[map::values_arr(&a), b.clone()]);
-
-                        std::mem::swap(compiler.instructions, &mut if_not_found);
-                    }
-
-                    compiler.instructions.extend([encoder::Instruction::If {
-                        condition: vec![encoder::Instruction::MemLoad(Some(did_find.memory_addr))],
-                        then: if_found_instructions,
-                        else_: if_not_found,
-                    }]);
-
-                    return b;
+                    std::mem::swap(compiler.instructions, &mut if_found_instructions);
                 }
-                _ => {}
+
+                let mut if_not_found = vec![];
+                {
+                    std::mem::swap(compiler.instructions, &mut if_not_found);
+
+                    array_push(compiler, scope, &[map::keys_arr(&a), index]);
+                    array_push(compiler, scope, &[map::values_arr(&a), b.clone()]);
+
+                    std::mem::swap(compiler.instructions, &mut if_not_found);
+                }
+
+                compiler.instructions.extend([encoder::Instruction::If {
+                    condition: vec![encoder::Instruction::MemLoad(Some(did_find.memory_addr))],
+                    then: if_found_instructions,
+                    else_: if_not_found,
+                }]);
+
+                return b;
             }
 
             let a = compile_expression(a, compiler, scope);
             let b = compile_expression(b, compiler, scope);
 
             match (&a.type_, &b.type_) {
-                (Type::Struct(a_struct), Type::Struct(b_struct)) => {
+                (Type::Struct(a_struct), Type::Struct(_b_struct)) => {
                     for (field, ty) in &a_struct.fields {
                         let a_field = struct_field(&a, field).unwrap();
-                        let b_field =
-                            struct_field(&b, field).expect(&format!("field {} not found", field));
+                        let b_field = struct_field(&b, field)
+                            .unwrap_or_else(|| panic!("field {} not found", field));
 
                         assert_eq!(ty, &b_field.type_);
 
@@ -1475,8 +1450,7 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
             if scope
                 .non_null_symbol_addrs
                 .iter()
-                .find(|addr| **addr == symbol.memory_addr)
-                .is_some() =>
+                .any(|addr| *addr == symbol.memory_addr) =>
         {
             nullable::value(symbol)
         }
@@ -1501,12 +1475,12 @@ fn compile_statement(
         Statement::Return(expr) => {
             let symbol = compile_expression(expr, compiler, scope);
             compiler.memory.read(
-                &mut compiler.instructions,
+                compiler.instructions,
                 symbol.memory_addr,
                 symbol.type_.miden_width(),
             );
             compiler.memory.write(
-                &mut compiler.instructions,
+                compiler.instructions,
                 return_result.memory_addr,
                 &vec![ValueSource::Stack; symbol.type_.miden_width() as usize],
             );
@@ -1536,7 +1510,7 @@ fn compile_statement(
             let mut then_scope = scope.deeper();
             let condition_symbol = match condition_symbol.type_ {
                 Type::PrimitiveType(PrimitiveType::Boolean) => condition_symbol,
-                Type::Nullable(ref t) => {
+                Type::Nullable(ref _t) => {
                     then_scope
                         .non_null_symbol_addrs
                         .push(condition_symbol.memory_addr);
@@ -1546,7 +1520,7 @@ fn compile_statement(
                 _ => panic!("if condition must be a boolean or optional"),
             };
             condition_compiler.memory.read(
-                &mut condition_compiler.instructions,
+                condition_compiler.instructions,
                 condition_symbol.memory_addr,
                 condition_symbol.type_.miden_width(),
             );
@@ -1602,7 +1576,7 @@ fn compile_statement(
                 Type::PrimitiveType(PrimitiveType::Boolean)
             );
             condition_compiler.memory.read(
-                &mut condition_compiler.instructions,
+                condition_compiler.instructions,
                 condition_symbol.memory_addr,
                 condition_symbol.type_.miden_width(),
             );
@@ -1639,7 +1613,7 @@ fn compile_statement(
                     compile_let_statement(l, &mut initial_compiler, &mut scope)
                 }
                 ast::ForInitialStatement::Expression(e) => {
-                    compile_expression(e, &mut initial_compiler, &mut scope);
+                    compile_expression(e, &mut initial_compiler, &scope);
                 }
             };
 
@@ -1655,7 +1629,7 @@ fn compile_statement(
                 Type::PrimitiveType(PrimitiveType::Boolean)
             );
             condition_compiler.memory.read(
-                &mut condition_compiler.instructions,
+                condition_compiler.instructions,
                 condition_symbol.memory_addr,
                 condition_symbol.type_.miden_width(),
             );
@@ -1663,7 +1637,7 @@ fn compile_statement(
             let mut post_instructions = vec![];
             let mut post_compiler =
                 Compiler::new(&mut post_instructions, compiler.memory, compiler.root_scope);
-            compile_expression(post_statement, &mut post_compiler, &mut scope);
+            compile_expression(post_statement, &mut post_compiler, &scope);
 
             let mut body_instructions = vec![];
             let mut body_compiler =
@@ -1701,12 +1675,12 @@ fn compile_let_statement(let_statement: &ast::Let, compiler: &mut Compiler, scop
     // because Ident expressions return symbols of variables
     let new_symbol = compiler.memory.allocate_symbol(symbol.type_);
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         symbol.memory_addr,
         new_symbol.type_.miden_width(),
     );
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         new_symbol.memory_addr,
         &vec![ValueSource::Stack; new_symbol.type_.miden_width() as usize],
     );
@@ -1756,12 +1730,12 @@ fn compile_ast_function_call(
         // TODO: fix this
         let new_arg = function_compiler.memory.allocate_symbol(arg.type_.clone());
         function_compiler.memory.read(
-            &mut function_compiler.instructions,
+            function_compiler.instructions,
             arg.memory_addr,
             arg.type_.miden_width(),
         );
         function_compiler.memory.write(
-            &mut function_compiler.instructions,
+            function_compiler.instructions,
             new_arg.memory_addr,
             &vec![ValueSource::Stack; new_arg.type_.miden_width() as usize],
         );
@@ -1787,7 +1761,7 @@ fn compile_function_call(
     this: Option<Symbol>,
 ) -> Symbol {
     match function {
-        Function::AST(a) => compile_ast_function_call(a, compiler, args, this),
+        Function::Ast(a) => compile_ast_function_call(a, compiler, args, this),
         Function::Builtin(b) => b(compiler, &mut Scope::new(), args),
     }
 }
@@ -2184,10 +2158,10 @@ fn compile_shift_right(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbo
 
 fn compile_index(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     match &a.type_ {
-        Type::Map(k, v) => {
+        Type::Map(k, _v) => {
             assert_eq!(k.as_ref(), &b.type_);
 
-            let (key, value, value_ptr, found) = map::get(compiler, a, b);
+            let (_key, value, _value_ptr, _found) = map::get(compiler, a, b);
             value
         }
         x => todo!("can't index into {x:?}"),
@@ -2207,12 +2181,12 @@ fn dynamic_alloc(compiler: &mut Compiler, args: &[Symbol]) -> Symbol {
         .push(encoder::Instruction::MemLoad(Some(3)));
     compiler.instructions.push(encoder::Instruction::Dup(None));
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         addr.memory_addr,
-        &vec![ValueSource::Stack],
+        &[ValueSource::Stack],
     );
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         size.memory_addr,
         size.type_.miden_width(),
     );
@@ -2258,17 +2232,16 @@ fn log(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Symbol {
     }
 
     for arg in str_args {
-        compile_function_call(compiler, &Function::AST(&LOG_STRING), &[arg], None);
+        compile_function_call(compiler, &Function::Ast(&LOG_STRING), &[arg], None);
     }
 
     Symbol {
         type_: Type::PrimitiveType(PrimitiveType::Boolean),
         memory_addr: 0,
-        ..Default::default()
     }
 }
 
-fn hash_string(compiler: &mut Compiler, scope: &Scope, args: &[Symbol]) -> Symbol {
+fn hash_string(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Symbol {
     let string = args.get(0).unwrap();
     assert!(matches!(
         string.type_,
@@ -2285,13 +2258,13 @@ fn hash_string(compiler: &mut Compiler, scope: &Scope, args: &[Symbol]) -> Symbo
     ]);
     // [h[3], h[2], h[1], h[0]]
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         string::data_ptr(string).memory_addr,
         string::data_ptr(string).type_.miden_width(),
     );
     // [data_ptr, h[3], h[2], h[1], h[0]]
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         string::length(string).memory_addr,
         string::length(string).type_.miden_width(),
     );
@@ -2345,7 +2318,7 @@ fn hash_string(compiler: &mut Compiler, scope: &Scope, args: &[Symbol]) -> Symbo
     // [h[3], h[2], h[1], h[0]]
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[
             ValueSource::Stack,
@@ -2384,9 +2357,9 @@ fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         array_len.memory_addr,
-        &vec![ValueSource::Stack],
+        &[ValueSource::Stack],
     );
     // [array_len]
 
@@ -2401,13 +2374,13 @@ fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
         .push(encoder::Instruction::U32CheckedMul);
     // [capacity = array_len * 2]
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         capacity.memory_addr,
-        &vec![ValueSource::Stack],
+        &[ValueSource::Stack],
     );
     // []
 
-    let data_ptr = dynamic_alloc(compiler, &[capacity.clone()]);
+    let data_ptr = dynamic_alloc(compiler, &[capacity]);
 
     let read_element_advice_insts = {
         let mut insts = vec![];
@@ -2415,7 +2388,7 @@ fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
 
         let el = read_advice_generic(compiler, element_type);
         compiler.memory.read(
-            &mut compiler.instructions,
+            compiler.instructions,
             el.memory_addr,
             element_type.miden_width(),
         );
@@ -2426,11 +2399,11 @@ fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
 
     compiler
         .memory
-        .read(&mut compiler.instructions, data_ptr.memory_addr, 1);
+        .read(compiler.instructions, data_ptr.memory_addr, 1);
     // [data_ptr]
     compiler
         .memory
-        .read(&mut compiler.instructions, array_len.memory_addr, 1);
+        .read(compiler.instructions, array_len.memory_addr, 1);
     // [array_len, data_ptr]
     compiler.instructions.push(encoder::Instruction::While {
         condition: vec![
@@ -2462,7 +2435,7 @@ fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
                     element_type.miden_width() - i,
                 )));
                 // [data_ptr, bytes..., data_ptr, array_len - 1]
-                v.push(encoder::Instruction::Push(i as u32));
+                v.push(encoder::Instruction::Push(i));
                 // [i, data_ptr, bytes..., data_ptr, array_len - 1]
                 v.push(encoder::Instruction::U32CheckedAdd);
                 // [data_ptr + i, bytes..., data_ptr, array_len - 1]
@@ -2494,16 +2467,14 @@ fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
         .allocate_symbol(Type::Array(Box::new(element_type.clone())));
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         array::length(&arr).memory_addr,
-        &vec![ValueSource::Memory(array_len.memory_addr)],
+        &[ValueSource::Memory(array_len.memory_addr)],
     );
 
-    compiler.memory.read(
-        &mut compiler.instructions,
-        array::length(&arr).memory_addr,
-        1,
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, array::length(&arr).memory_addr, 1);
     // [array_len]
     compiler.instructions.push(encoder::Instruction::Push(2));
     // [2, array_len]
@@ -2512,16 +2483,16 @@ fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
         .push(encoder::Instruction::U32CheckedMul);
     // [capacity = array_len * 2]
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         array::capacity(&arr).memory_addr,
-        &vec![ValueSource::Stack],
+        &[ValueSource::Stack],
     );
     // []
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         array::data_ptr(&arr).memory_addr,
-        &vec![ValueSource::Memory(data_ptr.memory_addr)],
+        &[ValueSource::Memory(data_ptr.memory_addr)],
     );
 
     arr
@@ -2538,9 +2509,9 @@ fn read_advice_map(compiler: &mut Compiler, key_type: &Type, value_type: &Type) 
     let value_array = read_advice_array(compiler, value_type);
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         map::keys_arr(&result).memory_addr,
-        &vec![
+        &[
             ValueSource::Memory(array::capacity(&key_array).memory_addr),
             ValueSource::Memory(array::length(&key_array).memory_addr),
             ValueSource::Memory(array::data_ptr(&key_array).memory_addr),
@@ -2548,9 +2519,9 @@ fn read_advice_map(compiler: &mut Compiler, key_type: &Type, value_type: &Type) 
     );
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         map::values_arr(&result).memory_addr,
-        &vec![
+        &[
             ValueSource::Memory(array::capacity(&value_array).memory_addr),
             ValueSource::Memory(array::length(&value_array).memory_addr),
             ValueSource::Memory(array::data_ptr(&value_array).memory_addr),
@@ -2593,22 +2564,22 @@ fn read_advice_nullable(compiler: &mut Compiler, type_: Type) -> Symbol {
 
     let s = compiler.memory.allocate_symbol(type_);
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         is_not_null.memory_addr,
         is_not_null.type_.miden_width(),
     );
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         nullable::is_not_null(&s).memory_addr,
         &vec![ValueSource::Stack; is_not_null.type_.miden_width() as _],
     );
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         value.memory_addr,
         value.type_.miden_width(),
     );
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         nullable::value(s.clone()).memory_addr,
         &vec![ValueSource::Stack; value.type_.miden_width() as _],
     );
@@ -2624,11 +2595,9 @@ fn array_push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Symbo
         Type::Array(Box::new(element.type_.clone()))
     );
 
-    compiler.memory.read(
-        &mut compiler.instructions,
-        array::length(&arr).memory_addr,
-        1,
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, array::length(arr).memory_addr, 1);
     // [len]
     compiler.instructions.push(encoder::Instruction::Push(1));
     // [1, len]
@@ -2637,23 +2606,19 @@ fn array_push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Symbo
         .push(encoder::Instruction::U32CheckedAdd);
     // [len + 1]
     compiler.memory.write(
-        &mut compiler.instructions,
-        array::length(&arr).memory_addr,
-        &vec![ValueSource::Stack],
+        compiler.instructions,
+        array::length(arr).memory_addr,
+        &[ValueSource::Stack],
     );
     // []
 
-    compiler.memory.read(
-        &mut compiler.instructions,
-        array::capacity(&arr).memory_addr,
-        1,
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, array::capacity(arr).memory_addr, 1);
     // [capacity]
-    compiler.memory.read(
-        &mut compiler.instructions,
-        array::length(&arr).memory_addr,
-        1,
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, array::length(arr).memory_addr, 1);
     // [len + 1, capacity]
     compiler
         .instructions
@@ -2664,17 +2629,13 @@ fn array_push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Symbo
     compiler.instructions.push(encoder::Instruction::Assert);
     // []
 
-    compiler.memory.read(
-        &mut compiler.instructions,
-        array::data_ptr(&arr).memory_addr,
-        1,
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, array::data_ptr(arr).memory_addr, 1);
     // [data_ptr]
-    compiler.memory.read(
-        &mut compiler.instructions,
-        array::length(&arr).memory_addr,
-        1,
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, array::length(arr).memory_addr, 1);
     compiler.instructions.push(encoder::Instruction::Push(1));
     compiler
         .instructions
@@ -2693,7 +2654,7 @@ fn array_push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Symbo
         .push(encoder::Instruction::U32CheckedAdd);
     // [data_ptr + len * element_width]
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         element.memory_addr,
         element.type_.miden_width(),
     );
@@ -2724,7 +2685,7 @@ fn generic_hash(compiler: &mut Compiler, value: &Symbol) -> Symbol {
     for i in 0..value.type_.miden_width() {
         compiler
             .memory
-            .read(&mut compiler.instructions, value.memory_addr + i, 1);
+            .read(compiler.instructions, value.memory_addr + i, 1);
         compiler.instructions.extend([
             encoder::Instruction::Push(0),
             encoder::Instruction::Push(0),
@@ -2736,7 +2697,7 @@ fn generic_hash(compiler: &mut Compiler, value: &Symbol) -> Symbol {
     }
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[
             ValueSource::Stack,
@@ -2837,19 +2798,18 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
                 let field = Symbol {
                     type_: field_type.clone(),
                     memory_addr: value.memory_addr + offset,
-                    ..Default::default()
                 };
                 offset += width;
 
                 let field_hash = hash(compiler, field);
 
                 compiler.memory.read(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     struct_hash.memory_addr,
                     struct_hash.type_.miden_width(),
                 );
                 compiler.memory.read(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     field_hash.memory_addr,
                     field_hash.type_.miden_width(),
                 );
@@ -2857,7 +2817,7 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
                 compiler.instructions.push(encoder::Instruction::HMerge);
 
                 compiler.memory.write(
-                    &mut compiler.instructions,
+                    compiler.instructions,
                     struct_hash.memory_addr,
                     &[
                         ValueSource::Stack,
@@ -2934,12 +2894,12 @@ fn read_struct_from_advice_tape(
 
         let sf = struct_field(struct_symbol, name).unwrap();
         compiler.memory.read(
-            &mut compiler.instructions,
+            compiler.instructions,
             symbol.memory_addr,
             symbol.type_.miden_width(),
         );
         compiler.memory.write(
-            &mut compiler.instructions,
+            compiler.instructions,
             sf.memory_addr,
             &vec![ValueSource::Stack; symbol.type_.miden_width() as _],
         );
@@ -2952,7 +2912,7 @@ fn read_collection_inputs(
     args: &[Type],
 ) -> (Option<Symbol>, Vec<Symbol>) {
     let this = this_struct.map(|ts| compiler.memory.allocate_symbol(Type::Struct(ts)));
-    let this_struct = this.as_ref().map(|ref t| {
+    let this_struct = this.as_ref().map(|t| {
         if let Type::Struct(s) = &t.type_ {
             s
         } else {
@@ -3042,7 +3002,7 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                                 .push((f.name.clone(), ast_type_to_type(f.required, &f.type_)));
                         }
                         ast::CollectionItem::Function(f) => {
-                            collection.functions.push((f.name.clone(), &f));
+                            collection.functions.push((f.name.clone(), f));
                         }
                         ast::CollectionItem::Index(_) => todo!(),
                     }
@@ -3052,7 +3012,7 @@ fn prepare_scope(program: &ast::Program) -> Scope {
             }
             ast::RootNode::Function(function) => scope
                 .functions
-                .push((function.name.clone(), Function::AST(function))),
+                .push((function.name.clone(), Function::Ast(function))),
         }
     }
 
@@ -3093,7 +3053,7 @@ pub fn compile(
                 .map(|(_, f)| *f)
         })
         .or_else(|| match scope.find_function(function_name) {
-            Some(Function::AST(f)) => Some(f),
+            Some(Function::Ast(f)) => Some(f),
             Some(Function::Builtin(_)) => todo!(),
             None => None,
         })
@@ -3109,7 +3069,7 @@ pub fn compile(
         let expected_hash = collection_struct.as_ref().map(|_| {
             let hash = compiler.memory.allocate_symbol(Type::Hash);
             compiler.memory.write(
-                &mut compiler.instructions,
+                compiler.instructions,
                 hash.memory_addr,
                 &vec![ValueSource::Stack; hash.type_.miden_width() as _],
             );
@@ -3149,7 +3109,7 @@ pub fn compile(
 
         comment!(compiler, "Reading result from memory");
         compiler.memory.read(
-            &mut compiler.instructions,
+            compiler.instructions,
             result.memory_addr,
             result.type_.miden_width(),
         );
@@ -3157,7 +3117,7 @@ pub fn compile(
         if let Some(this_symbol) = this_symbol {
             let this_hash = hash(&mut compiler, this_symbol);
             compiler.memory.read(
-                &mut compiler.instructions,
+                compiler.instructions,
                 this_hash.memory_addr,
                 this_hash.type_.miden_width(),
             );
@@ -3183,7 +3143,7 @@ pub fn compile(
         instruction
             .encode(unsafe { miden_code.as_mut_vec() }, 1)
             .unwrap();
-        miden_code.push_str("\n");
+        miden_code.push('\n');
     }
     miden_code.push_str("end\n");
 
@@ -3191,7 +3151,7 @@ pub fn compile(
         miden_code,
         Abi {
             out_this_addr: this_addr,
-            out_this_type: collection_struct.map(|s| Type::Struct(s)),
+            out_this_type: collection_struct.map(Type::Struct),
         },
     )
 }
@@ -3220,13 +3180,11 @@ fn ast_param_type_to_type(
         ast::ParameterType::Object(_) => todo!(),
     };
 
-    let t = if !required {
+    if !required {
         Type::Nullable(Box::new(t))
     } else {
         t
-    };
-
-    t
+    }
 }
 
 fn ast_type_to_type(required: bool, type_: &ast::Type) -> Type {
@@ -3256,13 +3214,11 @@ fn ast_type_to_type(required: bool, type_: &ast::Type) -> Type {
         }
     };
 
-    let t = if !required {
+    if !required {
         Type::Nullable(Box::new(t))
     } else {
         t
-    };
-
-    t
+    }
 }
 
 /// A function that takes in a struct type and generates a program that hashes a value of that type and returns the hash on the stack.
@@ -3281,7 +3237,7 @@ pub fn compile_struct_hasher(struct_: Struct) -> String {
 
         comment!(compiler, "Reading result from memory");
         compiler.memory.read(
-            &mut compiler.instructions,
+            compiler.instructions,
             hash.memory_addr,
             hash.type_.miden_width(),
         );
@@ -3306,7 +3262,7 @@ pub fn compile_struct_hasher(struct_: Struct) -> String {
         instruction
             .encode(unsafe { miden_code.as_mut_vec() }, 1)
             .unwrap();
-        miden_code.push_str("\n");
+        miden_code.push('\n');
     }
     miden_code.push_str("end\n");
 

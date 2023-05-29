@@ -4,31 +4,12 @@ pub(crate) const WIDTH: u32 = 1;
 
 // TODO: optimize the instructions for int32 artihmetic operations
 
-pub(crate) fn new(compiler: &mut Compiler, value: i32) -> Symbol {
-    let symbol = compiler
-        .memory
-        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Int32));
-
-    // memory is zero-initialized, so we don't need to write for 0
-    if value != 0 {
-        compiler.memory.write(
-            &mut compiler.instructions,
-            symbol.memory_addr,
-            &[ValueSource::Immediate(value as u32)],
-        );
-    }
-
-    symbol
-}
-
 /// Extracts signs for both operands.
 /// Stack will look like this: [b, a, b_sign, a_sign]
 fn prepare_stack_for_arithmetic(compiler: &mut Compiler, a: &Symbol, b: &Symbol) {
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
     // [a]
     compiler.instructions.push(encoder::Instruction::Dup(None));
     // [a, a]
@@ -36,11 +17,9 @@ fn prepare_stack_for_arithmetic(compiler: &mut Compiler, a: &Symbol, b: &Symbol)
         .instructions
         .push(encoder::Instruction::U32CheckedSHR(Some(31)));
     // [a_sign, a]
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     // [b, a_sign, a]
     compiler.instructions.push(encoder::Instruction::Dup(None));
     // [b, b, a_sign, a]
@@ -163,23 +142,19 @@ pub(crate) fn add(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Int32));
 
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
     // [a]
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     // [b, a]
 
     add_stack(compiler);
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -234,7 +209,7 @@ pub(crate) fn sub(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     );
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -263,7 +238,7 @@ pub(crate) fn mul(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
         encoder::Instruction::Push(0),
         // [0]
     ];
-    let mut if_not_zero = {
+    let if_not_zero = {
         let mut instructions = Vec::new();
         let mut compiler = Compiler::new(&mut instructions, compiler.memory, compiler.root_scope);
         // [b, a, b_sign, a_sign]
@@ -346,7 +321,7 @@ pub(crate) fn mul(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     );
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -449,7 +424,7 @@ pub(crate) fn div(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     });
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -465,17 +440,13 @@ pub(crate) fn modulo(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol 
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Int32));
 
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
     // [a]
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     // [b, a]
 
     compiler.instructions.push(encoder::Instruction::Dup(None));
@@ -574,7 +545,7 @@ pub(crate) fn modulo(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol 
     });
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -587,17 +558,13 @@ fn shift(compiler: &mut Compiler, a: &Symbol, b: &Symbol, is_right: bool) -> Sym
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Int32));
 
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
     // [a]
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     // [b, a]
 
     compiler.instructions.push(encoder::Instruction::Dup(None));
@@ -661,7 +628,7 @@ fn shift(compiler: &mut Compiler, a: &Symbol, b: &Symbol, is_right: bool) -> Sym
     });
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -726,7 +693,7 @@ pub(crate) fn gt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     gt_stack(compiler);
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -764,7 +731,7 @@ pub(crate) fn gte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     // [a > b || a == b]
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -787,7 +754,7 @@ pub(crate) fn lte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     // [a <= b]
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -833,7 +800,7 @@ pub(crate) fn lt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     // [a != b && a <= b]
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -844,6 +811,23 @@ pub(crate) fn lt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    fn new(compiler: &mut Compiler, value: i32) -> Symbol {
+        let symbol = compiler
+            .memory
+            .allocate_symbol(Type::PrimitiveType(PrimitiveType::Int32));
+
+        // memory is zero-initialized, so we don't need to write for 0
+        if value != 0 {
+            compiler.memory.write(
+                compiler.instructions,
+                symbol.memory_addr,
+                &[ValueSource::Immediate(value as u32)],
+            );
+        }
+
+        symbol
+    }
 
     #[test]
     fn test_prepare_stack_for_arithmetic() {
@@ -886,7 +870,7 @@ mod test {
         let result = super::add(&mut compiler, &a, &b);
         compiler
             .memory
-            .read(&mut compiler.instructions, result.memory_addr, WIDTH);
+            .read(compiler.instructions, result.memory_addr, WIDTH);
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -942,11 +926,9 @@ mod test {
         let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
         let a = new(&mut compiler, a);
 
-        compiler.memory.read(
-            &mut compiler.instructions,
-            a.memory_addr,
-            a.type_.miden_width(),
-        );
+        compiler
+            .memory
+            .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
         super::abs_stack(&mut compiler);
 
         let mut program = "begin\n".to_string();
@@ -999,11 +981,9 @@ mod test {
         let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
         let a = new(&mut compiler, a);
 
-        compiler.memory.read(
-            &mut compiler.instructions,
-            a.memory_addr,
-            a.type_.miden_width(),
-        );
+        compiler
+            .memory
+            .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
         super::negate_stack(&mut compiler);
 
         let mut program = "begin\n".to_string();
@@ -1043,8 +1023,8 @@ mod test {
         test!(0, Ok(0));
         test!(1, Ok(-1));
         test!(-1, Ok(1));
-        let min_add_1 = i32::MIN + 1;
-        test!(i32::MAX, Ok(min_add_1));
+        let _min_add_1 = i32::MIN + 1;
+        test!(i32::MAX, Ok(_min_add_1));
         test!(i32::MIN + 1, Ok(i32::MAX));
 
         test!(i32::MIN, Err(miden::ExecutionError::FailedAssertion(_)));
@@ -1061,7 +1041,7 @@ mod test {
         let result = super::sub(&mut compiler, &a, &b);
         compiler
             .memory
-            .read(&mut compiler.instructions, result.memory_addr, WIDTH);
+            .read(compiler.instructions, result.memory_addr, WIDTH);
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -1103,12 +1083,12 @@ mod test {
         test!(1, 0, Ok(1));
         test!(1, 1, Ok(0));
         test!(i32::MAX, 0, Ok(i32::MAX));
-        let max_sub_1 = i32::MAX - 1;
-        test!(i32::MAX, 1, Ok(max_sub_1));
+        let _max_sub_1 = i32::MAX - 1;
+        test!(i32::MAX, 1, Ok(_max_sub_1));
         test!(i32::MAX, i32::MAX, Ok(0));
         test!(i32::MIN, 0, Ok(i32::MIN));
-        let min_add_1 = i32::MIN + 1;
-        test!(i32::MIN, -1, Ok(min_add_1));
+        let _min_add_1 = i32::MIN + 1;
+        test!(i32::MIN, -1, Ok(_min_add_1));
         test!(i32::MIN, i32::MIN, Ok(0));
 
         test!(i32::MIN, 1, Err(miden::ExecutionError::FailedAssertion(_)));
@@ -1126,7 +1106,7 @@ mod test {
         let result = super::mul(&mut compiler, &a, &b);
         compiler
             .memory
-            .read(&mut compiler.instructions, result.memory_addr, WIDTH);
+            .read(compiler.instructions, result.memory_addr, WIDTH);
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -1172,8 +1152,8 @@ mod test {
         test!(-1, -1, Ok(1));
         test!(i32::MAX, 0, Ok(0));
         test!(i32::MAX, 1, Ok(i32::MAX));
-        let negative_max = -i32::MAX;
-        test!(i32::MAX, -1, Ok(negative_max));
+        let _negative_max = -i32::MAX;
+        test!(i32::MAX, -1, Ok(_negative_max));
         test!(i32::MIN, 0, Ok(0));
 
         // TODO: fix this case
@@ -1216,7 +1196,7 @@ mod test {
         let result = super::div(&mut compiler, &a, &b);
         compiler
             .memory
-            .read(&mut compiler.instructions, result.memory_addr, WIDTH);
+            .read(compiler.instructions, result.memory_addr, WIDTH);
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -1263,17 +1243,17 @@ mod test {
         test!(-1, 1, Ok(-1));
         test!(-1, -1, Ok(1));
         test!(i32::MAX, 1, Ok(i32::MAX));
-        let negative_max = -i32::MAX;
-        test!(i32::MAX, -1, Ok(negative_max));
+        let _negative_max = -i32::MAX;
+        test!(i32::MAX, -1, Ok(_negative_max));
 
         // TODO: fix this case
         // test!(i32::MIN, 1, Ok(i32::MIN));
-        let min_add_1 = i32::MIN + 1;
+        let _min_add_1 = i32::MIN + 1;
 
-        test!(i32::MIN + 1, 1, Ok(min_add_1));
+        test!(i32::MIN + 1, 1, Ok(_min_add_1));
 
-        let max_divided_by_2 = i32::MAX / 2;
-        test!(i32::MAX, 2, Ok(max_divided_by_2));
+        let _max_divided_by_2 = i32::MAX / 2;
+        test!(i32::MAX, 2, Ok(_max_divided_by_2));
     }
 
     fn modulo(a: i32, b: i32) -> Result<i32, miden::ExecutionError> {
@@ -1287,7 +1267,7 @@ mod test {
         let result = super::modulo(&mut compiler, &a, &b);
         compiler
             .memory
-            .read(&mut compiler.instructions, result.memory_addr, WIDTH);
+            .read(compiler.instructions, result.memory_addr, WIDTH);
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -1351,7 +1331,7 @@ mod test {
         let result = super::shift_right(&mut compiler, &a, &b);
         compiler
             .memory
-            .read(&mut compiler.instructions, result.memory_addr, WIDTH);
+            .read(compiler.instructions, result.memory_addr, WIDTH);
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -1410,7 +1390,7 @@ mod test {
         let result = super::shift_left(&mut compiler, &a, &b);
         compiler
             .memory
-            .read(&mut compiler.instructions, result.memory_addr, WIDTH);
+            .read(compiler.instructions, result.memory_addr, WIDTH);
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -1466,7 +1446,7 @@ mod test {
         let result = super::gt(&mut compiler, &a, &b);
         compiler
             .memory
-            .read(&mut compiler.instructions, result.memory_addr, WIDTH);
+            .read(compiler.instructions, result.memory_addr, WIDTH);
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {

@@ -79,7 +79,7 @@ impl Args {
             .abi
             .out_this_type
             .as_ref()
-            .ok_or_else(|| "ABI does not specify a `this` type")?;
+            .ok_or("ABI does not specify a `this` type")?;
         let polylang::compiler::Type::Struct(struct_) = this_type else {
             return Err("This type is not a struct".into());
         };
@@ -220,7 +220,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut log_messages = Vec::new();
     let (mut prev, mut str_ptr) = (get_mem_value(4), get_mem_value(5));
     loop {
-        if str_ptr == Some(0) || str_ptr == None {
+        if str_ptr == Some(0) || str_ptr.is_none() {
             break;
         }
 
@@ -253,7 +253,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Output: {:?}", stack);
 
             // read the error string out from the memory
-            let str_len = get_mem_value(1).ok_or_else(|| "Got an error, but no error string")?;
+            let str_len = get_mem_value(1).ok_or("Got an error, but no error string")?;
             let str_data_ptr = get_mem_value(2).unwrap();
 
             if str_data_ptr == 0 {

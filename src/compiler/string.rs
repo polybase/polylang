@@ -1,5 +1,3 @@
-use crate::validation::Value;
-
 use super::{encoder::Instruction, *};
 
 pub(crate) const WIDTH: u32 = 2;
@@ -7,11 +5,11 @@ pub(crate) const WIDTH: u32 = 2;
 pub(crate) fn new(compiler: &mut Compiler, value: &str) -> Symbol {
     let symbol = compiler.memory.allocate_symbol(Type::String);
 
-    if value != "" {
+    if !value.is_empty() {
         let string_addr = compiler.memory.allocate(value.len() as u32);
 
         compiler.memory.write(
-            &mut compiler.instructions,
+            compiler.instructions,
             symbol.memory_addr,
             &[
                 ValueSource::Immediate(value.len() as u32),
@@ -20,7 +18,7 @@ pub(crate) fn new(compiler: &mut Compiler, value: &str) -> Symbol {
         );
 
         compiler.memory.write(
-            &mut compiler.instructions,
+            compiler.instructions,
             string_addr,
             &value
                 .bytes()
@@ -36,7 +34,7 @@ pub(crate) fn length(string: &Symbol) -> Symbol {
     Symbol {
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
         memory_addr: string.memory_addr,
-        ..Default::default()
+        
     }
 }
 
@@ -44,7 +42,7 @@ pub(crate) fn data_ptr(string: &Symbol) -> Symbol {
     Symbol {
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
         memory_addr: string.memory_addr + 1,
-        ..Default::default()
+        
     }
 }
 
@@ -115,14 +113,14 @@ pub(crate) fn concat(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol 
 
     // Set the length of the result
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         a_len.memory_addr,
         a_len.type_.miden_width(),
     );
     // [a_len]
 
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         b_len.memory_addr,
         b_len.type_.miden_width(),
     );
@@ -134,7 +132,7 @@ pub(crate) fn concat(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol 
     // [a_len + b_len]
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result_len.memory_addr,
         &[ValueSource::Stack],
     );
@@ -142,27 +140,27 @@ pub(crate) fn concat(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol 
     let allocated_ptr = dynamic_alloc(compiler, &[result_len]);
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result_data_ptr.memory_addr,
         &[ValueSource::Memory(allocated_ptr.memory_addr)],
     );
 
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         result_data_ptr.memory_addr,
         result_data_ptr.type_.miden_width(),
     );
     // [result_data_ptr]
 
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         a_data_ptr.memory_addr,
         a_data_ptr.type_.miden_width(),
     );
     // [a_data_ptr, result_data_ptr]
 
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         a_len.memory_addr,
         a_len.type_.miden_width(),
     );
@@ -172,14 +170,14 @@ pub(crate) fn concat(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol 
     // []
 
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         result_data_ptr.memory_addr,
         result_data_ptr.type_.miden_width(),
     );
     // [result_data_ptr]
 
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         a_len.memory_addr,
         a_len.type_.miden_width(),
     );
@@ -191,14 +189,14 @@ pub(crate) fn concat(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol 
     // [result_data_ptr + a_len]
 
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         b_data_ptr.memory_addr,
         b_data_ptr.type_.miden_width(),
     );
     // [b_data_ptr, result_data_ptr + a_len]
 
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         b_len.memory_addr,
         b_len.type_.miden_width(),
     );
@@ -216,13 +214,13 @@ pub(crate) fn eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
 
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         length(a).memory_addr,
         length(a).type_.miden_width(),
     );
     // [a_len]
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         length(b).memory_addr,
         length(b).type_.miden_width(),
     );
