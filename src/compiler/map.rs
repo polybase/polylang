@@ -5,6 +5,7 @@ use super::*;
 /// [keys_array..., values_array...]
 pub(crate) const WIDTH: u32 = array::WIDTH * 2;
 
+#[allow(unused)]
 pub(crate) fn new_map(
     compiler: &mut Compiler,
     len: u32,
@@ -17,20 +18,20 @@ pub(crate) fn new_map(
     let map_symbol = Symbol {
         memory_addr: compiler.memory.allocate(WIDTH),
         type_: Type::Map(Box::new(key_type), Box::new(value_type)),
-        ..Default::default()
+        
     };
 
     let map_keys_ptr = keys_arr(&map_symbol);
     let map_values_ptr = values_arr(&map_symbol);
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         map_keys_ptr.memory_addr,
         &[ValueSource::Immediate(keys_array.memory_addr)],
     );
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         map_values_ptr.memory_addr,
         &[ValueSource::Immediate(values_array.memory_addr)],
     );
@@ -45,7 +46,7 @@ pub(crate) fn keys_arr(map_symbol: &Symbol) -> Symbol {
             Type::Map(key_type, _) => Type::Array(key_type.clone()),
             _ => panic!("Expected map type"),
         },
-        ..Default::default()
+        
     }
 }
 
@@ -54,7 +55,7 @@ pub(crate) fn values_arr(map_symbol: &Symbol) -> Symbol {
         Type::Map(_, value_type) => Symbol {
             memory_addr: map_symbol.memory_addr + array::WIDTH,
             type_: Type::Array(value_type.clone()),
-            ..Default::default()
+            
         },
         _ => panic!("Expected map type"),
     }
@@ -75,15 +76,15 @@ pub(crate) fn get(
             Type::Array(t) => *t.clone(),
             x => panic!("Expected array type, got {x:?}"),
         },
-        ..Default::default()
+        
     };
 
-    let current_key_symbol = compiler.memory.allocate_symbol(result.type_.clone());
+    let current_key_symbol = compiler.memory.allocate_symbol(result.type_);
     let (key_equality_bool, key_equality_instructions) = {
         let mut inst = vec![];
         std::mem::swap(compiler.instructions, &mut inst);
 
-        let eq = compile_eq(compiler, &key, &current_key_symbol);
+        let eq = compile_eq(compiler, key, &current_key_symbol);
 
         std::mem::swap(compiler.instructions, &mut inst);
 

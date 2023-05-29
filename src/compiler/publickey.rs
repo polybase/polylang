@@ -150,12 +150,13 @@ pub struct Key {
     pub(crate) y: [u8; 32],
 }
 
+#[allow(unused)]
 pub(crate) fn new(compiler: &mut Compiler, key: Key) -> Symbol {
     let symbol = compiler.memory.allocate_symbol(Type::PublicKey);
     let symbol_xy = compiler.memory.allocate(64);
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         symbol.memory_addr,
         &[
             ValueSource::Immediate(u8::from(key.kty) as u32),
@@ -167,7 +168,7 @@ pub(crate) fn new(compiler: &mut Compiler, key: Key) -> Symbol {
     );
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         symbol_xy,
         &key.x
             .iter()
@@ -183,7 +184,7 @@ pub(crate) fn kty(symbol: &Symbol) -> Symbol {
     Symbol {
         memory_addr: symbol.memory_addr,
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
-        ..Default::default()
+        
     }
 }
 
@@ -191,7 +192,7 @@ pub(crate) fn crv(symbol: &Symbol) -> Symbol {
     Symbol {
         memory_addr: symbol.memory_addr + 1,
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
-        ..Default::default()
+        
     }
 }
 
@@ -199,7 +200,7 @@ pub(crate) fn alg(symbol: &Symbol) -> Symbol {
     Symbol {
         memory_addr: symbol.memory_addr + 2,
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
-        ..Default::default()
+        
     }
 }
 
@@ -207,7 +208,7 @@ pub(crate) fn use_(symbol: &Symbol) -> Symbol {
     Symbol {
         memory_addr: symbol.memory_addr + 3,
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
-        ..Default::default()
+        
     }
 }
 
@@ -215,7 +216,7 @@ pub(crate) fn extra_ptr(symbol: &Symbol) -> Symbol {
     Symbol {
         memory_addr: symbol.memory_addr + 4,
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
-        ..Default::default()
+        
     }
 }
 
@@ -228,11 +229,11 @@ pub(crate) fn eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     for i in 0..4 {
         compiler
             .memory
-            .read(&mut compiler.instructions, a.memory_addr + i, 1);
+            .read(compiler.instructions, a.memory_addr + i, 1);
 
         compiler
             .memory
-            .read(&mut compiler.instructions, b.memory_addr + i, 1);
+            .read(compiler.instructions, b.memory_addr + i, 1);
 
         compiler.instructions.push(Instruction::Eq);
         compiler.instructions.push(Instruction::And);
@@ -241,14 +242,14 @@ pub(crate) fn eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     for i in 0..64 {
         compiler
             .memory
-            .read(&mut compiler.instructions, a.memory_addr + 4, 1);
+            .read(compiler.instructions, a.memory_addr + 4, 1);
         compiler.instructions.push(Instruction::Push(i as u32));
         compiler.instructions.push(Instruction::Add);
         compiler.instructions.push(Instruction::MemLoad(None));
 
         compiler
             .memory
-            .read(&mut compiler.instructions, b.memory_addr + 4, 1);
+            .read(compiler.instructions, b.memory_addr + 4, 1);
         compiler.instructions.push(Instruction::Push(i as u32));
         compiler.instructions.push(Instruction::Add);
         compiler.instructions.push(Instruction::MemLoad(None));
@@ -258,7 +259,7 @@ pub(crate) fn eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     }
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         symbol.memory_addr,
         &[ValueSource::Stack],
     );

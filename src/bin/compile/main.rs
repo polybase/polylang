@@ -1,6 +1,4 @@
-use std::{collections::HashMap, io::Read};
-
-use polylang::compiler::CompileTimeArg;
+use std::io::Read;
 
 fn main() {
     let mut code = String::new();

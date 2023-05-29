@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use base64::Engine;
 
 use super::{publickey, PrimitiveType, Struct, Type};

@@ -33,7 +33,6 @@ pub(crate) enum Instruction<'a> {
     Exec(&'a str),              // exec.u64::checked_add
     MemStore(Option<u32>),      // mem_store.1234
     MemLoad(Option<u32>),       // mem_load.1234
-    MemLoadW(Option<u32>),      // mem_loadw.1234
     AdvPush(u32),               // adv_push.1234
     HMerge,                     // hmerge
     While {
@@ -67,7 +66,7 @@ impl Instruction<'_> {
         macro_rules! write_indent {
             ($($arg:tt)*) => {{
                 for _ in 0..depth {
-                    f.write(b"  ")?;
+                    f.write_all(b"  ")?;
                 }
 
                 write!($($arg)*)?
@@ -113,26 +112,26 @@ impl Instruction<'_> {
             Instruction::While { condition, body } => {
                 for instruction in condition {
                     instruction.encode(f, depth)?;
-                    f.write(b"\n")?;
+                    f.write_all(b"\n")?;
                 }
                 write_indent!(f, "while.true");
-                f.write(b"\n")?;
+                f.write_all(b"\n")?;
                 for instruction in body {
                     instruction.encode(f, depth + 1)?;
-                    f.write(b"\n")?;
+                    f.write_all(b"\n")?;
                 }
                 for instruction in condition {
                     instruction.encode(f, depth + 1)?;
-                    f.write(b"\n")?;
+                    f.write_all(b"\n")?;
                 }
                 write_indent!(f, "end");
             }
             Instruction::WhileTrueRaw { instructions } => {
                 write_indent!(f, "while.true");
-                f.write(b"\n")?;
+                f.write_all(b"\n")?;
                 for instruction in instructions {
                     instruction.encode(f, depth + 1)?;
-                    f.write(b"\n")?;
+                    f.write_all(b"\n")?;
                 }
                 write_indent!(f, "end");
             }
@@ -140,8 +139,6 @@ impl Instruction<'_> {
             Instruction::MemStore(None) => write_indent!(f, "mem_store"),
             Instruction::MemLoad(Some(addr)) => write_indent!(f, "mem_load.{}", addr),
             Instruction::MemLoad(None) => write_indent!(f, "mem_load"),
-            Instruction::MemLoadW(Some(addr)) => write_indent!(f, "mem_loadw.{}", addr),
-            Instruction::MemLoadW(None) => write_indent!(f, "mem_loadw"),
             Instruction::AdvPush(addr) => write_indent!(f, "adv_push.{}", addr),
             Instruction::If {
                 condition,
@@ -150,25 +147,25 @@ impl Instruction<'_> {
             } => {
                 for instruction in condition {
                     instruction.encode(f, depth)?;
-                    f.write(b"\n")?;
+                    f.write_all(b"\n")?;
                 }
 
                 write_indent!(f, "if.true\n");
 
                 for instruction in then {
                     instruction.encode(f, depth + 1)?;
-                    f.write(b"\n")?;
+                    f.write_all(b"\n")?;
                 }
-                if then.len() == 0 {
+                if then.is_empty() {
                     write_indent!(f, "  push.0\n");
                     write_indent!(f, "  drop\n");
                 }
 
-                if else_.len() > 0 {
+                if !else_.is_empty() {
                     write_indent!(f, "else\n");
                     for instruction in else_ {
                         instruction.encode(f, depth + 1)?;
-                        f.write(b"\n")?;
+                        f.write_all(b"\n")?;
                     }
                 }
 
@@ -252,10 +249,7 @@ pub(crate) fn unabstract<'a>(
                             ptr_value_might_have_been_flipped,
                             true,
                         );
-                        result.push(Instruction::While {
-                            condition: condition,
-                            body: body,
-                        });
+                        result.push(Instruction::While { condition, body });
                     }
                     Instruction::If {
                         condition,
@@ -295,7 +289,7 @@ pub(crate) fn unabstract<'a>(
                     condition,
                     then: _,
                     else_,
-                }) if &condition[..] == &[cond()] && !*ptr_value_might_have_been_flipped => {
+                }) if condition[..] == [cond()] && !*ptr_value_might_have_been_flipped => {
                     // if the previous instruction is an if with the same condition,
                     // then add to that if
                     unabstract_inst(
@@ -346,7 +340,7 @@ pub(crate) fn unabstract<'a>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use pretty_assertions::{assert_eq, assert_ne};
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn test_unabstract_break() {

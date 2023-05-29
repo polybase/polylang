@@ -10,7 +10,7 @@ pub(crate) fn new(compiler: &mut Compiler, value: bool) -> Symbol {
     // memory is zero-initialized, so we don't need to write for false
     if value {
         compiler.memory.write(
-            &mut compiler.instructions,
+            compiler.instructions,
             symbol.memory_addr,
             &[ValueSource::Immediate(1)],
         );
@@ -26,19 +26,15 @@ pub(crate) fn compile_and(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Sy
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     compiler.instructions.push(encoder::Instruction::And);
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -53,19 +49,15 @@ pub(crate) fn compile_or(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Sym
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     compiler.instructions.push(encoder::Instruction::Or);
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );

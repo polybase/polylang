@@ -9,7 +9,7 @@ pub(crate) fn is_not_null(value: &Symbol) -> Symbol {
     Symbol {
         memory_addr: value.memory_addr,
         type_: Type::PrimitiveType(PrimitiveType::Boolean),
-        ..Default::default()
+        
     }
 }
 
@@ -20,6 +20,6 @@ pub(crate) fn value(value: Symbol) -> Symbol {
             Type::Nullable(t) => *t,
             _ => panic!("value is not nullable"),
         },
-        ..Default::default()
+        
     }
 }

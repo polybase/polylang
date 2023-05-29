@@ -1,3 +1,6 @@
+// TODO: remove
+#![allow(unused)]
+
 use std::{borrow::Cow, collections::HashMap};
 
 use super::encoder;
@@ -77,11 +80,11 @@ impl<'a> Builder<'a> {
                 func.num_outputs
             }
             Expression::If {
-                condition,
-                then,
-                then_dependencies,
-                otherwise,
-                otherwise_dependencies,
+                condition: _,
+                then: _,
+                then_dependencies: _,
+                otherwise: _,
+                otherwise_dependencies: _,
             } => todo!(),
         };
         self.expressions.push(expr);
@@ -147,12 +150,12 @@ impl<'a> Builder<'a> {
         self.call_func(func_name, args).0
     }
 
-    fn if_<const Outputs: usize>(
+    fn if_<const OUTPUTS: usize>(
         &mut self,
         condition: ExpressionRef,
-        then: impl FnOnce(&mut Self) -> [ExpressionRef; Outputs],
-        otherwise: impl FnOnce(&mut Self) -> [ExpressionRef; Outputs],
-    ) -> [ExpressionRef; Outputs] {
+        then: impl FnOnce(&mut Self) -> [ExpressionRef; OUTPUTS],
+        otherwise: impl FnOnce(&mut Self) -> [ExpressionRef; OUTPUTS],
+    ) -> [ExpressionRef; OUTPUTS] {
         let mut then_builder = Self::new(self.functions);
         then_builder.start_expr_index = self.last_expr_index();
         let then_refs = then(&mut then_builder);
@@ -173,10 +176,9 @@ impl<'a> Builder<'a> {
             otherwise_dependencies: vec![],
         });
 
-        let mut refs = [ExpressionRef::new(0, 0); Outputs];
-        for nth_element in 0..Outputs {
-            let expr_ref = ExpressionRef::new(expr_index, nth_element);
-            refs[nth_element] = expr_ref;
+        let mut refs = [ExpressionRef::new(0, 0); OUTPUTS];
+        for (i, ref_) in refs.iter_mut().enumerate() {
+            *ref_ = ExpressionRef::new(expr_index, i);
         }
         refs
     }
@@ -225,7 +227,7 @@ impl<'a> Compiler<'a> {
     fn movup(&mut self, expr_ref: &ExpressionRef) {
         let position = self
             .find_expr_on_stack(expr_ref)
-            .expect(&format!("Expression {:?} not found on the stack", expr_ref));
+            .unwrap_or_else(|| panic!("Expression {:?} not found on the stack", expr_ref));
         match position {
             0 => {
                 // The element is already on the top of the stack.
@@ -358,11 +360,11 @@ impl<'a> Compiler<'a> {
             Expression::If {
                 condition,
                 then,
-                then_dependencies,
+                then_dependencies: _,
                 otherwise,
-                otherwise_dependencies,
+                otherwise_dependencies: _,
             } => {
-                let condition = condition.clone();
+                let condition = *condition;
                 let then = then.clone();
                 let otherwise = otherwise.clone();
 
@@ -435,9 +437,11 @@ mod tests {
         let b = builder.number(2);
         let [result] = builder.call("u32wrapping_add", &[a, b])[..] else { unreachable!() };
 
-        let mut compiler = Compiler::default();
-        compiler.expressions = builder.build();
-        compiler.functions = functions.to_vec();
+        let compiler = Compiler {
+            expressions: builder.build(),
+            functions: functions.to_vec(),
+            ..Default::default()
+        };
 
         let code = compiler.compile(&[result]);
 
@@ -475,9 +479,11 @@ mod tests {
         let [a2, a] = builder.call("dup", &[a])[..] else { unreachable!() };
         let [result] = builder.call("u32wrapping_add", &[a2, a])[..] else { unreachable!() };
 
-        let mut compiler = Compiler::default();
-        compiler.expressions = builder.build();
-        compiler.functions = functions.to_vec();
+        let compiler = Compiler {
+            expressions: builder.build(),
+            functions: functions.to_vec(),
+            ..Default::default()
+        };
 
         let code = compiler.compile(&[result]);
 
@@ -515,9 +521,11 @@ mod tests {
         let [a2, a] = builder.call("dup", &[a])[..] else { unreachable!() };
         let [result] = builder.call("u32wrapping_add", &[a, a2])[..] else { unreachable!() };
 
-        let mut compiler = Compiler::default();
-        compiler.expressions = builder.build();
-        compiler.functions = functions.to_vec();
+        let compiler = Compiler {
+            expressions: builder.build(),
+            functions: functions.to_vec(),
+            ..Default::default()
+        };
 
         let code = compiler.compile(&[result]);
 
@@ -549,9 +557,10 @@ mod tests {
             },
         );
 
-        let mut compiler = Compiler::default();
-        compiler.expressions = builder.build();
-        compiler.functions = vec![];
+        let compiler = Compiler {
+            expressions: builder.build(),
+            ..Default::default()
+        };
 
         let code = compiler.compile(&[a_from_if]);
         assert_eq!(
@@ -582,9 +591,11 @@ mod tests {
         let n123 = builder.number(123);
         let [n123] = builder.call("assert_guard", &[true_, n123])[..] else { unreachable!() };
 
-        let mut compiler = Compiler::default();
-        compiler.expressions = builder.build();
-        compiler.functions = functions.to_vec();
+        let compiler = Compiler {
+            expressions: builder.build(),
+            functions: functions.to_vec(),
+            ..Default::default()
+        };
 
         let code = compiler.compile(&[n123]);
         assert_eq!(
