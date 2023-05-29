@@ -24,7 +24,7 @@ pub(crate) fn new(compiler: &mut Compiler, value: f32) -> Symbol {
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         symbol.memory_addr,
         &[ValueSource::Immediate(value.to_bits())],
     );
@@ -34,18 +34,14 @@ pub(crate) fn new(compiler: &mut Compiler, value: f32) -> Symbol {
 
 // [a, b] -> [a_exp, b_exp, a_sign^, b_sign^, a_mant, b_mant]
 fn prepare_stack_for_arithmetic(compiler: &mut Compiler, a: &Symbol, b: &Symbol) {
-    compiler.memory.read(
-        &mut compiler.instructions,
-        a.memory_addr,
-        a.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, a.memory_addr, a.type_.miden_width());
     decompose(compiler);
     // [a_mant, a_sign^, a_exp]
-    compiler.memory.read(
-        &mut compiler.instructions,
-        b.memory_addr,
-        b.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     decompose(compiler);
     // [b_mant, b_sign^, b_exp, a_mant, a_sign^, a_exp]
 
@@ -347,7 +343,7 @@ pub(crate) fn mul(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     }]);
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -540,7 +536,7 @@ pub(crate) fn div(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     }]);
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -892,7 +888,7 @@ fn add_impl(compiler: &mut Compiler) -> Symbol {
     }]);
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -980,7 +976,7 @@ pub(crate) fn eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     }]);
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -1033,7 +1029,7 @@ pub(crate) fn ne(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     }]);
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -1144,7 +1140,7 @@ pub(crate) fn lt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     }]);
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -1304,7 +1300,7 @@ pub(crate) fn lte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     }]);
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -1418,7 +1414,7 @@ pub(crate) fn gt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     }]);
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -1581,7 +1577,7 @@ pub(crate) fn gte(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     }]);
 
     compiler.memory.write(
-        &mut compiler.instructions,
+        compiler.instructions,
         result.memory_addr,
         &[ValueSource::Stack],
     );
@@ -1625,7 +1621,7 @@ mod tests {
             .allocate_symbol(Type::PrimitiveType(PrimitiveType::Int32));
 
         compiler.memory.write(
-            &mut compiler.instructions,
+            compiler.instructions,
             symbol.memory_addr,
             &[ValueSource::Immediate(value.to_bits())],
         );
@@ -1648,7 +1644,7 @@ mod tests {
         let result = f(&mut compiler, &a, &b);
         compiler
             .memory
-            .read(&mut compiler.instructions, result.memory_addr, WIDTH);
+            .read(compiler.instructions, result.memory_addr, WIDTH);
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -1821,7 +1817,7 @@ mod tests {
         const INACCURATE: bool = false;
     }
 
-    fn assert_bin_op<T: BinaryOp>(a: f32, b: f32, bin_op: T) {
+    fn assert_bin_op<T: BinaryOp>(a: f32, b: f32, _bin_op: T) {
         println!("running for {a} {} {b}", T::STR);
         let expected = T::RUST_FN(a, b);
         let result = helper_bin_op(a, b, T::VM_FN).unwrap();
@@ -1857,52 +1853,52 @@ mod tests {
             .for_each(|x| assert_bin_op(x[0], x[1], bin_op));
     }
 
-    #[quickcheck_macros::quickcheck]
+    #[quickcheck]
     fn test_mul(a: f32, b: f32) {
         assert_bin_op(a, b, Mul)
     }
 
-    #[quickcheck_macros::quickcheck]
+    #[quickcheck]
     fn test_div(a: f32, b: f32) {
         assert_bin_op(a, b, Div)
     }
 
-    #[quickcheck_macros::quickcheck]
+    #[quickcheck]
     fn test_add(a: f32, b: f32) {
         assert_bin_op(a, b, Add)
     }
 
-    #[quickcheck_macros::quickcheck]
+    #[quickcheck]
     fn test_sub(a: f32, b: f32) {
         assert_bin_op(a, b, Sub)
     }
 
-    #[quickcheck_macros::quickcheck]
+    #[quickcheck]
     fn test_eq(a: f32, b: f32) {
         assert_bin_op(a, b, Eq)
     }
 
-    #[quickcheck_macros::quickcheck]
+    #[quickcheck]
     fn test_ne(a: f32, b: f32) {
         assert_bin_op(a, b, Ne)
     }
 
-    #[quickcheck_macros::quickcheck]
+    #[quickcheck]
     fn test_lt(a: f32, b: f32) {
         assert_bin_op(a, b, Lt)
     }
 
-    #[quickcheck_macros::quickcheck]
+    #[quickcheck]
     fn test_lte(a: f32, b: f32) {
         assert_bin_op(a, b, Lte)
     }
 
-    #[quickcheck_macros::quickcheck]
+    #[quickcheck]
     fn test_gt(a: f32, b: f32) {
         assert_bin_op(a, b, Gt)
     }
 
-    #[quickcheck_macros::quickcheck]
+    #[quickcheck]
     fn test_gte(a: f32, b: f32) {
         assert_bin_op(a, b, Gte)
     }

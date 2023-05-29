@@ -152,10 +152,10 @@ impl Instruction<'_> {
                 instructions,
             } => {
                 write_indent!(f, "repeat.{}", count);
-                f.write(b"\n")?;
+                f.write_all(b"\n")?;
                 for instruction in instructions {
                     instruction.encode(f, depth + 1)?;
-                    f.write(b"\n")?;
+                    f.write_all(b"\n")?;
                 }
                 write_indent!(f, "end");
             }
