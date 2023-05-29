@@ -134,15 +134,20 @@ impl TypeReader for Type {
             Type::Map(k, v) => {
                 let mut key_values = Vec::new();
 
-                let key_array_ptr = reader(addr).ok_or("invalid address for map key array ptr")?[0];
-                let value_array_ptr =
-                    reader(addr + 1).ok_or("invalid address for map value array ptr")?[0];
-                let length =
-                    reader(key_array_ptr + 1).ok_or("invalid address for map keys length")?[0];
+                let key_array_data_start_ptr = reader(addr + 2).unwrap()[0];
+                let value_array_data_start_ptr =
+                    reader(addr + super::array::WIDTH as u64 + 2).unwrap()[0];
+                let length = reader(addr + 1).ok_or("invalid address for map keys length")?[0];
 
                 for i in 0..length {
-                    let key = k.read(reader, key_array_ptr + i * k.miden_width() as u64)?;
-                    let value = v.read(reader, value_array_ptr + i * v.miden_width() as u64)?;
+                    let key = k.read(
+                        reader,
+                        key_array_data_start_ptr + i * k.miden_width() as u64,
+                    )?;
+                    let value = v.read(
+                        reader,
+                        value_array_data_start_ptr + i * v.miden_width() as u64,
+                    )?;
 
                     key_values.push((key, value));
                 }
@@ -342,8 +347,8 @@ impl Value {
                 .into_iter()
                 .chain(values.iter().flat_map(|v| v.serialize()))
                 .collect(),
-            // Map is serialized as [length, keys, length, values] so that we can reuse read_advice_array
-            Value::Map(key_values) => [key_values.len() as u64]
+            // Map is serialized as [keys_arr..., values_arr...] so that we can reuse read_advice_array
+            Value::Map(key_values) => []
                 .into_iter()
                 .chain([key_values.len() as u64])
                 .chain(key_values.iter().flat_map(|(k, _)| k.serialize()))
