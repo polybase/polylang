@@ -474,6 +474,43 @@ lazy_static::lazy_static! {
             hash_string(compiler, scope, &[casted_to_bytes])
         }))));
 
+        builtins.push(("hashMap".to_owned(), Function::Builtin(Box::new(&|compiler, _scope, args| {
+            let map = args.get(0).unwrap();
+
+            let keys = map::keys_arr(map);
+            let values = map::values_arr(map);
+
+            let (_, hash_array_fn) = HIDDEN_BUILTINS.iter().find(|(name, _)| name == "hashArray").unwrap();
+
+            let keys_hash = compile_function_call(compiler, hash_array_fn, &[keys], None);
+            let values_hash = compile_function_call(compiler, hash_array_fn, &[values], None);
+
+            let result = compiler
+                .memory
+                .allocate_symbol(Type::Hash);
+
+            compiler.memory.read(
+                compiler.instructions,
+                keys_hash.memory_addr,
+                keys_hash.type_.miden_width(),
+            );
+            compiler.memory.read(
+                compiler.instructions,
+                values_hash.memory_addr,
+                values_hash.type_.miden_width(),
+            );
+
+            compiler.instructions.push(encoder::Instruction::HMerge);
+
+            compiler.memory.write(
+                compiler.instructions,
+                result.memory_addr,
+                &[ValueSource::Stack, ValueSource::Stack, ValueSource::Stack, ValueSource::Stack],
+            );
+
+            result
+        }))));
+
          builtins.push(("hashPublicKey".to_owned(), Function::Builtin(Box::new(&|compiler, _, args| {
             let public_key = args.get(0).unwrap();
             assert_eq!(public_key.type_, Type::PublicKey);
@@ -2499,7 +2536,7 @@ fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
 }
 
 fn read_advice_map(compiler: &mut Compiler, key_type: &Type, value_type: &Type) -> Symbol {
-    // Maps are serialized as [length, keys, length, values]
+    // Maps are serialized as [keys_arr..., values_arr...]
     let result = compiler.memory.allocate_symbol(Type::Map(
         Box::new(key_type.clone()),
         Box::new(value_type.clone()),
@@ -2780,7 +2817,7 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
         ),
         Type::Map(_, _) => compile_function_call(
             compiler,
-            BUILTINS_SCOPE.find_function(todo!()).unwrap(),
+            BUILTINS_SCOPE.find_function("hashMap").unwrap(),
             &[value],
             None,
         ),
@@ -2880,6 +2917,7 @@ fn read_advice_generic(compiler: &mut Compiler, type_: &Type) -> Symbol {
             &[],
             None,
         ),
+        Type::Map(k, v) => read_advice_map(compiler, k, v),
         _ => unimplemented!("{:?}", type_),
     }
 }
@@ -3198,7 +3236,10 @@ fn ast_type_to_type(required: bool, type_: &ast::Type) -> Type {
         },
         ast::Type::Array(t) => Type::Array(Box::new(ast_type_to_type(true, t))),
         ast::Type::Boolean => todo!(),
-        ast::Type::Map(_, _) => todo!(),
+        ast::Type::Map(k, v) => Type::Map(
+            Box::new(ast_type_to_type(true, k)),
+            Box::new(ast_type_to_type(true, v)),
+        ),
         ast::Type::Object(o) => {
             let mut fields = vec![];
             for field in o {
