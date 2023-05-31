@@ -11,6 +11,7 @@ mod publickey;
 mod string;
 mod uint32;
 mod uint64;
+mod float32;
 
 use std::{collections::HashMap, ops::Deref};
 
