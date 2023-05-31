@@ -80,4 +80,16 @@ jobs:
             "body": "Release notes for v'$PR_VERSION'"
           }"
 
-      # TODO trigger update dependencies in other repos
+  dispatch:
+    needs: release
+    strategy:
+      matrix:
+        repo: ['polybase/polybase-ts', 'polybase-rust', 'polybase/explorer']
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger repo updates
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.ADMIN_TOKEN }}
+          repository: ${{ matrix.repo }}
+          event-type: update-polylang-packages
