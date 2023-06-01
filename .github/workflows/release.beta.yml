@@ -49,7 +49,7 @@ jobs:
     needs: release_beta
     strategy:
       matrix:
-        repo: ['polybase/polybase-ts', 'polybase-rust', 'polybase/explorer']
+        repo: ['polybase/polybase-ts', 'polybase/polybase-rust', 'polybase/explorer']
     runs-on: ubuntu-latest
     steps:
       - name: Trigger repo updates
