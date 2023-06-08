@@ -568,6 +568,20 @@ lazy_static::lazy_static! {
             result
         }))));
 
+        builtins.push((
+            "uintToFloat".to_string(),
+            Function::Builtin(Box::new(&|compiler, _scope, args| {
+                float32::from_uint32(compiler, &args[0])
+            }))
+        ));
+
+        builtins.push((
+            "intToFloat".to_string(),
+            Function::Builtin(Box::new(&|compiler, _scope, args| {
+                float32::from_int32(compiler, &args[0])
+            }))
+        ));
+
         Box::leak(Box::new(builtins))
     };
     static ref USABLE_BUILTINS: &'static [(String, Function<'static>)] = {
@@ -850,20 +864,6 @@ lazy_static::lazy_static! {
                 assert!(matches!(m.type_, Type::Map(_, _)));
 
                 array::length(&map::keys_arr(m))
-            }))
-        ));
-
-        builtins.push((
-            "uintToFloat".to_string(),
-            Function::Builtin(Box::new(&|compiler, scope, args| {
-                float32::from_uint32(compiler, &args[0])
-            }))
-        ));
-
-        builtins.push((
-            "intToFloat".to_string(),
-            Function::Builtin(Box::new(&|compiler, scope, args| {
-                float32::from_int32(compiler, &args[0])
             }))
         ));
 
@@ -1196,7 +1196,7 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
     let symbol = match expr {
         Expression::Ident(id) => scope.find_symbol(id).unwrap(),
-        Expression::Primitive(ast::Primitive::Number(n, has_decimal_point)) => {
+        Expression::Primitive(ast::Primitive::Number(n, _has_decimal_point)) => {
             let n = convert_f64_to_f32(*n).expect("silent truncation");
 
             float32::new(compiler, n)
@@ -2057,6 +2057,12 @@ fn compile_eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 }
 
 fn compile_neq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+    if a.type_ == Type::PrimitiveType(PrimitiveType::Float32)
+        && b.type_ == Type::PrimitiveType(PrimitiveType::Float32)
+    {
+        return float32::ne(compiler, a, b);
+    }
+
     let eq = compile_eq(compiler, a, b);
     let result = compiler
         .memory

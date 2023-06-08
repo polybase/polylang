@@ -31,7 +31,8 @@ pub(crate) enum Instruction<'a> {
     U32CheckedOr,               // u32checked_or
     U32CheckedXOR,              // u32checked_xor
     U32CheckedNot,              // u32checked_not
-    U32CheckedMin,              // u32checked_min
+    #[allow(dead_code)]
+    U32CheckedMin, // u32checked_min
     U32WrappingAdd,             // u32wrapping_add
     U32WrappingSub,             // u32wrapping_sub
     U32WrappingMul,             // u32wrapping_mul
@@ -164,18 +165,6 @@ impl Instruction<'_> {
                 }
                 write_indent!(f, "end");
             }
-            Instruction::Repeat {
-                count,
-                instructions,
-            } => {
-                write_indent!(f, "repeat.{}", count);
-                f.write(b"\n")?;
-                for instruction in instructions {
-                    instruction.encode(f, depth + 1)?;
-                    f.write(b"\n")?;
-                }
-                write_indent!(f, "end");
-            }
             Instruction::MemStore(Some(addr)) => write_indent!(f, "mem_store.{}", addr),
             Instruction::MemStore(None) => write_indent!(f, "mem_store"),
             Instruction::MemLoad(Some(addr)) => write_indent!(f, "mem_load.{}", addr),
@@ -291,23 +280,6 @@ pub(crate) fn unabstract<'a>(
                             true,
                         );
                         result.push(Instruction::While { condition, body });
-                    }
-                    Instruction::Repeat {
-                        count,
-                        instructions,
-                    } => {
-                        let instructions = unabstract(
-                            instructions,
-                            allocate,
-                            &mut None,
-                            return_ptr,
-                            ptr_value_might_have_been_flipped,
-                            true,
-                        );
-                        result.push(Instruction::Repeat {
-                            count,
-                            instructions,
-                        });
                     }
                     Instruction::Repeat {
                         count,

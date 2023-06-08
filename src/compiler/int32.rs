@@ -4,6 +4,7 @@ pub(crate) const WIDTH: u32 = 1;
 
 // TODO: optimize the instructions for int32 artihmetic operations
 
+#[allow(dead_code)]
 pub(crate) fn new(compiler: &mut Compiler, value: i32) -> Symbol {
     let symbol = compiler
         .memory
