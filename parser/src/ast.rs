@@ -186,7 +186,8 @@ pub enum ForInitialStatement {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum Primitive {
-    Number(f64),
+    // (value, has_decimal_point)
+    Number(f64, bool),
     String(String),
 }
 

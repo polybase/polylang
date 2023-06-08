@@ -4,6 +4,50 @@ pub(crate) const WIDTH: u32 = 1;
 
 // TODO: optimize the instructions for int32 artihmetic operations
 
+#[allow(dead_code)]
+pub(crate) fn new(compiler: &mut Compiler, value: i32) -> Symbol {
+    let symbol = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Int32));
+
+    // memory is zero-initialized, so we don't need to write for 0
+    if value != 0 {
+        compiler.memory.write(
+            &mut compiler.instructions,
+            symbol.memory_addr,
+            &[ValueSource::Immediate(value as u32)],
+        );
+    }
+
+    symbol
+}
+
+// Stack output: [sign_mask, unsigned_result]
+pub(crate) fn decompose(compiler: &mut Compiler, n: &Symbol) {
+    assert_eq!(n.type_, Type::PrimitiveType(PrimitiveType::Int32));
+
+    compiler.memory.read(
+        &mut compiler.instructions,
+        n.memory_addr,
+        n.type_.miden_width(),
+    );
+    // [n]
+    compiler.instructions.push(encoder::Instruction::Dup(None));
+    // [n, n]
+    abs_stack(compiler);
+    // [abs(n), n]
+    compiler.instructions.push(encoder::Instruction::Swap);
+    // [n, abs(n)]
+    compiler
+        .instructions
+        .push(encoder::Instruction::Push(0x8000_0000));
+    // [0x8000_0000, n, abs(n)]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedAnd);
+    // [sign = n & 0x8000_0000, abs(n)]
+}
+
 /// Extracts signs for both operands.
 /// Stack will look like this: [b, a, b_sign, a_sign]
 fn prepare_stack_for_arithmetic(compiler: &mut Compiler, a: &Symbol, b: &Symbol) {
@@ -36,30 +80,35 @@ fn prepare_stack_for_arithmetic(compiler: &mut Compiler, a: &Symbol, b: &Symbol)
 /// abs_stack returns (on the stack) the absolute value of the value at the top of the stack.
 fn abs_stack(compiler: &mut Compiler) {
     // current stack: [value]
-    compiler.instructions.push(encoder::Instruction::Dup(None));
-    // [value, value]
-    compiler
-        .instructions
-        .push(encoder::Instruction::U32CheckedSHR(Some(31)));
-    // [sign, value]
-    compiler.instructions.push(encoder::Instruction::Dup(None));
-    // [sign, sign, value]
-    compiler.instructions.push(encoder::Instruction::MovDown(2));
-    // [sign, value, sign]
-    compiler
-        .instructions
-        .push(encoder::Instruction::Push(-1i32 as u32));
-    // [4294967295, sign, value, sign]
-    compiler
-        .instructions
-        .push(encoder::Instruction::U32CheckedMul);
-    // [sign * 4294967295, value, sign]
-    compiler
-        .instructions
-        .push(encoder::Instruction::U32CheckedXOR);
-    // [value ^ (sign * 4294967295), sign]
-    add_stack(compiler);
-    // [int32CheckedAdd(value ^ (sign * 4294967295))]
+    compiler.instructions.extend([
+        encoder::Instruction::Dup(None),
+        // [value, value]
+        encoder::Instruction::Push(i32::MIN as u32),
+        // [-2147483648, value, value]
+        encoder::Instruction::U32CheckedEq,
+        // [value == -2147483648, value]
+        encoder::Instruction::AssertZero,
+        // [value]
+        encoder::Instruction::If {
+            condition: vec![
+                encoder::Instruction::Dup(None),
+                // [value, value]
+                encoder::Instruction::U32CheckedSHR(Some(31)),
+                // [sign, value]
+            ],
+            then: vec![
+                // [value]
+                encoder::Instruction::U32CheckedNot,
+                // [~value]
+                encoder::Instruction::Push(1),
+                // [1, ~value]
+                encoder::Instruction::U32CheckedAdd,
+                // [~value + 1]
+            ],
+            else_: vec![],
+        },
+    ]);
+    // [abs(value)]
 }
 
 fn negate_stack(compiler: &mut Compiler) {
@@ -517,7 +566,7 @@ pub(crate) fn modulo(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol 
     // [abs(b), abs(a), a_sign]
     compiler
         .instructions
-        .push(encoder::Instruction::U32CheckedMod);
+        .push(encoder::Instruction::U32CheckedMod(None));
     // [abs(a) % abs(b), a_sign]
 
     compiler.instructions.push(encoder::Instruction::Swap);
@@ -970,6 +1019,7 @@ mod test {
         test!(-1, Ok(1));
         test!(i32::MAX, Ok(i32::MAX));
         test!(i32::MIN + 1, Ok(i32::MAX));
+        test!(2147483584, Ok(2147483584));
 
         test!(i32::MIN, Err(miden::ExecutionError::FailedAssertion(_)));
     }
