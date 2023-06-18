@@ -14,10 +14,11 @@ pub(crate) enum Instruction<'a> {
     Or,                         // or
     Not,                        // not
     Eq,                         // Eq
+    Cswap,                      // cswap
     U32CheckedAdd,              // u32checked_add
     U32CheckedSub,              // u32checked_sub
     U32CheckedMod(Option<u32>), // u32checked_mod
-    U32CheckedDiv,              // u32checked_div
+    U32CheckedDiv(Option<u32>), // u32checked_div
     U32CheckedMul,              // u32checked_mul
     U32CheckedEq,               // u32checked_eq
     U32CheckedNeq,              // u32checked_neq
@@ -100,11 +101,13 @@ impl Instruction<'_> {
             Instruction::Or => write_indent!(f, "or"),
             Instruction::Not => write_indent!(f, "not"),
             Instruction::Eq => write_indent!(f, "eq"),
+            Instruction::Cswap => write_indent!(f, "cswap"),
             Instruction::U32CheckedAdd => write_indent!(f, "u32checked_add"),
             Instruction::U32CheckedSub => write_indent!(f, "u32checked_sub"),
             Instruction::U32CheckedMod(None) => write_indent!(f, "u32checked_mod"),
             Instruction::U32CheckedMod(Some(value)) => write_indent!(f, "u32checked_mod.{}", value),
-            Instruction::U32CheckedDiv => write_indent!(f, "u32checked_div"),
+            Instruction::U32CheckedDiv(None) => write_indent!(f, "u32checked_div"),
+            Instruction::U32CheckedDiv(Some(value)) => write_indent!(f, "u32checked_div.{}", value),
             Instruction::U32CheckedMul => write_indent!(f, "u32checked_mul"),
             Instruction::U32CheckedEq => write_indent!(f, "u32checked_eq"),
             Instruction::U32CheckedNeq => write_indent!(f, "u32checked_neq"),

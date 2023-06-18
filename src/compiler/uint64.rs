@@ -1,5 +1,6 @@
 use super::*;
 
+/// [high, low]
 pub(crate) const WIDTH: u32 = 2;
 
 pub(crate) fn cast_from_uint32(compiler: &mut Compiler, from: &Symbol, dest: &Symbol) {

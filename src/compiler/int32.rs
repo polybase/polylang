@@ -439,7 +439,7 @@ pub(crate) fn div(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     // [abs(b), abs(a), b_sign, a_sign]
     compiler
         .instructions
-        .push(encoder::Instruction::U32CheckedDiv);
+        .push(encoder::Instruction::U32CheckedDiv(None));
     // [result, b_sign, a_sign]
 
     let negation = {

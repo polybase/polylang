@@ -23,5 +23,5 @@ fn main() {
     let (miden_code, abi) =
         polylang::compiler::compile(program, collection_name.as_deref(), &function_name);
     println!("{}", miden_code);
-    eprintln!("{}", serde_json::to_string(&abi).unwrap());
+    eprintln!("ABI: {}", serde_json::to_string(&abi).unwrap());
 }

@@ -2,11 +2,13 @@ use super::{encoder::Instruction, *};
 
 pub(crate) const WIDTH: u32 = 2;
 
-pub(crate) fn new(compiler: &mut Compiler, value: &str) -> Symbol {
+pub(crate) fn new(compiler: &mut Compiler, value: &str) -> (Symbol, Option<u32>) {
     let symbol = compiler.memory.allocate_symbol(Type::String);
 
+    let mut string_addr = None;
     if !value.is_empty() {
-        let string_addr = compiler.memory.allocate(value.len() as u32);
+        string_addr = Some(compiler.memory.allocate(value.len() as u32));
+        let string_addr = string_addr.unwrap();
 
         compiler.memory.write(
             compiler.instructions,
@@ -27,14 +29,13 @@ pub(crate) fn new(compiler: &mut Compiler, value: &str) -> Symbol {
         );
     }
 
-    symbol
+    (symbol, string_addr)
 }
 
 pub(crate) fn length(string: &Symbol) -> Symbol {
     Symbol {
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
         memory_addr: string.memory_addr,
-        
     }
 }
 
@@ -42,7 +43,6 @@ pub(crate) fn data_ptr(string: &Symbol) -> Symbol {
     Symbol {
         type_: Type::PrimitiveType(PrimitiveType::UInt32),
         memory_addr: string.memory_addr + 1,
-        
     }
 }
 
@@ -101,7 +101,7 @@ fn copy_str_stack(compiler: &mut Compiler) {
 }
 
 pub(crate) fn concat(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
-    let result = new(compiler, "");
+    let (result, _) = new(compiler, "");
     let result_data_ptr = data_ptr(&result);
     let result_len = length(&result);
 
@@ -296,6 +296,96 @@ pub(crate) fn eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
         ],
         else_: vec![],
     }]);
+
+    result
+}
+
+pub(crate) fn hash(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Symbol {
+    let string = args.get(0).unwrap();
+    assert!(matches!(
+        string.type_,
+        Type::String | Type::Bytes | Type::CollectionReference { .. }
+    ));
+
+    let result = compiler.memory.allocate_symbol(Type::Hash);
+
+    compiler.instructions.extend([
+        encoder::Instruction::Push(0),
+        encoder::Instruction::Push(0),
+        encoder::Instruction::Push(0),
+        encoder::Instruction::Push(0),
+    ]);
+    // [h[3], h[2], h[1], h[0]]
+    compiler.memory.read(
+        compiler.instructions,
+        string::data_ptr(string).memory_addr,
+        string::data_ptr(string).type_.miden_width(),
+    );
+    // [data_ptr, h[3], h[2], h[1], h[0]]
+    compiler.memory.read(
+        compiler.instructions,
+        string::length(string).memory_addr,
+        string::length(string).type_.miden_width(),
+    );
+    // [len, data_ptr, h[3], h[2], h[1], h[0]]
+
+    compiler.instructions.push(encoder::Instruction::While {
+        // len > 0
+        condition: vec![
+            encoder::Instruction::Dup(None),
+            // [len, len, data_ptr, h[3], h[2], h[1], h[0]]
+            encoder::Instruction::Push(0),
+            // [0, len, len, data_ptr, h[3], h[2], h[1], h[0]]
+            encoder::Instruction::U32CheckedGT,
+            // [len > 0, len, data_ptr, h[3], h[2], h[1], h[0]]
+        ],
+        body: vec![
+            // [len, data_ptr, h[3], h[2], h[1], h[0]]
+            encoder::Instruction::Push(1),
+            // [1, len, data_ptr, h[3], h[2], h[1], h[0]]
+            encoder::Instruction::U32CheckedSub,
+            // [len - 1, data_ptr, h[3], h[2], h[1], h[0]]
+            encoder::Instruction::MovDown(5),
+            // [data_ptr, h[3], h[2], h[1], h[0], len - 1]
+            encoder::Instruction::Dup(None),
+            // [data_ptr, data_ptr, h[3], h[2], h[1], h[0], len - 1]
+            encoder::Instruction::MovDown(6),
+            // [data_ptr, h[3], h[2], h[1], h[0], len - 1, data_ptr]
+            encoder::Instruction::MemLoad(None),
+            // [byte, h[3], h[2], h[1], h[0], len - 1, data_ptr]
+            encoder::Instruction::Push(0),
+            encoder::Instruction::Push(0),
+            encoder::Instruction::Push(0),
+            // [0, 0, 0, byte, h[3], h[2], h[1], h[0], len - 1, data_ptr]
+            encoder::Instruction::HMerge,
+            // [h[3], h[2], h[1], h[0], len - 1, data_ptr]
+            encoder::Instruction::MovUp(5),
+            // [data_ptr, h[3], h[2], h[1], h[0], len - 1]
+            encoder::Instruction::Push(1),
+            // [1, data_ptr, h[3], h[2], h[1], h[0], len - 1]
+            encoder::Instruction::U32CheckedAdd,
+            // [data_ptr + 1, h[3], h[2], h[1], h[0], len - 1]
+            encoder::Instruction::MovUp(5),
+            // [len - 1, data_ptr + 1, h[3], h[2], h[1], h[0]]
+        ],
+    });
+
+    // [len, data_ptr, h[3], h[2], h[1], h[0]]
+    compiler.instructions.push(encoder::Instruction::Drop);
+    // [data_ptr, h[3], h[2], h[1], h[0]]
+    compiler.instructions.push(encoder::Instruction::Drop);
+    // [h[3], h[2], h[1], h[0]]
+
+    compiler.memory.write(
+        compiler.instructions,
+        result.memory_addr,
+        &[
+            ValueSource::Stack,
+            ValueSource::Stack,
+            ValueSource::Stack,
+            ValueSource::Stack,
+        ],
+    );
 
     result
 }

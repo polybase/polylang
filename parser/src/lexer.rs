@@ -10,6 +10,12 @@ pub enum Tok<'input> {
     True,
     False,
     Number,
+    F32,
+    F64,
+    U32,
+    U64,
+    I32,
+    I64,
     String,
     Boolean,
     Map,
@@ -74,6 +80,12 @@ impl std::fmt::Display for Tok<'_> {
             Tok::True => write!(f, "true"),
             Tok::False => write!(f, "false"),
             Tok::Number => write!(f, "number"),
+            Tok::F32 => write!(f, "f32"),
+            Tok::F64 => write!(f, "f64"),
+            Tok::U32 => write!(f, "u32"),
+            Tok::U64 => write!(f, "u64"),
+            Tok::I32 => write!(f, "i32"),
+            Tok::I64 => write!(f, "i64"),
             Tok::String => write!(f, "string"),
             Tok::Boolean => write!(f, "boolean"),
             Tok::Map => write!(f, "map"),
@@ -188,6 +200,12 @@ const KEYWORDS: &[(Tok, &str)] = &[
     (Tok::True, "true"),
     (Tok::False, "false"),
     (Tok::Number, "number"),
+    (Tok::F32, "f32"),
+    (Tok::F64, "f64"),
+    (Tok::U32, "u32"),
+    (Tok::U64, "u64"),
+    (Tok::I32, "i32"),
+    (Tok::I64, "i64"),
     (Tok::String, "string"),
     (Tok::Boolean, "boolean"),
     (Tok::Map, "map"),
@@ -330,14 +348,14 @@ impl<'input> Lexer<'input> {
 
     fn lex_keyword(&mut self) -> Option<LexerItem<'input>> {
         let (start, c) = self.peek_char()?;
-        if !c.is_alphabetic() {
+        if !c.is_ascii_alphabetic() {
             return None;
         }
 
         let mut end = start;
         let mut keyword = String::new();
         while let Some((i, c)) = self.peek_char() {
-            if !c.is_alphabetic() {
+            if !c.is_ascii_alphanumeric() && c != '_' {
                 break;
             }
             end = i;

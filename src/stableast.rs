@@ -195,6 +195,18 @@ pub enum PrimitiveType {
     String,
     #[serde(rename = "number")]
     Number,
+    #[serde(rename = "f32")]
+    F32,
+    #[serde(rename = "f64")]
+    F64,
+    #[serde(rename = "u32")]
+    U32,
+    #[serde(rename = "u64")]
+    U64,
+    #[serde(rename = "i32")]
+    I32,
+    #[serde(rename = "i64")]
+    I64,
     #[serde(rename = "boolean")]
     Boolean,
     #[serde(rename = "bytes")]
@@ -206,6 +218,12 @@ impl Display for PrimitiveType {
         match self {
             PrimitiveType::String => write!(f, "string"),
             PrimitiveType::Number => write!(f, "number"),
+            PrimitiveType::F32 => write!(f, "f32"),
+            PrimitiveType::F64 => write!(f, "f64"),
+            PrimitiveType::U32 => write!(f, "u32"),
+            PrimitiveType::U64 => write!(f, "u64"),
+            PrimitiveType::I32 => write!(f, "i32"),
+            PrimitiveType::I64 => write!(f, "i64"),
             PrimitiveType::Boolean => write!(f, "boolean"),
             PrimitiveType::Bytes => write!(f, "bytes"),
         }
@@ -356,6 +374,24 @@ impl<'a> Type<'a> {
             ast::Type::Number => Type::Primitive(Primitive {
                 value: PrimitiveType::Number,
             }),
+            ast::Type::F32 => Type::Primitive(Primitive {
+                value: PrimitiveType::F32,
+            }),
+            ast::Type::F64 => Type::Primitive(Primitive {
+                value: PrimitiveType::F64,
+            }),
+            ast::Type::U32 => Type::Primitive(Primitive {
+                value: PrimitiveType::U32,
+            }),
+            ast::Type::U64 => Type::Primitive(Primitive {
+                value: PrimitiveType::U64,
+            }),
+            ast::Type::I32 => Type::Primitive(Primitive {
+                value: PrimitiveType::I32,
+            }),
+            ast::Type::I64 => Type::Primitive(Primitive {
+                value: PrimitiveType::I64,
+            }),
             ast::Type::Boolean => Type::Primitive(Primitive {
                 value: PrimitiveType::Boolean,
             }),
@@ -393,6 +429,24 @@ impl<'a> Type<'a> {
             }),
             ast::ParameterType::Number => Type::Primitive(Primitive {
                 value: PrimitiveType::Number,
+            }),
+            ast::ParameterType::F32 => Type::Primitive(Primitive {
+                value: PrimitiveType::F32,
+            }),
+            ast::ParameterType::F64 => Type::Primitive(Primitive {
+                value: PrimitiveType::F64,
+            }),
+            ast::ParameterType::U32 => Type::Primitive(Primitive {
+                value: PrimitiveType::U32,
+            }),
+            ast::ParameterType::U64 => Type::Primitive(Primitive {
+                value: PrimitiveType::U64,
+            }),
+            ast::ParameterType::I32 => Type::Primitive(Primitive {
+                value: PrimitiveType::I32,
+            }),
+            ast::ParameterType::I64 => Type::Primitive(Primitive {
+                value: PrimitiveType::I64,
             }),
             ast::ParameterType::Boolean => Type::Primitive(Primitive {
                 value: PrimitiveType::Boolean,

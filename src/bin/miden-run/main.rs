@@ -1,6 +1,9 @@
 use std::{collections::HashMap, io::Read};
 
-use polylang::compiler::abi::{self, Parser, TypeReader};
+use polylang::compiler::{
+    self,
+    abi::{self, Parser, TypeReader, Value},
+};
 
 // Copied from https://github.com/novifinancial/winterfell/blob/1a1815adb51757e57f8f3844c51ff538e6c17a32/math/src/field/f64/mod.rs#L572
 const fn mont_red_cst(x: u128) -> u64 {
@@ -17,16 +20,28 @@ const fn mont_red_cst(x: u128) -> u64 {
 
 struct Args {
     advice_tape: Vec<u64>,
+    advice_tape_json: Option<String>,
     this_values: HashMap<String, String>,
+    this_json: Option<serde_json::Value>,
     abi: polylang::compiler::Abi,
+    ctx: Ctx,
+}
+
+#[derive(Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Ctx {
+    public_key: Option<compiler::Key>,
 }
 
 impl Args {
     fn parse(args: std::env::Args) -> Result<Self, String> {
         let mut args = args.skip(1);
         let mut advice_tape = Vec::new();
+        let mut advice_tape_json = None;
         let mut abi = polylang::compiler::Abi::default();
         let mut this_values = HashMap::new();
+        let mut this_json = None;
+        let mut ctx = None;
 
         while let Some(arg) = args.next() {
             match arg.as_str() {
@@ -43,6 +58,13 @@ impl Args {
 
                     advice_tape.extend(values);
                 }
+                "--advice-tape-json" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| format!("missing value for argument {}", arg))?;
+
+                    advice_tape_json = Some(value);
+                }
                 "--abi" => {
                     let abi_json = args
                         .next()
@@ -50,6 +72,26 @@ impl Args {
 
                     abi = serde_json::from_str::<polylang::compiler::Abi>(&abi_json)
                         .map_err(|e| format!("invalid value for argument {}: {}", arg, e))?;
+                }
+                "--this-json" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| format!("missing value for argument {}", arg))?;
+
+                    let this_value = serde_json::from_str::<serde_json::Value>(&value)
+                        .map_err(|e| format!("invalid value for argument {}: {}", value, e))?;
+
+                    this_json = Some(this_value);
+                }
+                "--ctx" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| format!("missing value for argument {}", arg))?;
+
+                    let c = serde_json::from_str::<Ctx>(&value)
+                        .map_err(|e| format!("invalid value for argument {}: {}", value, e))?;
+
+                    ctx = Some(c);
                 }
                 this_param if this_param.starts_with("--this.") => {
                     let field = this_param
@@ -69,15 +111,26 @@ impl Args {
 
         Ok(Self {
             advice_tape,
+            advice_tape_json,
             abi,
             this_values,
+            this_json,
+            ctx: ctx.unwrap_or_default(),
         })
     }
 
     fn this_value(&self) -> Result<abi::Value, Box<dyn std::error::Error>> {
+        if self.this_json.is_some() {
+            self.this_value_json()
+        } else {
+            self.this_value_str()
+        }
+    }
+
+    fn this_value_str(&self) -> Result<abi::Value, Box<dyn std::error::Error>> {
         let this_type = self
             .abi
-            .out_this_type
+            .this_type
             .as_ref()
             .ok_or("ABI does not specify a `this` type")?;
         let polylang::compiler::Type::Struct(struct_) = this_type else {
@@ -94,12 +147,75 @@ impl Args {
                 )
             })?;
 
-            let field_value = Parser::parse(field_type, value_str)?;
+            let field_value = Parser::parse(field_type, value_str.as_str())?;
 
             struct_values.push((field_name.clone(), field_value));
         }
 
         Ok(abi::Value::StructValue(struct_values))
+    }
+
+    fn this_value_json(&self) -> Result<abi::Value, Box<dyn std::error::Error>> {
+        let Some(this_json) = &self.this_json else {
+            return Err("No JSON value for `this`".into());
+        };
+
+        let this_type = self
+            .abi
+            .this_type
+            .as_ref()
+            .ok_or("ABI does not specify a `this` type")?;
+        let polylang::compiler::Type::Struct(struct_) = this_type else {
+                return Err("This type is not a struct".into());
+            };
+
+        let use_defaults = this_json.as_object().map(|o| o.is_empty()).unwrap_or(false);
+
+        let mut struct_values = Vec::new();
+        for (field_name, field_type) in &struct_.fields {
+            let field_value = match this_json.get(field_name) {
+                Some(value) => Parser::parse(field_type, value)?,
+                None if use_defaults => field_type.default_value(),
+                None if matches!(field_type, polylang::compiler::Type::Nullable(_)) => {
+                    field_type.default_value()
+                }
+                None => return Err(format!("missing value for field `{}`", field_name).into()),
+            };
+
+            struct_values.push((field_name.clone(), field_value));
+        }
+
+        Ok(abi::Value::StructValue(struct_values))
+    }
+
+    fn args_advice_tape(&self) -> Result<Vec<u64>, Box<dyn std::error::Error>> {
+        if let Some(advice_tape_json) = &self.advice_tape_json {
+            let mut tape = Vec::new();
+            let advice_tape_json = serde_json::from_str::<Vec<serde_json::Value>>(advice_tape_json)
+                .map_err(|e| format!("invalid value for argument: {}", e))?;
+
+            for (i, t) in self.abi.param_types.iter().enumerate() {
+                tape.extend_from_slice(&t.parse(&advice_tape_json[i])?.serialize());
+            }
+
+            Ok(tape)
+        } else {
+            Ok(self.advice_tape.clone())
+        }
+    }
+
+    fn ctx_advice_tape(&self) -> Result<Vec<u64>, Box<dyn std::error::Error>> {
+        let ctx = Value::StructValue(vec![(
+            "publicKey".to_owned(),
+            Value::Nullable(
+                self.ctx
+                    .public_key
+                    .clone()
+                    .map(|pk| Box::new(Value::PublicKey(pk))),
+            ),
+        )]);
+
+        Ok(ctx.serialize())
     }
 }
 
@@ -133,7 +249,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut advice_tape = vec![];
     let mut stack = Vec::<u64>::new();
 
-    if let Some(this_type) = &args.abi.out_this_type {
+    advice_tape.extend(&args.ctx_advice_tape()?);
+
+    if let Some(this_type) = &args.abi.this_type {
         let this_value = args.this_value()?;
         advice_tape.extend(this_value.serialize());
         let this_hash = hash(
@@ -150,7 +268,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         stack.extend(this_hash.iter().take(4).rev());
     }
-    advice_tape.extend(args.advice_tape);
+    advice_tape.extend(&args.args_advice_tape()?);
 
     let mut masm_code = String::new();
     std::io::stdin().read_to_string(&mut masm_code)?;
@@ -242,9 +360,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => {
             println!("Output: {:?}", stack);
 
-            if let Some(type_) = args.abi.out_this_type {
-                let value = type_.read(&get_mem_values, args.abi.out_this_addr.unwrap() as _);
+            if let Some(type_) = args.abi.this_type {
+                let value = type_.read(&get_mem_values, args.abi.this_addr.unwrap() as _);
                 println!("this: {:?}", value);
+                println!(
+                    "this_json: {}",
+                    value
+                        .map(|v| Into::<serde_json::Value>::into(v))
+                        .map(|v| serde_json::to_string(&v).unwrap())
+                        .unwrap_or_else(|_| "null".to_string())
+                );
+
+                let self_destruct_flag = stack[4];
+                println!("Self-destructed: {}", self_destruct_flag != 0);
             }
 
             Ok(())

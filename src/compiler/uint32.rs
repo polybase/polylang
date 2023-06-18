@@ -207,7 +207,7 @@ pub(crate) fn div(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
         .read(compiler.instructions, b.memory_addr, b.type_.miden_width());
     compiler
         .instructions
-        .push(encoder::Instruction::U32CheckedDiv);
+        .push(encoder::Instruction::U32CheckedDiv(None));
     compiler.memory.write(
         compiler.instructions,
         result.memory_addr,

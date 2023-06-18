@@ -134,6 +134,94 @@ pub(crate) fn validate_value<'a>(
                     })
                 }
             }
+            stableast::PrimitiveType::F32 => {
+                if let Value::Number(_) = value {
+                    Ok(())
+                } else {
+                    Err(ValidationError::InvalidType {
+                        path: path.clone(),
+                        expected: expected_type.clone(),
+                    })
+                }
+            }
+            stableast::PrimitiveType::F64 => {
+                if let Value::Number(_) = value {
+                    Ok(())
+                } else {
+                    Err(ValidationError::InvalidType {
+                        path: path.clone(),
+                        expected: expected_type.clone(),
+                    })
+                }
+            }
+            stableast::PrimitiveType::U32 => {
+                if let Value::Number(n) = value {
+                    if n.fract() != 0.0 {
+                        Err(ValidationError::InvalidType {
+                            path: path.clone(),
+                            expected: expected_type.clone(),
+                        })
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    Err(ValidationError::InvalidType {
+                        path: path.clone(),
+                        expected: expected_type.clone(),
+                    })
+                }
+            }
+            stableast::PrimitiveType::U64 => {
+                if let Value::Number(n) = value {
+                    if n.fract() != 0.0 {
+                        Err(ValidationError::InvalidType {
+                            path: path.clone(),
+                            expected: expected_type.clone(),
+                        })
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    Err(ValidationError::InvalidType {
+                        path: path.clone(),
+                        expected: expected_type.clone(),
+                    })
+                }
+            }
+            stableast::PrimitiveType::I32 => {
+                if let Value::Number(n) = value {
+                    if n.fract() != 0.0 {
+                        Err(ValidationError::InvalidType {
+                            path: path.clone(),
+                            expected: expected_type.clone(),
+                        })
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    Err(ValidationError::InvalidType {
+                        path: path.clone(),
+                        expected: expected_type.clone(),
+                    })
+                }
+            }
+            stableast::PrimitiveType::I64 => {
+                if let Value::Number(n) = value {
+                    if n.fract() != 0.0 {
+                        Err(ValidationError::InvalidType {
+                            path: path.clone(),
+                            expected: expected_type.clone(),
+                        })
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    Err(ValidationError::InvalidType {
+                        path: path.clone(),
+                        expected: expected_type.clone(),
+                    })
+                }
+            }
             stableast::PrimitiveType::Boolean => {
                 if let Value::Boolean(_) = value {
                     Ok(())
