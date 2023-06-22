@@ -6,12 +6,11 @@ use std::{
 use polylang::{
     compiler::{
         self,
-        abi::{self, Parser, TypeReader, Value},
+        abi::{self, Parser},
     },
-    prover::{self, Inputs},
+    prover,
 };
 struct Args {
-    advice_tape: Vec<u64>,
     advice_tape_json: Option<String>,
     this_values: HashMap<String, String>,
     this_json: Option<serde_json::Value>,
@@ -29,7 +28,6 @@ struct Ctx {
 impl Args {
     fn parse(args: std::env::Args) -> Result<Self, String> {
         let mut args = args.skip(1);
-        let mut advice_tape = Vec::new();
         let mut advice_tape_json = None;
         let mut abi = polylang::compiler::Abi::default();
         let mut this_values = HashMap::new();
@@ -39,19 +37,6 @@ impl Args {
 
         while let Some(arg) = args.next() {
             match arg.as_str() {
-                "--advice-tape" => {
-                    let value = args
-                        .next()
-                        .ok_or_else(|| format!("missing value for argument {}", arg))?;
-
-                    let values = value
-                        .split(',')
-                        .map(|s| s.parse::<u64>())
-                        .collect::<Result<Vec<_>, _>>()
-                        .map_err(|e| format!("invalid value for argument {}: {}", arg, e))?;
-
-                    advice_tape.extend(values);
-                }
                 "--advice-tape-json" => {
                     let value = args
                         .next()
@@ -111,7 +96,6 @@ impl Args {
         }
 
         Ok(Self {
-            advice_tape,
             advice_tape_json,
             abi,
             this_values,
@@ -232,7 +216,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     dbg!(output.hash());
     dbg!(output.logs());
-    dbg!(output.self_destructed());
+    dbg!(output.self_destructed()?);
 
     println!(
         "this_json: {}",
