@@ -2,7 +2,7 @@ use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use base64::Engine;
 use miden_processor::{utils::Serializable, ProgramInfo};
 use polylang::{
-    compiler::{self, abi::Parser, Abi},
+    compiler::{self, abi::Parser, Abi, StdVersion},
     prover::Inputs,
 };
 use serde::Deserialize;
@@ -19,8 +19,15 @@ struct ProveRequest {
 
 #[post("/prove")]
 async fn prove(req: web::Json<ProveRequest>) -> Result<impl Responder, actix_web::Error> {
+    let std_library = match &req.abi.std_version {
+        None => miden_stdlib::StdLibrary::default(),
+        Some(version) => match version {
+            StdVersion::V0_5_0 => miden_stdlib::StdLibrary::default(),
+        },
+    };
+
     let assembler = miden::Assembler::default()
-        .with_library(&miden_stdlib::StdLibrary::default())
+        .with_library(&std_library)
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Assembler error: {}", e))
         })?;

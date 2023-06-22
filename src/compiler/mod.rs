@@ -3297,11 +3297,18 @@ fn prepare_scope(program: &ast::Program) -> Scope {
     scope
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StdVersion {
+    #[serde(rename = "0.5.0")]
+    V0_5_0,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Abi {
     pub this_addr: Option<u32>,
     pub this_type: Option<Type>,
     pub param_types: Vec<Type>,
+    pub std_version: Option<StdVersion>,
 }
 
 impl Abi {
@@ -3452,6 +3459,7 @@ pub fn compile(
             this_addr,
             this_type: collection_struct.map(Type::Struct),
             param_types,
+            std_version: Some(StdVersion::V0_5_0),
         },
     )
 }
