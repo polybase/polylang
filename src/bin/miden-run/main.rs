@@ -198,7 +198,18 @@ impl Args {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse(std::env::args())?;
+    let mut args = Args::parse(std::env::args())?;
+
+    let has_this_type = if args.abi.this_type.is_none() {
+        args.abi.this_type = Some(compiler::Type::Struct(compiler::Struct {
+            name: "Empty".to_string(),
+            fields: Vec::new(),
+        }));
+
+        false
+    } else {
+        true
+    };
 
     let inputs = args.inputs(|v| prover::hash_this(args.abi.this_type.clone().unwrap(), v))?;
 
@@ -218,10 +229,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     dbg!(output.logs());
     dbg!(output.self_destructed()?);
 
-    println!(
-        "this_json: {}",
-        Into::<serde_json::Value>::into(output.this(&args.abi)?)
-    );
+    if has_this_type {
+        println!(
+            "this_json: {}",
+            Into::<serde_json::Value>::into(output.this(&args.abi)?)
+        );
+    }
 
     if let Some(out) = args.proof_output {
         let proof = prove()?;
