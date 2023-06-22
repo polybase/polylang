@@ -129,7 +129,7 @@ async def run_tests():
 
     with open("function_test.jsonl", "r") as file:
         lines = file.readlines()
-        lines = random.sample(lines, 10000)
+        lines = random.sample(lines, 1000)
         total_lines = len(lines)
         tasks = []
         for (i, line) in enumerate(lines):

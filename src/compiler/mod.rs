@@ -15,7 +15,7 @@ mod string;
 mod uint32;
 mod uint64;
 
-use std::{collections::HashMap, ops::Deref};
+use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
 
@@ -3297,16 +3297,21 @@ fn prepare_scope(program: &ast::Program) -> Scope {
     scope
 }
 
-pub enum CompileTimeArg {
-    U32(u32),
-    Record(HashMap<String, u32>),
-}
-
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Abi {
     pub this_addr: Option<u32>,
     pub this_type: Option<Type>,
     pub param_types: Vec<Type>,
+}
+
+impl Abi {
+    pub fn default_this_value(&self) -> Result<abi::Value, Box<dyn std::error::Error>> {
+        let Some(ref this_type) = self.this_type else {
+            return Err("Missing this type".into());
+        };
+
+        Ok(this_type.default_value())
+    }
 }
 
 pub fn compile(
