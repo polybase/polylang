@@ -1,0 +1,16 @@
+[package]
+name = "prover"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+abi = { path = "../abi" }
+polylang = { path = "../" }
+
+miden-vm = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.5.0" }
+miden-processor = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.5.0" }
+miden-stdlib = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.5.0" }
+
+serde_json = { version = "1.0", features = ["arbitrary_precision"] }

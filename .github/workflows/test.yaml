@@ -17,13 +17,7 @@ jobs:
         run: |
           ./pull-collections.sh
 
-      - name: Test the main crate
+      - name: Run Tests
         uses: actions-rs/cargo@v1
         with:
           command: test
-
-      - name: Test the parser
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --manifest-path parser/Cargo.toml

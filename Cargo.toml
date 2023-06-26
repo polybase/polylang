@@ -21,7 +21,7 @@ name = "prover"
 path = "src/bin/prover/main.rs"
 
 [workspace]
-members = ["prover", "abi"]
+members = ["parser", "prover", "abi"]
 
 [features]
 default = ["parser"]
