@@ -3,6 +3,15 @@
 version = 3
 
 [[package]]
+name = "abi"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "actix-codec"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1107,6 +1116,7 @@ checksum = "26072860ba924cbfa98ea39c8c19b4dd6a4a25423dbdf219c1eca91aa0cf6964"
 name = "polylang"
 version = "0.1.0"
 dependencies = [
+ "abi",
  "actix-web",
  "base64",
  "console_error_panic_hook",
@@ -1205,6 +1215,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ea3d908b0e36316caf9e9e2c4625cdde190a7e6f440d794667ed17a1855e725"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "prover"
+version = "0.1.0"
+dependencies = [
+ "abi",
+ "miden-processor",
+ "miden-stdlib",
+ "miden-vm",
+ "polylang",
+ "serde_json",
 ]
 
 [[package]]

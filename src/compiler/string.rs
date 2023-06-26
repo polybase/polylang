@@ -1,7 +1,6 @@
 use super::{encoder::Instruction, *};
 
-pub(crate) const WIDTH: u32 = 2;
-
+// A string is represented as [length, pointer]
 pub(crate) fn new(compiler: &mut Compiler, value: &str) -> (Symbol, Option<u32>) {
     let symbol = compiler.memory.allocate_symbol(Type::String);
 

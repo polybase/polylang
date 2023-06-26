@@ -1,6 +1,7 @@
 use super::{encoder::Instruction, *};
 
 // [is_not_null, t_elements...]
+#[allow(dead_code)]
 pub(crate) fn width(t: &Type) -> u32 {
     1 + t.miden_width()
 }

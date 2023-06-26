@@ -3,18 +3,13 @@ use std::{
     io::{Read, Write},
 };
 
-use polylang::{
-    compiler::{
-        self,
-        abi::{self, Parser},
-    },
-    prover,
-};
+use abi::Abi;
+use polylang::prover;
 struct Args {
     advice_tape_json: Option<String>,
     this_values: HashMap<String, String>,
     this_json: Option<serde_json::Value>,
-    abi: polylang::compiler::Abi,
+    abi: Abi,
     ctx: Ctx,
     proof_output: Option<String>,
 }
@@ -22,14 +17,14 @@ struct Args {
 #[derive(Default, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Ctx {
-    public_key: Option<compiler::Key>,
+    public_key: Option<abi::publickey::Key>,
 }
 
 impl Args {
     fn parse(args: std::env::Args) -> Result<Self, String> {
         let mut args = args.skip(1);
         let mut advice_tape_json = None;
-        let mut abi = polylang::compiler::Abi::default();
+        let mut abi = Abi::default();
         let mut this_values = HashMap::new();
         let mut this_json = None;
         let mut ctx = None;
@@ -49,7 +44,7 @@ impl Args {
                         .next()
                         .ok_or_else(|| format!("missing value for argument {}", arg))?;
 
-                    abi = serde_json::from_str::<polylang::compiler::Abi>(&abi_json)
+                    abi = serde_json::from_str::<Abi>(&abi_json)
                         .map_err(|e| format!("invalid value for argument {}: {}", arg, e))?;
                 }
                 "--this-json" => {
@@ -119,7 +114,7 @@ impl Args {
             .this_type
             .as_ref()
             .ok_or("ABI does not specify a `this` type")?;
-        let polylang::compiler::Type::Struct(struct_) = this_type else {
+        let abi::Type::Struct(struct_) = this_type else {
             return Err("This type is not a struct".into());
         };
 
@@ -133,7 +128,7 @@ impl Args {
                 )
             })?;
 
-            let field_value = Parser::parse(field_type, value_str.as_str())?;
+            let field_value = abi::Parser::parse(field_type, value_str.as_str())?;
 
             struct_values.push((field_name.clone(), field_value));
         }
@@ -151,7 +146,7 @@ impl Args {
             .this_type
             .as_ref()
             .ok_or("ABI does not specify a `this` type")?;
-        let polylang::compiler::Type::Struct(struct_) = this_type else {
+        let abi::Type::Struct(struct_) = this_type else {
             return Err("This type is not a struct".into());
         };
 
@@ -160,11 +155,9 @@ impl Args {
         let mut struct_values = Vec::new();
         for (field_name, field_type) in &struct_.fields {
             let field_value = match this_json.get(field_name) {
-                Some(value) => Parser::parse(field_type, value)?,
+                Some(value) => abi::Parser::parse(field_type, value)?,
                 None if use_defaults => field_type.default_value(),
-                None if matches!(field_type, polylang::compiler::Type::Nullable(_)) => {
-                    field_type.default_value()
-                }
+                None if matches!(field_type, abi::Type::Nullable(_)) => field_type.default_value(),
                 None => return Err(format!("missing value for field `{}`", field_name).into()),
             };
 
@@ -201,7 +194,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = Args::parse(std::env::args())?;
 
     let has_this_type = if args.abi.this_type.is_none() {
-        args.abi.this_type = Some(compiler::Type::Struct(compiler::Struct {
+        args.abi.this_type = Some(abi::Type::Struct(abi::Struct {
             name: "Empty".to_string(),
             fields: Vec::new(),
         }));

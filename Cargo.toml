@@ -20,11 +20,15 @@ path = "src/bin/miden-run/main.rs"
 name = "prover"
 path = "src/bin/prover/main.rs"
 
+[workspace]
+members = ["prover", "abi"]
+
 [features]
 default = ["parser"]
 parser = []
 
 [dependencies]
+abi = { path = "./abi" }
 regex = { version = "1", default-features = false }
 wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1.7"

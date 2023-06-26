@@ -1,18 +1,16 @@
+use abi::Parser;
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use base64::Engine;
 use miden_processor::{utils::Serializable, ProgramInfo};
-use polylang::{
-    compiler::{self, abi::Parser, Abi, StdVersion},
-    prover::Inputs,
-};
+use polylang::prover::Inputs;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProveRequest {
     miden_code: String,
-    abi: Abi,
-    ctx_public_key: Option<compiler::Key>,
+    abi: abi::Abi,
+    ctx_public_key: Option<abi::publickey::Key>,
     this: Option<serde_json::Value>,
     args: Vec<serde_json::Value>,
 }
@@ -22,7 +20,7 @@ async fn prove(req: web::Json<ProveRequest>) -> Result<impl Responder, actix_web
     let std_library = match &req.abi.std_version {
         None => miden_stdlib::StdLibrary::default(),
         Some(version) => match version {
-            StdVersion::V0_5_0 => miden_stdlib::StdLibrary::default(),
+            abi::StdVersion::V0_5_0 => miden_stdlib::StdLibrary::default(),
         },
     };
 

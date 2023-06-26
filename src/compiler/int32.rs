@@ -1,7 +1,5 @@
 use super::*;
 
-pub(crate) const WIDTH: u32 = 1;
-
 // TODO: optimize the instructions for int32 artihmetic operations
 
 #[allow(dead_code)]
@@ -917,9 +915,11 @@ mod test {
         let b = new(&mut compiler, b);
 
         let result = super::add(&mut compiler, &a, &b);
-        compiler
-            .memory
-            .read(compiler.instructions, result.memory_addr, WIDTH);
+        compiler.memory.read(
+            compiler.instructions,
+            result.memory_addr,
+            PrimitiveType::Int32.miden_width(),
+        );
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -1089,9 +1089,11 @@ mod test {
         let b = new(&mut compiler, b);
 
         let result = super::sub(&mut compiler, &a, &b);
-        compiler
-            .memory
-            .read(compiler.instructions, result.memory_addr, WIDTH);
+        compiler.memory.read(
+            compiler.instructions,
+            result.memory_addr,
+            PrimitiveType::Int32.miden_width(),
+        );
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -1154,9 +1156,11 @@ mod test {
         let b = new(&mut compiler, b);
 
         let result = super::mul(&mut compiler, &a, &b);
-        compiler
-            .memory
-            .read(compiler.instructions, result.memory_addr, WIDTH);
+        compiler.memory.read(
+            compiler.instructions,
+            result.memory_addr,
+            PrimitiveType::Int32.miden_width(),
+        );
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -1244,9 +1248,11 @@ mod test {
         let b = new(&mut compiler, b);
 
         let result = super::div(&mut compiler, &a, &b);
-        compiler
-            .memory
-            .read(compiler.instructions, result.memory_addr, WIDTH);
+        compiler.memory.read(
+            compiler.instructions,
+            result.memory_addr,
+            PrimitiveType::Int32.miden_width(),
+        );
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -1315,9 +1321,11 @@ mod test {
         let b = new(&mut compiler, b);
 
         let result = super::modulo(&mut compiler, &a, &b);
-        compiler
-            .memory
-            .read(compiler.instructions, result.memory_addr, WIDTH);
+        compiler.memory.read(
+            compiler.instructions,
+            result.memory_addr,
+            PrimitiveType::Int32.miden_width(),
+        );
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -1379,9 +1387,11 @@ mod test {
         let b = new(&mut compiler, b);
 
         let result = super::shift_right(&mut compiler, &a, &b);
-        compiler
-            .memory
-            .read(compiler.instructions, result.memory_addr, WIDTH);
+        compiler.memory.read(
+            compiler.instructions,
+            result.memory_addr,
+            PrimitiveType::Int32.miden_width(),
+        );
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -1438,9 +1448,11 @@ mod test {
         let b = new(&mut compiler, b);
 
         let result = super::shift_left(&mut compiler, &a, &b);
-        compiler
-            .memory
-            .read(compiler.instructions, result.memory_addr, WIDTH);
+        compiler.memory.read(
+            compiler.instructions,
+            result.memory_addr,
+            PrimitiveType::Int32.miden_width(),
+        );
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -1494,9 +1506,11 @@ mod test {
         let b = new(&mut compiler, b);
 
         let result = super::gt(&mut compiler, &a, &b);
-        compiler
-            .memory
-            .read(compiler.instructions, result.memory_addr, WIDTH);
+        compiler.memory.read(
+            compiler.instructions,
+            result.memory_addr,
+            PrimitiveType::Int32.miden_width(),
+        );
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {

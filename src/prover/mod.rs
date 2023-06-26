@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 
-use crate::compiler::{
-    self,
-    abi::{Parser, TypeReader, Value},
-    Abi, Type,
-};
+use crate::compiler;
+use abi::{publickey, Abi, Parser, Type, TypeReader, Value};
 use miden::{ExecutionProof, ProofOptions};
 use miden_processor::{AdviceProvider, Program, StackInputs};
 
@@ -79,7 +76,7 @@ pub fn hash_this(struct_type: Type, this: &Value) -> Result<[u64; 4], Box<dyn st
 
 pub struct Inputs {
     pub abi: Abi,
-    pub ctx_public_key: Option<compiler::Key>,
+    pub ctx_public_key: Option<publickey::Key>,
     pub this: serde_json::Value,
     pub this_hash: [u64; 4],
     pub args: Vec<serde_json::Value>,

@@ -1,4 +1,3 @@
-pub mod abi;
 mod array;
 mod boolean;
 mod bytes;
@@ -15,13 +14,9 @@ mod string;
 mod uint32;
 mod uint64;
 
-use std::ops::Deref;
-
-use serde::{Deserialize, Serialize};
-
 use crate::ast::{self, Expression, Statement};
-
-pub use publickey::Key;
+use abi::{self, publickey::Key, Abi, PrimitiveType, StdVersion, Struct, Type};
+use std::ops::Deref;
 
 macro_rules! comment {
     ($compiler:expr, $($arg:tt)*) => {
@@ -834,98 +829,6 @@ lazy_static::lazy_static! {
 
         Box::leak(Box::new(builtins))
     };
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum PrimitiveType {
-    Boolean,
-    UInt32,
-    UInt64,
-    Int32,
-    Int64,
-    Float32,
-    Float64,
-}
-
-impl PrimitiveType {
-    fn miden_width(&self) -> u32 {
-        match self {
-            PrimitiveType::Boolean => boolean::WIDTH,
-            PrimitiveType::UInt32 => uint32::WIDTH,
-            PrimitiveType::UInt64 => uint64::WIDTH,
-            PrimitiveType::Int32 => int32::WIDTH,
-            PrimitiveType::Int64 => int64::WIDTH,
-            PrimitiveType::Float32 => float32::WIDTH,
-            PrimitiveType::Float64 => float64::WIDTH,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Struct {
-    pub name: String,
-    pub fields: Vec<(String, Type)>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub enum Type {
-    Nullable(Box<Type>),
-    PrimitiveType(PrimitiveType),
-    #[default]
-    String,
-    Bytes,
-    CollectionReference {
-        collection: String,
-    },
-    Array(Box<Type>),
-    Map(Box<Type>, Box<Type>),
-    /// A type that can contain a 4-field wide hash, such as one returned by `hmerge`
-    Hash,
-    PublicKey,
-    Struct(Struct),
-}
-
-impl Type {
-    fn miden_width(&self) -> u32 {
-        match self {
-            Type::Nullable(t) => nullable::width(t),
-            Type::PrimitiveType(pt) => pt.miden_width(),
-            Type::String => string::WIDTH,
-            Type::Bytes => bytes::WIDTH,
-            Type::CollectionReference { .. } => bytes::WIDTH,
-            Type::Array(_) => array::WIDTH,
-            Type::Map(_, _) => map::WIDTH,
-            Type::Hash => 4,
-            Type::PublicKey => publickey::WIDTH,
-            Type::Struct(struct_) => struct_.fields.iter().map(|(_, t)| t.miden_width()).sum(),
-        }
-    }
-
-    pub fn default_value(&self) -> abi::Value {
-        match &self {
-            Type::Nullable(_) => abi::Value::Nullable(None),
-            Type::PrimitiveType(PrimitiveType::Boolean) => abi::Value::Boolean(false),
-            Type::PrimitiveType(PrimitiveType::UInt32) => abi::Value::UInt32(0),
-            Type::PrimitiveType(PrimitiveType::UInt64) => abi::Value::UInt64(0),
-            Type::PrimitiveType(PrimitiveType::Int32) => abi::Value::Int32(0),
-            Type::PrimitiveType(PrimitiveType::Int64) => abi::Value::Int64(0),
-            Type::PrimitiveType(PrimitiveType::Float32) => abi::Value::Float32(0.0),
-            Type::PrimitiveType(PrimitiveType::Float64) => abi::Value::Float64(0.0),
-            Type::String => abi::Value::String("".to_owned()),
-            Type::Bytes => abi::Value::Bytes(vec![]),
-            Type::CollectionReference { .. } => abi::Value::CollectionReference(Vec::new()),
-            Type::Array(_) => abi::Value::Array(Vec::new()),
-            Type::Map(_, _) => abi::Value::Map(Vec::new()),
-            Type::Hash => abi::Value::Hash([0; 4]),
-            Type::PublicKey => abi::Value::PublicKey(publickey::Key::default()),
-            Type::Struct(t) => abi::Value::StructValue(
-                t.fields
-                    .iter()
-                    .map(|(n, t)| (n.clone(), t.default_value()))
-                    .collect(),
-            ),
-        }
-    }
 }
 
 fn struct_field(
@@ -3295,30 +3198,6 @@ fn prepare_scope(program: &ast::Program) -> Scope {
     }
 
     scope
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum StdVersion {
-    #[serde(rename = "0.5.0")]
-    V0_5_0,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct Abi {
-    pub this_addr: Option<u32>,
-    pub this_type: Option<Type>,
-    pub param_types: Vec<Type>,
-    pub std_version: Option<StdVersion>,
-}
-
-impl Abi {
-    pub fn default_this_value(&self) -> Result<abi::Value, Box<dyn std::error::Error>> {
-        let Some(ref this_type) = self.this_type else {
-            return Err("Missing this type".into());
-        };
-
-        Ok(this_type.default_value())
-    }
 }
 
 pub fn compile(
