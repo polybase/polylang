@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 abi = { path = "../abi" }
-polylang = { path = "../" }
+polylang = { path = "../", default-features = false }
 
 miden-vm = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.5.0" }
 miden-processor = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.5.0" }
