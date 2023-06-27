@@ -1,7 +1,6 @@
 mod bindings;
 pub mod compiler;
 pub mod js;
-pub mod prover;
 pub mod stableast;
 mod validation;
 

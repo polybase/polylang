@@ -29,6 +29,7 @@ parser = []
 
 [dependencies]
 abi = { path = "./abi" }
+prover = { path = "./prover" }
 regex = { version = "1", default-features = false }
 wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1.7"

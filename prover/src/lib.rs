@@ -1,8 +1,8 @@
-use std::collections::HashMap;
-
-use abi::{Abi, Parser, Type, TypeReader, Value};
+use abi::{publickey, Abi, Parser, Type, TypeReader, Value};
 use miden::{ExecutionProof, ProofOptions};
-use miden_processor::{AdviceProvider, Program, StackInputs};
+use miden_processor::{utils::Serializable, AdviceProvider, Program, ProgramInfo, StackInputs};
+use polylang::compiler;
+use std::collections::HashMap;
 
 const fn mont_red_cst(x: u128) -> u64 {
     // See reference above for a description of the following implementation.
@@ -55,7 +55,7 @@ pub fn hash_this(struct_type: Type, this: &Value) -> Result<[u64; 4], Box<dyn st
         return Err("This type is not a struct".into());
     };
 
-    let hasher_program = polylang::compiler::compile_struct_hasher(struct_type.clone());
+    let hasher_program = compiler::compile_struct_hasher(struct_type.clone());
 
     let assembler =
         miden::Assembler::default().with_library(&miden_stdlib::StdLibrary::default())?;
@@ -73,9 +73,21 @@ pub fn hash_this(struct_type: Type, this: &Value) -> Result<[u64; 4], Box<dyn st
     Ok(execution_result.stack_outputs().stack()[0..4].try_into()?)
 }
 
+pub fn compile_program(abi: &Abi, miden_code: &str) -> Result<Program, Box<dyn std::error::Error>> {
+    let std_library = match &abi.std_version {
+        None => miden_stdlib::StdLibrary::default(),
+        Some(version) => match version {
+            abi::StdVersion::V0_5_0 => miden_stdlib::StdLibrary::default(),
+        },
+    };
+    let assembler = miden::Assembler::default().with_library(&std_library)?;
+
+    Ok(assembler.compile(miden_code)?)
+}
+
 pub struct Inputs {
     pub abi: Abi,
-    pub ctx_public_key: Option<abi::publickey::Key>,
+    pub ctx_public_key: Option<publickey::Key>,
     pub this: serde_json::Value,
     pub this_hash: [u64; 4],
     pub args: Vec<serde_json::Value>,
@@ -301,4 +313,14 @@ pub fn run<'a>(
             Ok(proof)
         },
     ))
+}
+
+pub trait ProgramExt {
+    fn to_program_info_bytes(self) -> Vec<u8>;
+}
+
+impl ProgramExt for Program {
+    fn to_program_info_bytes(self) -> Vec<u8> {
+        ProgramInfo::from(self).to_bytes()
+    }
 }

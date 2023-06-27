@@ -4,7 +4,7 @@ use std::{
 };
 
 use abi::Abi;
-use polylang::prover;
+
 struct Args {
     advice_tape_json: Option<String>,
     this_values: HashMap<String, String>,
