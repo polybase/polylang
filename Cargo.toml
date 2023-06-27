@@ -16,8 +16,9 @@ path = "src/bin/compile/main.rs"
 members = ["parser", "prover", "abi", "miden-run"]
 
 [features]
-default = ["parser"]
+default = ["parser", "bindings"]
 parser = []
+bindings = []
 
 [dependencies]
 abi = { path = "./abi" }
