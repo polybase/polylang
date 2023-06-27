@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::compiler;
 use abi::{publickey, Abi, Parser, Type, TypeReader, Value};
 use miden::{ExecutionProof, ProofOptions};
-use miden_processor::{AdviceProvider, Program, StackInputs};
+use miden_processor::{utils::Serializable, AdviceProvider, Program, ProgramInfo, StackInputs};
 
 const fn mont_red_cst(x: u128) -> u64 {
     // See reference above for a description of the following implementation.
@@ -72,6 +72,18 @@ pub fn hash_this(struct_type: Type, this: &Value) -> Result<[u64; 4], Box<dyn st
     )?;
 
     Ok(execution_result.stack_outputs().stack()[0..4].try_into()?)
+}
+
+pub fn compile_program(abi: &Abi, miden_code: &str) -> Result<Program, Box<dyn std::error::Error>> {
+    let std_library = match &abi.std_version {
+        None => miden_stdlib::StdLibrary::default(),
+        Some(version) => match version {
+            abi::StdVersion::V0_5_0 => miden_stdlib::StdLibrary::default(),
+        },
+    };
+    let assembler = miden::Assembler::default().with_library(&std_library)?;
+
+    Ok(assembler.compile(miden_code)?)
 }
 
 pub struct Inputs {
@@ -302,4 +314,14 @@ pub fn run<'a>(
             Ok(proof)
         },
     ))
+}
+
+pub trait ProgramExt {
+    fn to_program_info_bytes(self) -> Vec<u8>;
+}
+
+impl ProgramExt for Program {
+    fn to_program_info_bytes(self) -> Vec<u8> {
+        ProgramInfo::from(self).to_bytes()
+    }
 }

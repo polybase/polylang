@@ -1,8 +1,7 @@
 use abi::Parser;
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use base64::Engine;
-use miden_processor::{utils::Serializable, ProgramInfo};
-use polylang::prover::Inputs;
+use polylang::prover::{Inputs, ProgramExt};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -17,20 +16,8 @@ struct ProveRequest {
 
 #[post("/prove")]
 async fn prove(req: web::Json<ProveRequest>) -> Result<impl Responder, actix_web::Error> {
-    let std_library = match &req.abi.std_version {
-        None => miden_stdlib::StdLibrary::default(),
-        Some(version) => match version {
-            abi::StdVersion::V0_5_0 => miden_stdlib::StdLibrary::default(),
-        },
-    };
-
-    let assembler = miden::Assembler::default()
-        .with_library(&std_library)
-        .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("Assembler error: {}", e))
-        })?;
-    let program = assembler.compile(&req.miden_code).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Compilation error: {}", e))
+    let program = polylang::prover::compile_program(&req.abi, &req.miden_code).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("failed to compile program: {}", e))
     })?;
 
     let this = req
@@ -61,7 +48,7 @@ async fn prove(req: web::Json<ProveRequest>) -> Result<impl Responder, actix_web
 
     let output = polylang::prover::prove(&program, &inputs)?;
 
-    let program_info = ProgramInfo::from(program).to_bytes();
+    let program_info = program.to_program_info_bytes();
     let new_this = Into::<serde_json::Value>::into(output.new_this);
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
