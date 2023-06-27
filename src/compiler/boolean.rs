@@ -1,7 +1,6 @@
 use super::*;
 
-pub(crate) const WIDTH: u32 = 1;
-
+// Layout: [value] - where value is 0 or 1
 pub(crate) fn new(compiler: &mut Compiler, value: bool) -> Symbol {
     let symbol = compiler
         .memory

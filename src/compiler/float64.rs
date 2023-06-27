@@ -1,2 +1,1 @@
-/// [high, low]
-pub(crate) const WIDTH: u32 = 2;
+// Layout: [high, low]

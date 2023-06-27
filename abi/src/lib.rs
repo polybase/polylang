@@ -1,8 +1,137 @@
+pub mod publickey;
+
 use std::str::FromStr;
 
 use base64::Engine;
+use serde::{Deserialize, Serialize};
 
-use super::{publickey, PrimitiveType, Struct, Type};
+const BOOLEAN_MIDEN_WIDTH: u32 = 1;
+const UINT32_MIDEN_WIDTH: u32 = 1;
+const UINT64_MIDEN_WIDTH: u32 = 2;
+const INT32_MIDEN_WIDTH: u32 = 1;
+const INT64_MIDEN_WIDTH: u32 = 2;
+const FLOAT32_MIDEN_WIDTH: u32 = 1;
+const FLOAT64_MIDEN_WIDTH: u32 = 2;
+const STRING_MIDEN_WIDTH: u32 = 2;
+const BYTES_MIDEN_WIDTH: u32 = 2;
+const ARRAY_MIDEN_WIDTH: u32 = 3;
+const MAP_MIDEN_WIDTH: u32 = ARRAY_MIDEN_WIDTH * 2;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StdVersion {
+    #[serde(rename = "0.5.0")]
+    V0_5_0,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Abi {
+    pub this_addr: Option<u32>,
+    pub this_type: Option<Type>,
+    pub param_types: Vec<Type>,
+    pub std_version: Option<StdVersion>,
+}
+
+impl Abi {
+    pub fn default_this_value(&self) -> Result<Value, Box<dyn std::error::Error>> {
+        let Some(ref this_type) = self.this_type else {
+            return Err("Missing this type".into());
+        };
+
+        Ok(this_type.default_value())
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum PrimitiveType {
+    Boolean,
+    UInt32,
+    UInt64,
+    Int32,
+    Int64,
+    Float32,
+    Float64,
+}
+
+impl PrimitiveType {
+    pub const fn miden_width(&self) -> u32 {
+        match self {
+            PrimitiveType::Boolean => BOOLEAN_MIDEN_WIDTH,
+            PrimitiveType::UInt32 => UINT32_MIDEN_WIDTH,
+            PrimitiveType::UInt64 => UINT64_MIDEN_WIDTH,
+            PrimitiveType::Int32 => INT32_MIDEN_WIDTH,
+            PrimitiveType::Int64 => INT64_MIDEN_WIDTH,
+            PrimitiveType::Float32 => FLOAT32_MIDEN_WIDTH,
+            PrimitiveType::Float64 => FLOAT64_MIDEN_WIDTH,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Struct {
+    pub name: String,
+    pub fields: Vec<(String, Type)>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub enum Type {
+    Nullable(Box<Type>),
+    PrimitiveType(PrimitiveType),
+    #[default]
+    String,
+    Bytes,
+    CollectionReference {
+        collection: String,
+    },
+    Array(Box<Type>),
+    Map(Box<Type>, Box<Type>),
+    /// A type that can contain a 4-field wide hash, such as one returned by `hmerge`
+    Hash,
+    PublicKey,
+    Struct(Struct),
+}
+
+impl Type {
+    pub fn miden_width(&self) -> u32 {
+        match self {
+            Type::Nullable(t) => 1 + t.miden_width(),
+            Type::PrimitiveType(pt) => pt.miden_width(),
+            Type::String => STRING_MIDEN_WIDTH,
+            Type::Bytes => BYTES_MIDEN_WIDTH,
+            Type::CollectionReference { .. } => BYTES_MIDEN_WIDTH,
+            Type::Array(_) => ARRAY_MIDEN_WIDTH,
+            Type::Map(_, _) => MAP_MIDEN_WIDTH,
+            Type::Hash => 4,
+            Type::PublicKey => publickey::WIDTH,
+            Type::Struct(struct_) => struct_.fields.iter().map(|(_, t)| t.miden_width()).sum(),
+        }
+    }
+
+    pub fn default_value(&self) -> Value {
+        match &self {
+            Type::Nullable(_) => Value::Nullable(None),
+            Type::PrimitiveType(PrimitiveType::Boolean) => Value::Boolean(false),
+            Type::PrimitiveType(PrimitiveType::UInt32) => Value::UInt32(0),
+            Type::PrimitiveType(PrimitiveType::UInt64) => Value::UInt64(0),
+            Type::PrimitiveType(PrimitiveType::Int32) => Value::Int32(0),
+            Type::PrimitiveType(PrimitiveType::Int64) => Value::Int64(0),
+            Type::PrimitiveType(PrimitiveType::Float32) => Value::Float32(0.0),
+            Type::PrimitiveType(PrimitiveType::Float64) => Value::Float64(0.0),
+            Type::String => Value::String("".to_owned()),
+            Type::Bytes => Value::Bytes(vec![]),
+            Type::CollectionReference { .. } => Value::CollectionReference(Vec::new()),
+            Type::Array(_) => Value::Array(Vec::new()),
+            Type::Map(_, _) => Value::Map(Vec::new()),
+            Type::Hash => Value::Hash([0; 4]),
+            Type::PublicKey => Value::PublicKey(publickey::Key::default()),
+            Type::Struct(t) => Value::StructValue(
+                t.fields
+                    .iter()
+                    .map(|(n, t)| (n.clone(), t.default_value()))
+                    .collect(),
+            ),
+        }
+    }
+}
 
 type MemoryReader<'a> = dyn Fn(u64) -> Option<[u64; 4]> + 'a;
 
@@ -229,7 +358,7 @@ impl TypeReader for Type {
 
                 let key_array_data_start_ptr = reader(addr + 2).unwrap()[0];
                 let value_array_data_start_ptr =
-                    reader(addr + super::array::WIDTH as u64 + 2).unwrap()[0];
+                    reader(addr + ARRAY_MIDEN_WIDTH as u64 + 2).unwrap()[0];
                 let length = reader(addr + 1).ok_or("invalid address for map keys length")?[0];
 
                 for i in 0..length {

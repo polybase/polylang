@@ -84,7 +84,7 @@ module.exports = {
     new WasmPackPlugin({
       crateDirectory: path.resolve(__dirname, '..'),
       outDir: path.resolve(__dirname, 'pkg-thin'),
-      extraArgs: '-- --no-default-features',
+      extraArgs: '-- --no-default-features --features bindings',
     }),
     inlineWASM('pkg-thin'),
   ],

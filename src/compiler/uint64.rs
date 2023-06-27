@@ -1,8 +1,6 @@
 use super::*;
 
-/// [high, low]
-pub(crate) const WIDTH: u32 = 2;
-
+// Layout: [high, low]
 pub(crate) fn cast_from_uint32(compiler: &mut Compiler, from: &Symbol, dest: &Symbol) {
     assert_eq!(from.type_, Type::PrimitiveType(PrimitiveType::UInt32));
     assert_eq!(dest.type_, Type::PrimitiveType(PrimitiveType::UInt64));

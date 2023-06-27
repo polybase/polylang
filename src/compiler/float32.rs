@@ -7,8 +7,6 @@ use super::*;
 
 use encoder::Instruction;
 
-pub(crate) const WIDTH: u32 = 1;
-
 const SIGN_MASK: u32 = 0x8000_0000;
 const EXP_MASK: u32 = 0x7f80_0000;
 const EXP_SHIFT: u32 = 23;
@@ -1847,7 +1845,7 @@ mod tests {
         let result = f(&mut compiler, &a, &b);
         compiler
             .memory
-            .read(compiler.instructions, result.memory_addr, WIDTH);
+            .read(compiler.instructions, result.memory_addr, 1);
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {
@@ -2117,7 +2115,7 @@ mod tests {
         let result = from_uint32(&mut compiler, &a);
         compiler
             .memory
-            .read(&mut compiler.instructions, result.memory_addr, WIDTH);
+            .read(&mut compiler.instructions, result.memory_addr, 1);
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {

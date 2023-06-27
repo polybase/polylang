@@ -1,3 +1,4 @@
+#[cfg(feature = "bindings")]
 mod bindings;
 pub mod compiler;
 pub mod js;
