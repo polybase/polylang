@@ -169,11 +169,11 @@ impl Args {
     fn inputs(
         &self,
         hasher: impl Fn(&abi::Value) -> Result<[u64; 4], Box<dyn std::error::Error>>,
-    ) -> Result<prover::Inputs, Box<dyn std::error::Error>> {
+    ) -> Result<polylang_prover::Inputs, Box<dyn std::error::Error>> {
         let this = self.this_value()?;
         let this_hash = hasher(&this)?;
 
-        Ok(prover::Inputs {
+        Ok(polylang_prover::Inputs {
             abi: self.abi.clone(),
             ctx_public_key: self.ctx.public_key.clone(),
             this: this.into(),
@@ -203,14 +203,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         true
     };
 
-    let inputs = args.inputs(|v| prover::hash_this(args.abi.this_type.clone().unwrap(), v))?;
+    let inputs =
+        args.inputs(|v| polylang_prover::hash_this(args.abi.this_type.clone().unwrap(), v))?;
 
     let mut masm_code = String::new();
     std::io::stdin().read_to_string(&mut masm_code)?;
 
-    let program = prover::compile_program(&args.abi, &masm_code)?;
+    let program = polylang_prover::compile_program(&args.abi, &masm_code)?;
 
-    let (output, prove) = prover::run(&program, &inputs)?;
+    let (output, prove) = polylang_prover::run(&program, &inputs)?;
 
     dbg!(output.hash());
     dbg!(output.logs());

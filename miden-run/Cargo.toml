@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 abi = { path = "../abi" }
-prover = { path = "../prover" }
+polylang-prover = { path = "../prover" }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
