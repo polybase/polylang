@@ -925,6 +925,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "miden-run"
+version = "0.1.0"
+dependencies = [
+ "abi",
+ "prover",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "miden-stdlib"
 version = "0.4.0"
 source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.5.0#4195475d75ab2d586bdb01d1ff3ea2cd626eaf7b"

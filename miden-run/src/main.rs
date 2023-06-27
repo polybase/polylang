@@ -1,9 +1,8 @@
+use abi::Abi;
 use std::{
     collections::HashMap,
     io::{Read, Write},
 };
-
-use abi::Abi;
 
 struct Args {
     advice_tape_json: Option<String>,
@@ -209,12 +208,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut masm_code = String::new();
     std::io::stdin().read_to_string(&mut masm_code)?;
 
-    let assembler = miden::Assembler::default()
-        .with_library(&miden_stdlib::StdLibrary::default())
-        .expect("Failed to load stdlib");
-    let program = assembler
-        .compile(&masm_code)
-        .expect("Failed to compile miden assembly");
+    let program = prover::compile_program(&args.abi, &masm_code)?;
 
     let (output, prove) = prover::run(&program, &inputs)?;
 

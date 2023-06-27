@@ -12,16 +12,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "compile"
 path = "src/bin/compile/main.rs"
 
-[[bin]]
-name = "miden-run"
-path = "src/bin/miden-run/main.rs"
-
-[[bin]]
-name = "prover"
-path = "src/bin/prover/main.rs"
-
 [workspace]
-members = ["parser", "prover", "abi"]
+members = ["parser", "prover", "abi", "miden-run"]
 
 [features]
 default = ["parser"]
@@ -29,7 +21,6 @@ parser = []
 
 [dependencies]
 abi = { path = "./abi" }
-prover = { path = "./prover" }
 regex = { version = "1", default-features = false }
 wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1.7"
