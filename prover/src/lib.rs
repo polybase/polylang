@@ -1,8 +1,12 @@
 use abi::{publickey, Abi, Parser, Type, TypeReader, Value};
 use miden::{ExecutionProof, ProofOptions};
-use miden_processor::{utils::Serializable, AdviceProvider, Program, ProgramInfo, StackInputs};
+use miden_processor::{
+    math::Felt,
+    utils::{IntoBytes, Serializable},
+    Program, ProgramInfo, StackInputs,
+};
 use polylang::compiler;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 const fn mont_red_cst(x: u128) -> u64 {
     // See reference above for a description of the following implementation.
@@ -30,8 +34,8 @@ fn json_to_this_value(
     this_type: &Type,
 ) -> Result<Value, Box<dyn std::error::Error>> {
     let Type::Struct(struct_) = this_type else {
-            return Err("This type is not a struct".into());
-        };
+        return Err("This type is not a struct".into());
+    };
 
     let use_defaults = this_json.as_object().map(|o| o.is_empty()).unwrap_or(false);
 
@@ -110,7 +114,7 @@ impl Inputs {
         json_to_this_value(&self.this, this_type)
     }
 
-    fn advice_tape(&self) -> Result<impl AdviceProvider + Clone, Box<dyn std::error::Error>> {
+    fn advice_tape(&self) -> Result<miden::MemAdviceProvider, Box<dyn std::error::Error>> {
         let mut advice_tape = vec![];
         advice_tape.extend(
             // This should probably be on the stack
@@ -148,8 +152,8 @@ pub fn prove(program: &Program, inputs: &Inputs) -> Result<Output, Box<dyn std::
 
 #[derive(Debug)]
 pub struct RunOutput {
-    stack: Vec<u64>,
     memory: HashMap<u64, [u64; 4]>,
+    stack: Vec<u64>,
 }
 
 impl RunOutput {
@@ -256,6 +260,10 @@ pub fn run<'a>(
             return Err(Box::new(e));
         }
         (Some(state), Some(e)) => {
+            if state.memory.iter().find(|(a, _)| *a == 1).is_none() {
+                return Err(Box::new(e));
+            }
+
             let Value::String(s) = Type::String.read(
                 &|addr| {
                     state

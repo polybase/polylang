@@ -213,11 +213,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (output, prove) = polylang_prover::run(&program, &inputs)?;
 
+    dbg!(&output);
     dbg!(output.hash());
     dbg!(output.logs());
-    dbg!(output.self_destructed()?);
 
     if has_this_type {
+        dbg!(output.self_destructed()?);
         println!(
             "this_json: {}",
             Into::<serde_json::Value>::into(output.this(&args.abi)?)
