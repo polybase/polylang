@@ -99,7 +99,7 @@ fn copy_str_stack(compiler: &mut Compiler) {
     // []
 }
 
-pub(crate) fn concat(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+pub(crate) fn concat(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Result<Symbol> {
     let (result, _) = new(compiler, "");
     let result_data_ptr = data_ptr(&result);
     let result_len = length(&result);
@@ -136,7 +136,7 @@ pub(crate) fn concat(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol 
         &[ValueSource::Stack],
     );
 
-    let allocated_ptr = dynamic_alloc(compiler, &[result_len]);
+    let allocated_ptr = dynamic_alloc(compiler, &[result_len])?;
 
     compiler.memory.write(
         compiler.instructions,
@@ -204,7 +204,7 @@ pub(crate) fn concat(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol 
     copy_str_stack(compiler);
     // []
 
-    result
+    Ok(result)
 }
 
 pub(crate) fn eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
@@ -299,12 +299,19 @@ pub(crate) fn eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     result
 }
 
-pub(crate) fn hash(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Symbol {
-    let string = args.get(0).unwrap();
-    assert!(matches!(
-        string.type_,
+pub(crate) fn hash(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Result<Symbol> {
+    ensure!(
+        args.len() == 1,
+        ArgumentsCountSnafu {
+            found: args.len(),
+            expected: 1usize
+        }
+    );
+    let string = &args[0];
+    ensure_eq_type!(
+        string,
         Type::String | Type::Bytes | Type::CollectionReference { .. }
-    ));
+    );
 
     let result = compiler.memory.allocate_symbol(Type::Hash);
 
@@ -386,5 +393,5 @@ pub(crate) fn hash(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> 
         ],
     );
 
-    result
+    Ok(result)
 }

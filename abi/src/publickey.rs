@@ -3,6 +3,8 @@ use std::str::FromStr;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 
+use error::prelude::{whatever, Whatever};
+
 /// Layout: [key, crv, alg, use, extra_ptr]
 /// `extra_ptr` in secp256k1 is pointer to 64 bytes of data,
 /// the x and y coordinates of the public key.
@@ -33,12 +35,12 @@ impl From<u8> for Kty {
 }
 
 impl FromStr for Kty {
-    type Err = ();
+    type Err = Whatever;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "EC" => Ok(Kty::EC),
-            _ => Err(()),
+            _ => whatever!("invalid kty: {s}"),
         }
     }
 }
@@ -68,12 +70,12 @@ impl From<u8> for Crv {
 }
 
 impl FromStr for Crv {
-    type Err = ();
+    type Err = Whatever;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "secp256k1" => Ok(Crv::Secp256k1),
-            _ => Err(()),
+            _ => whatever!("invalid crv: {s}"),
         }
     }
 }
@@ -102,12 +104,12 @@ impl From<u8> for Alg {
 }
 
 impl FromStr for Alg {
-    type Err = ();
+    type Err = Whatever;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "ES256K" => Ok(Alg::ES256K),
-            _ => Err(()),
+            _ => whatever!("invalid alg: {s}"),
         }
     }
 }
@@ -137,12 +139,12 @@ impl From<u8> for Use {
 }
 
 impl FromStr for Use {
-    type Err = ();
+    type Err = Whatever;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "sig" => Ok(Use::Sig),
-            _ => Err(()),
+            _ => whatever!("invalid use: {s}"),
         }
     }
 }

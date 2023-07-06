@@ -5,6 +5,8 @@ use std::str::FromStr;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 
+use error::prelude::*;
+
 const BOOLEAN_MIDEN_WIDTH: u32 = 1;
 const UINT32_MIDEN_WIDTH: u32 = 1;
 const UINT64_MIDEN_WIDTH: u32 = 2;
@@ -136,7 +138,7 @@ impl Type {
 type MemoryReader<'a> = dyn Fn(u64) -> Option<[u64; 4]> + 'a;
 
 pub trait TypeReader {
-    fn read(&self, reader: &MemoryReader, addr: u64) -> Result<Value, Box<dyn std::error::Error>>;
+    fn read(&self, reader: &MemoryReader, addr: u64) -> Result<Value>;
 }
 
 #[derive(Debug, PartialEq)]
@@ -159,12 +161,13 @@ pub enum Value {
     StructValue(Vec<(String, Value)>),
 }
 
-impl Into<serde_json::Value> for Value {
-    fn into(self) -> serde_json::Value {
-        match self {
+impl TryInto<serde_json::Value> for Value {
+    type Error = Error;
+    fn try_into(self) -> Result<serde_json::Value> {
+        Ok(match self {
             Value::Nullable(opt) => match opt {
                 None => serde_json::Value::Null,
-                Some(v) => (*v).into(),
+                Some(v) => (*v).try_into()?,
             },
             Value::Boolean(b) => serde_json::Value::Bool(b),
             Value::UInt32(x) => serde_json::Value::Number(x.into()),
@@ -172,10 +175,10 @@ impl Into<serde_json::Value> for Value {
             Value::Int32(x) => serde_json::Value::Number(x.into()),
             Value::Int64(x) => serde_json::Value::Number(x.into()),
             Value::Float32(x) => {
-                serde_json::Value::Number(serde_json::Number::from_str(&x.to_string()).unwrap())
+                serde_json::Value::Number(serde_json::Number::from_str(&x.to_string()).wrap_err()?)
             }
             Value::Float64(x) => {
-                serde_json::Value::Number(serde_json::Number::from_str(&x.to_string()).unwrap())
+                serde_json::Value::Number(serde_json::Number::from_str(&x.to_string()).wrap_err()?)
             }
             Value::Hash(h) => {
                 let mut s = String::new();
@@ -187,10 +190,10 @@ impl Into<serde_json::Value> for Value {
             Value::String(s) => serde_json::Value::String(s),
             Value::Bytes(b) => serde_json::Value::String(format!(
                 "\"{}\"",
-                base64::engine::general_purpose::STANDARD.encode(&b)
+                base64::engine::general_purpose::STANDARD.encode(b)
             )),
             Value::CollectionReference(cr) => {
-                let cr = String::from_utf8(cr).unwrap();
+                let cr = String::from_utf8(cr).wrap_err()?;
                 // let parts = cr.split('|');
                 // let collection_id = parts.clone().next().unwrap();
                 // let id = parts.clone().nth(1).unwrap();
@@ -205,65 +208,101 @@ impl Into<serde_json::Value> for Value {
             Value::Array(a) => {
                 let mut array = Vec::new();
                 for value in a {
-                    array.push(value.into());
+                    array.push(value.try_into()?);
                 }
                 serde_json::Value::Array(array)
             }
             Value::Map(m) => {
                 let mut map = serde_json::Map::new();
-                for (key, value) in m {
-                    let key = key.maybe_to_string().unwrap();
-                    map.insert(key.into(), value.into());
+                for (key, value) in m
+                    .into_iter()
+                    .filter_map(|(k, v)| Some((k.maybe_to_string()?, v)))
+                {
+                    map.insert(key, value.try_into()?);
                 }
                 serde_json::Value::Object(map)
             }
-            Value::PublicKey(pk) => serde_json::to_value(pk).unwrap(),
+            Value::PublicKey(pk) => serde_json::to_value(pk).wrap_err()?,
             Value::StructValue(sv) => {
                 let mut map = serde_json::Map::new();
                 for (name, value) in sv {
-                    map.insert(name, value.into());
+                    map.insert(name, value.try_into()?);
                 }
                 serde_json::Value::Object(map)
             }
-        }
+        })
     }
 }
 
 impl TypeReader for PrimitiveType {
-    fn read(&self, reader: &MemoryReader, addr: u64) -> Result<Value, Box<dyn std::error::Error>> {
+    fn read(&self, reader: &MemoryReader, addr: u64) -> Result<Value> {
         Ok(match self {
             PrimitiveType::Boolean => {
-                let [b, _, _, _] = reader(addr).ok_or("invalid address for boolean")?;
-                assert!(b == 0 || b == 1);
+                let [b, _, _, _] = reader(addr).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "boolean",
+                })?;
+                snafu::ensure!(
+                    b == 0 || b == 1,
+                    TypeMismatchSnafu {
+                        context: "tried to use boolean that is not 0, nor 1",
+                    }
+                );
                 Value::Boolean(b != 0)
             }
             PrimitiveType::UInt32 => {
-                let [x, _, _, _] = reader(addr).ok_or("invalid address for uint32")?;
-                Value::UInt32(u32::try_from(x).unwrap())
+                let [x, _, _, _] = reader(addr).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "uint32",
+                })?;
+                Value::UInt32(u32::try_from(x).wrap_err()?)
             }
             PrimitiveType::UInt64 => {
-                let [high, _, _, _] = reader(addr).ok_or("invalid address for uint64")?;
-                let [low, _, _, _] = reader(addr + 1).ok_or("invalid address for uint64")?;
+                let [high, _, _, _] = reader(addr).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "uint64",
+                })?;
+                let [low, _, _, _] = reader(addr + 1).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "uint64",
+                })?;
 
                 Value::UInt64((high << 32) | low)
             }
             PrimitiveType::Int32 => {
-                let [x, _, _, _] = reader(addr).ok_or("invalid address for int32")?;
+                let [x, _, _, _] = reader(addr).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "int32",
+                })?;
                 Value::Int32(x as i32)
             }
             PrimitiveType::Int64 => {
-                let [high, _, _, _] = reader(addr).ok_or("invalid address for int64")?;
-                let [low, _, _, _] = reader(addr + 1).ok_or("invalid address for int64")?;
-
+                let [high, _, _, _] = reader(addr).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "int64",
+                })?;
+                let [low, _, _, _] = reader(addr + 1).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "int64",
+                })?;
                 Value::Int64(((high << 32) | low) as i64)
             }
             PrimitiveType::Float32 => {
-                let [bits, _, _, _] = reader(addr).ok_or("invalid address for float32")?;
+                let [bits, _, _, _] = reader(addr).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "float32",
+                })?;
                 Value::Float32(f32::from_bits(bits as u32))
             }
             PrimitiveType::Float64 => {
-                let [high, _, _, _] = reader(addr).ok_or("invalid address for float32")?;
-                let [low, _, _, _] = reader(addr + 1).ok_or("invalid address for float32")?;
+                let [high, _, _, _] = reader(addr).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "float64",
+                })?;
+                let [low, _, _, _] = reader(addr + 1).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "float64",
+                })?;
 
                 Value::Float64(f64::from_bits((high << 32) | low))
             }
@@ -272,23 +311,28 @@ impl TypeReader for PrimitiveType {
 }
 
 impl TypeReader for Struct {
-    fn read(&self, reader: &MemoryReader, addr: u64) -> Result<Value, Box<dyn std::error::Error>> {
+    fn read(&self, reader: &MemoryReader, addr: u64) -> Result<Value> {
         let mut fields = Vec::new();
         let mut current_addr = addr;
         for (name, type_) in &self.fields {
-            let value = type_.read(reader, current_addr)?;
+            let value = type_
+                .read(reader, current_addr)
+                .nest_err(|| format!("invalid read of field {name}"))?;
             fields.push((name.clone(), value));
-            current_addr += type_.miden_width() as u64;
+            current_addr += u64::from(type_.miden_width());
         }
         Ok(Value::StructValue(fields))
     }
 }
 
 impl TypeReader for Type {
-    fn read(&self, reader: &MemoryReader, addr: u64) -> Result<Value, Box<dyn std::error::Error>> {
+    fn read(&self, reader: &MemoryReader, addr: u64) -> Result<Value> {
         match self {
             Type::Nullable(t) => {
-                let [is_null, _, _, _] = reader(addr).ok_or("invalid address for nullable")?;
+                let [is_null, _, _, _] = reader(addr).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "nullable",
+                })?;
                 if is_null == 0 {
                     Ok(Value::Nullable(None))
                 } else {
@@ -297,30 +341,52 @@ impl TypeReader for Type {
             }
             Type::PrimitiveType(pt) => pt.read(reader, addr),
             Type::Struct(s) => s.read(reader, addr),
-            Type::Hash => Ok(reader(addr)
-                .ok_or("invalid address for hash")
-                .map(Value::Hash)?),
+            Type::Hash => reader(addr)
+                .map(Value::Hash)
+                .context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "hash",
+                })
+                .map_err(Into::into),
             Type::String => {
                 let mut bytes = vec![];
 
-                let length = reader(addr).ok_or("invalid address for string length")?[0];
-                let data_ptr = reader(addr + 1).ok_or("invalid address for string data ptr")?[0];
+                let length = reader(addr).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "string length",
+                })?[0];
+                let data_ptr = reader(addr + 1).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "string data ptr",
+                })?[0];
                 for i in 0..length {
-                    let byte = reader(data_ptr + i).ok_or("invalid address for string byte")?[0];
+                    let byte = reader(data_ptr + i).context(InvalidAddressSnafu {
+                        addr,
+                        type_name: "string byte",
+                    })?[0];
                     bytes.push(byte as u8);
                 }
 
-                let string = String::from_utf8(bytes)?;
+                let string = String::from_utf8(bytes).wrap_err()?;
 
                 Ok(Value::String(string))
             }
             Type::Bytes => {
                 let mut bytes = vec![];
 
-                let length = reader(addr).ok_or("invalid address for bytes length")?[0];
-                let data_ptr = reader(addr + 1).ok_or("invalid address for bytes data ptr")?[0];
+                let length = reader(addr).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "bytes length",
+                })?[0];
+                let data_ptr = reader(addr + 1).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "bytes data ptr",
+                })?[0];
                 for i in 0..length {
-                    let byte = reader(data_ptr + i).ok_or("invalid address for bytes byte")?[0];
+                    let byte = reader(data_ptr + i).context(InvalidAddressSnafu {
+                        addr,
+                        type_name: "bytes byte",
+                    })?[0];
                     bytes.push(byte as u8);
                 }
 
@@ -329,13 +395,19 @@ impl TypeReader for Type {
             Type::CollectionReference { .. } => {
                 let mut bytes = vec![];
 
-                let length =
-                    reader(addr).ok_or("invalid address for collection reference length")?[0];
-                let data_ptr =
-                    reader(addr + 1).ok_or("invalid address for collection reference data ptr")?[0];
+                let length = reader(addr).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "collection reference length",
+                })?[0];
+                let data_ptr = reader(addr + 1).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "collection reference data ptr",
+                })?[0];
                 for i in 0..length {
-                    let byte = reader(data_ptr + i)
-                        .ok_or("invalid address for collection reference byte")?[0];
+                    let byte = reader(data_ptr + i).context(InvalidAddressSnafu {
+                        addr,
+                        type_name: "collection reference byte",
+                    })?[0];
                     bytes.push(byte as u8);
                 }
 
@@ -344,8 +416,14 @@ impl TypeReader for Type {
             Type::Array(t) => {
                 let mut values = vec![];
 
-                let length = reader(addr + 1).ok_or("invalid address for array length")?[0];
-                let data_ptr = reader(addr + 2).ok_or("invalid address for array data ptr")?[0];
+                let length = reader(addr + 1).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "array length",
+                })?[0];
+                let data_ptr = reader(addr + 2).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "array data ptr",
+                })?[0];
                 for i in 0..length {
                     let value = t.read(reader, data_ptr + i * t.miden_width() as u64)?;
                     values.push(value);
@@ -359,7 +437,10 @@ impl TypeReader for Type {
                 let key_array_data_start_ptr = reader(addr + 2).unwrap()[0];
                 let value_array_data_start_ptr =
                     reader(addr + ARRAY_MIDEN_WIDTH as u64 + 2).unwrap()[0];
-                let length = reader(addr + 1).ok_or("invalid address for map keys length")?[0];
+                let length = reader(addr + 1).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "map keys length",
+                })?[0];
 
                 for i in 0..length {
                     let key = k.read(
@@ -377,32 +458,49 @@ impl TypeReader for Type {
                 Ok(Value::Map(key_values))
             }
             Type::PublicKey => {
-                let kty = reader(addr)
-                    .map(|x| x[0])
-                    .ok_or("invalid address for public key kty")?;
+                let kty = reader(addr).map(|x| x[0]).context(InvalidAddressSnafu {
+                    addr,
+                    type_name: "public key kty",
+                })?;
                 let crv = reader(addr + 1)
                     .map(|x| x[0])
-                    .ok_or("invalid address for public key crv")?;
+                    .context(InvalidAddressSnafu {
+                        addr,
+                        type_name: "public key crv",
+                    })?;
                 let alg = reader(addr + 2)
                     .map(|x| x[0])
-                    .ok_or("invalid address for public key alg")?;
+                    .context(InvalidAddressSnafu {
+                        addr,
+                        type_name: "public key alg",
+                    })?;
                 let use_ = reader(addr + 3)
                     .map(|x| x[0])
-                    .ok_or("invalid address for public key use")?;
+                    .context(InvalidAddressSnafu {
+                        addr,
+                        type_name: "public key use",
+                    })?;
                 let extra_ptr = reader(addr + 4)
                     .map(|x| x[0])
-                    .ok_or("invalid address for public key extra ptr")?;
+                    .context(InvalidAddressSnafu {
+                        addr,
+                        type_name: "public key extra ptr",
+                    })?;
 
-                let mut extra_bytes = vec![];
+                let mut extra_bytes = [0; 64];
                 for i in 0..64 {
-                    let byte = reader(extra_ptr + i)
-                        .map(|x| x[0])
-                        .ok_or("invalid address for public key extra byte")?;
-                    extra_bytes.push(byte as u8);
+                    let byte =
+                        reader(extra_ptr + i)
+                            .map(|x| x[0])
+                            .context(InvalidAddressSnafu {
+                                addr,
+                                type_name: "public key extra byte",
+                            })?;
+                    extra_bytes[i as usize] = byte as u8;
                 }
 
-                let x = extra_bytes[0..32].try_into()?;
-                let y = extra_bytes[32..64].try_into()?;
+                let x = extra_bytes[0..32].try_into().unwrap();
+                let y = extra_bytes[32..64].try_into().unwrap();
 
                 let key = publickey::Key {
                     kty: (kty as u8).into(),
@@ -420,54 +518,90 @@ impl TypeReader for Type {
 }
 
 pub trait Parser<T: ?Sized> {
-    fn parse(&self, value: &T) -> Result<Value, Box<dyn std::error::Error>>;
+    fn parse(&self, value: &T) -> Result<Value>;
 }
 
 impl Parser<str> for PrimitiveType {
-    fn parse(&self, value: &str) -> Result<Value, Box<dyn std::error::Error>> {
-        Ok(match self {
-            PrimitiveType::Boolean => Value::Boolean(value.parse()?),
-            PrimitiveType::UInt32 => Value::UInt32(value.parse()?),
-            PrimitiveType::UInt64 => Value::UInt64(value.parse()?),
-            PrimitiveType::Int32 => Value::Int32(value.parse()?),
-            PrimitiveType::Int64 => Value::Int64(value.parse()?),
-            PrimitiveType::Float32 => Value::Float32(value.parse()?),
-            PrimitiveType::Float64 => Value::Float64(value.parse()?),
-        })
+    fn parse(&self, value: &str) -> Result<Value> {
+        match self {
+            PrimitiveType::Boolean => value
+                .parse()
+                .map(Value::Boolean)
+                .parse_err("Boolean", value),
+            PrimitiveType::UInt32 => value.parse().map(Value::UInt32).parse_err("UInt32", value),
+            PrimitiveType::UInt64 => value.parse().map(Value::UInt64).parse_err("UInt64", value),
+            PrimitiveType::Int32 => value.parse().map(Value::Int32).parse_err("Int32", value),
+            PrimitiveType::Int64 => value.parse().map(Value::Int64).parse_err("Int64", value),
+            PrimitiveType::Float32 => value
+                .parse()
+                .map(Value::Float32)
+                .parse_err("Float32", value),
+            PrimitiveType::Float64 => value
+                .parse()
+                .map(Value::Float64)
+                .parse_err("Float64", value),
+        }
     }
 }
 
 impl Parser<serde_json::Value> for PrimitiveType {
-    fn parse(&self, value: &serde_json::Value) -> Result<Value, Box<dyn std::error::Error>> {
+    fn parse(&self, value: &serde_json::Value) -> Result<Value> {
+        let reason = "invalid json value";
         Ok(match self {
-            PrimitiveType::Boolean => {
-                Value::Boolean(value.as_bool().ok_or("invalid boolean value")?)
-            }
-            PrimitiveType::UInt32 => {
-                Value::UInt32(value.as_u64().ok_or("invalid uint32 value")? as u32)
-            }
-            PrimitiveType::UInt64 => Value::UInt64(value.as_u64().ok_or("invalid uint64 value")?),
-            PrimitiveType::Int32 => {
-                Value::Int32(value.as_i64().ok_or("invalid int32 value")? as i32)
-            }
-            PrimitiveType::Int64 => Value::Int64(value.as_i64().ok_or("invalid int64 value")?),
-            PrimitiveType::Float32 => {
-                Value::Float32(value.as_f64().ok_or("invalid float32 value")? as f32)
-            }
-            PrimitiveType::Float64 => {
-                Value::Float64(value.as_f64().ok_or("invalid float64 value")?)
-            }
+            PrimitiveType::Boolean => Value::Boolean(value.as_bool().parse_err(
+                reason,
+                "boolean",
+                format!("{value}").as_str(),
+            )?),
+            PrimitiveType::UInt32 => Value::UInt32(value.as_u64().parse_err(
+                reason,
+                "uint32",
+                format!("{value}").as_str(),
+            )? as u32),
+            PrimitiveType::UInt64 => Value::UInt64(value.as_u64().parse_err(
+                reason,
+                "uint64",
+                format!("{value}").as_str(),
+            )?),
+            PrimitiveType::Int32 => Value::Int32(value.as_i64().parse_err(
+                reason,
+                "int32",
+                format!("{value}").as_str(),
+            )? as i32),
+            PrimitiveType::Int64 => Value::Int64(value.as_i64().parse_err(
+                reason,
+                "int64",
+                format!("{value}").as_str(),
+            )?),
+            PrimitiveType::Float32 => Value::Float32(value.as_f64().parse_err(
+                reason,
+                "float32",
+                format!("{value}").as_str(),
+            )? as f32),
+            PrimitiveType::Float64 => Value::Float64(value.as_f64().parse_err(
+                reason,
+                "float64",
+                format!("{value}").as_str(),
+            )?),
         })
     }
 }
 
 impl Parser<str> for Struct {
-    fn parse(&self, value: &str) -> Result<Value, Box<dyn std::error::Error>> {
+    fn parse(&self, value: &str) -> Result<Value> {
         let mut fields = Vec::new();
         let mut value = value;
         for (name, type_) in &self.fields {
-            let (field_value, rest) = value.split_once(',').ok_or("invalid value")?;
-            fields.push((name.clone(), type_.parse(field_value)?));
+            let (field_value, rest) = value
+                .split_once(',')
+                .parse_err("missing field comma", "struct", value)
+                .nest_err(|| format!("field {name}"))?;
+            fields.push((
+                name.clone(),
+                type_
+                    .parse(field_value)
+                    .nest_err(|| format!("field {name}"))?,
+            ));
             value = rest;
         }
         Ok(Value::StructValue(fields))
@@ -475,12 +609,10 @@ impl Parser<str> for Struct {
 }
 
 impl Parser<serde_json::Value> for Struct {
-    fn parse(&self, value: &serde_json::Value) -> Result<Value, Box<dyn std::error::Error>> {
+    fn parse(&self, value: &serde_json::Value) -> Result<Value> {
         let mut fields = Vec::new();
         for (name, type_) in &self.fields {
-            let field_value = value
-                .get(name)
-                .ok_or_else(|| format!("missing field {}", name))?;
+            let field_value = value.get(name).parse_err("missing", "field", name)?;
             fields.push((name.clone(), type_.parse(field_value)?));
         }
         Ok(Value::StructValue(fields))
@@ -488,7 +620,7 @@ impl Parser<serde_json::Value> for Struct {
 }
 
 impl Parser<str> for Type {
-    fn parse(&self, value: &str) -> Result<Value, Box<dyn std::error::Error>> {
+    fn parse(&self, value: &str) -> Result<Value> {
         match self {
             Type::Nullable(t) => {
                 if value == "null" {
@@ -503,7 +635,7 @@ impl Parser<str> for Type {
                 let mut bytes = vec![];
                 if !value.is_empty() {
                     for byte in value.split(',') {
-                        bytes.push(byte.parse()?);
+                        bytes.push(byte.parse().parse_err("hash", value)?);
                     }
                 }
                 let mut hash = [0; 4];
@@ -515,7 +647,7 @@ impl Parser<str> for Type {
                 let mut bytes = vec![];
                 if !value.is_empty() {
                     for byte in value.split(',') {
-                        bytes.push(byte.parse()?);
+                        bytes.push(byte.parse().parse_err("bytes", value)?);
                     }
                 }
                 Ok(Value::Bytes(bytes))
@@ -524,7 +656,7 @@ impl Parser<str> for Type {
                 let mut bytes = vec![];
                 if !value.is_empty() {
                     for byte in value.split(',') {
-                        bytes.push(byte.parse()?);
+                        bytes.push(byte.parse().parse_err("collection reference", value)?);
                     }
                 }
                 Ok(Value::CollectionReference(bytes))
@@ -547,7 +679,9 @@ impl Parser<str> for Type {
                             break;
                         };
 
-                        let value = parts.next().expect("Missing value in map");
+                        let value = parts
+                            .next()
+                            .ok_or_else(|| Error::simple("missing value in map"))?;
 
                         key_values.push((k.parse(key)?, v.parse(value)?));
                     }
@@ -556,27 +690,45 @@ impl Parser<str> for Type {
             }
             Type::PublicKey => {
                 let mut values = value.split(',');
-                let kty = values.next().ok_or("missing kty")?;
-                let crv = values.next().ok_or("missing crv")?;
-                let alg = values.next().ok_or("missing alg")?;
-                let use_ = values.next().ok_or("missing use")?;
-                let x_base64 = values.next().ok_or("missing x")?;
-                let y_base64 = values.next().ok_or("missing y")?;
+                let kty = values
+                    .next()
+                    .parse_err("missing field", "kty of public key", value)?;
+                let crv = values
+                    .next()
+                    .parse_err("missing field", "crv of public key", value)?;
+                let alg = values
+                    .next()
+                    .parse_err("missing field", "alg of public key", value)?;
+                let use_ = values
+                    .next()
+                    .parse_err("missing field", "use of public key", value)?;
+                let x_base64 =
+                    values
+                        .next()
+                        .parse_err("missing field", "x of public key", value)?;
+                let y_base64 =
+                    values
+                        .next()
+                        .parse_err("missing field", "y of public key", value)?;
 
-                let x = base64::engine::general_purpose::URL_SAFE.decode(x_base64)?;
-                let y = base64::engine::general_purpose::URL_SAFE.decode(y_base64)?;
+                let x = base64::engine::general_purpose::URL_SAFE
+                    .decode(x_base64)
+                    .wrap_err()?;
+                let y = base64::engine::general_purpose::URL_SAFE
+                    .decode(y_base64)
+                    .wrap_err()?;
 
                 let mut extra_bytes = vec![];
                 extra_bytes.extend_from_slice(&x);
                 extra_bytes.extend_from_slice(&y);
 
                 let key = publickey::Key {
-                    kty: kty.parse().map_err(|_| "invalid kty")?,
-                    crv: crv.parse().map_err(|_| "invalid crv")?,
-                    alg: alg.parse().map_err(|_| "invalid alg")?,
-                    use_: use_.parse().map_err(|_| "invalid use")?,
-                    x: x.try_into().map_err(|_| "invalid x")?,
-                    y: y.try_into().map_err(|_| "invalid y")?,
+                    kty: kty.parse().parse_err("kty", kty)?,
+                    crv: crv.parse().parse_err("crv", crv)?,
+                    alg: alg.parse().parse_err("alg", alg)?,
+                    use_: use_.parse().parse_err("use", use_)?,
+                    x: x.try_into().ok().parse_err("invalid size", "x", x_base64)?,
+                    y: y.try_into().ok().parse_err("invalid size", "y", y_base64)?,
                 };
 
                 Ok(Value::PublicKey(key))
@@ -586,7 +738,7 @@ impl Parser<str> for Type {
 }
 
 impl Parser<serde_json::Value> for Type {
-    fn parse(&self, value: &serde_json::Value) -> Result<Value, Box<dyn std::error::Error>> {
+    fn parse(&self, value: &serde_json::Value) -> Result<Value> {
         match self {
             Type::Nullable(t) => {
                 if value.is_null() {
@@ -600,7 +752,7 @@ impl Parser<serde_json::Value> for Type {
             Type::Hash => {
                 let mut hash = [0u64; 4];
                 if !value.is_null() {
-                    let hex = value.as_str().ok_or("invalid hash")?;
+                    let hex = value.as_str().parse_err("invalid", "hash", "json")?;
                     let hex = hex.trim_start_matches("0x");
 
                     let mut bytes = vec![];
@@ -611,7 +763,8 @@ impl Parser<serde_json::Value> for Type {
                     }
 
                     for (i, byte) in bytes.iter().enumerate() {
-                        hash[i] = u64::from_str_radix(std::str::from_utf8(byte)?, 16)?;
+                        hash[i] = u64::from_str_radix(std::str::from_utf8(byte).wrap_err()?, 16)
+                            .wrap_err()?;
                     }
 
                     hash.reverse();
@@ -619,12 +772,15 @@ impl Parser<serde_json::Value> for Type {
                 Ok(Value::Hash(hash))
             }
             Type::String => Ok(Value::String(
-                value.as_str().ok_or("invalid string")?.to_string(),
+                value
+                    .as_str()
+                    .parse_err("invalid", "string", "json")?
+                    .to_string(),
             )),
             Type::Bytes => {
                 let mut bytes = vec![];
                 if !value.is_null() {
-                    let bytes_str = value.as_str().ok_or("invalid bytes")?;
+                    let bytes_str = value.as_str().parse_err("invalid", "string", "json")?;
                     let bytes_str = bytes_str.trim_start_matches("0x");
                     let bytes_str = bytes_str.trim_start_matches("0X");
                     let bytes_str = bytes_str.trim_end_matches('"');
@@ -636,7 +792,7 @@ impl Parser<serde_json::Value> for Type {
                     let bytes_str = bytes_str.trim_start_matches("0X");
                     let bytes_str = bytes_str.trim();
                     for byte_str in bytes_str.split(',') {
-                        bytes.push(byte_str.parse()?);
+                        bytes.push(byte_str.parse().wrap_err()?);
                     }
                 }
                 Ok(Value::Bytes(bytes))
@@ -651,9 +807,9 @@ impl Parser<serde_json::Value> for Type {
                     //     .ok_or("invalid collection reference")?;
                     let id = value
                         .get("id")
-                        .ok_or("invalid collection reference")?
+                        .parse_err("missing", "collection reference", "json")?
                         .as_str()
-                        .ok_or("invalid collection reference")?;
+                        .parse_err("invalid", "collection reference", "json")?;
                     // bytes.extend_from_slice(collection_id.as_bytes());
                     // bytes.extend_from_slice(b"|");
                     bytes.extend_from_slice(id.as_bytes());
@@ -663,7 +819,7 @@ impl Parser<serde_json::Value> for Type {
             Type::Array(t) => {
                 let mut values = vec![];
                 if !value.is_null() {
-                    for value in value.as_array().ok_or("invalid array")? {
+                    for value in value.as_array().parse_err("invalid", "array", "json")? {
                         values.push(t.parse(value)?);
                     }
                 }
@@ -672,7 +828,7 @@ impl Parser<serde_json::Value> for Type {
             Type::Map(k, v) => {
                 let mut key_values = vec![];
                 if !value.is_null() {
-                    for (key, value) in value.as_object().ok_or("invalid map")? {
+                    for (key, value) in value.as_object().parse_err("invalid", "object", "json")? {
                         key_values.push((k.parse(key.as_str())?, v.parse(value)?));
                     }
                 }
@@ -681,49 +837,53 @@ impl Parser<serde_json::Value> for Type {
             Type::PublicKey => {
                 let kty = value
                     .get("kty")
-                    .ok_or("missing kty")?
+                    .parse_err("missing field", "kty of public key", "json")?
                     .as_str()
-                    .ok_or("invalid kty")?;
+                    .parse_err("invalidi", "kty", "json as str")?;
                 let crv = value
                     .get("crv")
-                    .ok_or("missing crv")?
+                    .parse_err("missing field", "crv of public key", "json")?
                     .as_str()
-                    .ok_or("invalid crv")?;
+                    .parse_err("invalidi", "crv", "json as str")?;
                 let alg = value
                     .get("alg")
-                    .ok_or("missing alg")?
+                    .parse_err("missing field", "alg of public key", "json")?
                     .as_str()
-                    .ok_or("invalid alg")?;
+                    .parse_err("invalidi", "alg", "json as str")?;
                 let use_ = value
                     .get("use")
-                    .ok_or("missing use")?
+                    .parse_err("missing field", "use of public key", "json")?
                     .as_str()
-                    .ok_or("invalid use")?;
+                    .parse_err("invalidi", "use", "json as str")?;
                 let x_base64 = value
                     .get("x")
-                    .ok_or("missing x")?
+                    .parse_err("missing field", "x of public key", "json")?
                     .as_str()
-                    .ok_or("invalid x")?;
+                    .parse_err("invalidi", "x", "json as str")?;
                 let y_base64 = value
                     .get("y")
-                    .ok_or("missing y")?
+                    .parse_err("missing field", "y of public key", "json")?
                     .as_str()
-                    .ok_or("invalid y")?;
+                    .parse_err("invalidi", "y", "json as str")?;
 
-                let x = base64::engine::general_purpose::URL_SAFE.decode(x_base64)?;
-                let y = base64::engine::general_purpose::URL_SAFE.decode(y_base64)?;
+                let x = base64::engine::general_purpose::URL_SAFE
+                    .decode(x_base64)
+                    .wrap_err()?;
+                let y = base64::engine::general_purpose::URL_SAFE
+                    .decode(y_base64)
+                    .wrap_err()?;
 
                 let mut extra_bytes = vec![];
                 extra_bytes.extend_from_slice(&x);
                 extra_bytes.extend_from_slice(&y);
 
                 let key = publickey::Key {
-                    kty: kty.parse().map_err(|_| "invalid kty")?,
-                    crv: crv.parse().map_err(|_| "invalid crv")?,
-                    alg: alg.parse().map_err(|_| "invalid alg")?,
-                    use_: use_.parse().map_err(|_| "invalid use")?,
-                    x: x.try_into().map_err(|_| "invalid x")?,
-                    y: y.try_into().map_err(|_| "invalid y")?,
+                    kty: kty.parse().parse_err("kty", kty)?,
+                    crv: crv.parse().parse_err("crv", crv)?,
+                    alg: alg.parse().parse_err("alg", alg)?,
+                    use_: use_.parse().parse_err("use", use_)?,
+                    x: x.try_into().ok().parse_err("invalid size", "x", x_base64)?,
+                    y: y.try_into().ok().parse_err("invalid size", "y", y_base64)?,
                 };
 
                 Ok(Value::PublicKey(key))
@@ -745,10 +905,7 @@ impl Value {
             Value::Int32(x) => vec![*x as u32 as u64],
             Value::Int64(x) => vec![(*x >> 32) as u64, *x as u64],
             Value::Float32(x) => vec![x.to_bits() as u64],
-            Value::Float64(x) => vec![
-                (x.to_bits() >> 32) as u64,
-                (x.to_bits() & 0xffffffff) as u64,
-            ],
+            Value::Float64(x) => vec![(x.to_bits() >> 32), (x.to_bits() & 0xffffffff)],
             Value::Hash(h) => h.to_vec(),
             Value::String(s) => [s.len() as u64]
                 .into_iter()

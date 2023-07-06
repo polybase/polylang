@@ -365,7 +365,7 @@ impl<'input> Lexer<'input> {
 
         KEYWORDS
             .iter()
-            .find(|(_, k)| k == &&keyword)
+            .find(|(_, k)| k == &keyword)
             .map(|(tok, _)| Ok::<_, LexicalError>((start, tok.clone(), end + c.len_utf8())))
     }
 

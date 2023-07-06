@@ -1,4 +1,5 @@
 use abi::Abi;
+use error::prelude::*;
 use std::{
     collections::HashMap,
     io::{Read, Write},
@@ -99,7 +100,7 @@ impl Args {
         })
     }
 
-    fn this_value(&self) -> Result<abi::Value, Box<dyn std::error::Error>> {
+    fn this_value(&self) -> Result<abi::Value> {
         if self.this_json.is_some() {
             self.this_value_json()
         } else {
@@ -107,24 +108,25 @@ impl Args {
         }
     }
 
-    fn this_value_str(&self) -> Result<abi::Value, Box<dyn std::error::Error>> {
+    fn this_value_str(&self) -> Result<abi::Value> {
         let this_type = self
             .abi
             .this_type
             .as_ref()
-            .ok_or("ABI does not specify a `this` type")?;
+            .ok_or_else(|| Error::simple("ABI does not specify a `this` type"))?;
         let abi::Type::Struct(struct_) = this_type else {
-            return Err("This type is not a struct".into());
+            return Err(Error::simple("This type is not a struct"));
         };
 
         let mut struct_values = Vec::new();
 
         for (field_name, field_type) in &struct_.fields {
             let value_str = self.this_values.get(field_name).ok_or_else(|| {
-                format!(
+                // FIXME: add a separate variant
+                Error::simple(format!(
                     "missing value for field `{}` of type `{:?}`",
                     field_name, field_type
-                )
+                ))
             })?;
 
             let field_value = abi::Parser::parse(field_type, value_str.as_str())?;
@@ -135,18 +137,18 @@ impl Args {
         Ok(abi::Value::StructValue(struct_values))
     }
 
-    fn this_value_json(&self) -> Result<abi::Value, Box<dyn std::error::Error>> {
+    fn this_value_json(&self) -> Result<abi::Value> {
         let Some(this_json) = &self.this_json else {
-            return Err("No JSON value for `this`".into());
+            return Err(Error::simple("No JSON value for `this`"));
         };
 
         let this_type = self
             .abi
             .this_type
             .as_ref()
-            .ok_or("ABI does not specify a `this` type")?;
+            .ok_or_else(|| Error::simple("ABI does not specify a `this` type"))?;
         let abi::Type::Struct(struct_) = this_type else {
-            return Err("This type is not a struct".into());
+            return Err(Error::simple("This type is not a struct"));
         };
 
         let use_defaults = this_json.as_object().map(|o| o.is_empty()).unwrap_or(false);
@@ -157,7 +159,13 @@ impl Args {
                 Some(value) => abi::Parser::parse(field_type, value)?,
                 None if use_defaults => field_type.default_value(),
                 None if matches!(field_type, abi::Type::Nullable(_)) => field_type.default_value(),
-                None => return Err(format!("missing value for field `{}`", field_name).into()),
+                // FIXME: add a separate variant
+                None => {
+                    return Err(Error::simple(format!(
+                        "missing value for field `{}`",
+                        field_name
+                    )))
+                }
             };
 
             struct_values.push((field_name.clone(), field_value));
@@ -168,29 +176,24 @@ impl Args {
 
     fn inputs(
         &self,
-        hasher: impl Fn(&abi::Value) -> Result<[u64; 4], Box<dyn std::error::Error>>,
-    ) -> Result<polylang_prover::Inputs, Box<dyn std::error::Error>> {
+        hasher: impl Fn(&abi::Value) -> Result<[u64; 4]>,
+    ) -> Result<polylang_prover::Inputs> {
         let this = self.this_value()?;
         let this_hash = hasher(&this)?;
 
         Ok(polylang_prover::Inputs {
             abi: self.abi.clone(),
             ctx_public_key: self.ctx.public_key.clone(),
-            this: this.into(),
+            this: this.try_into()?,
             this_hash,
-            args: serde_json::from_str(
-                &self
-                    .advice_tape_json
-                    .as_ref()
-                    .map(|x| x.as_str())
-                    .unwrap_or("[]"),
-            )?,
+            args: serde_json::from_str(self.advice_tape_json.as_deref().unwrap_or("[]"))
+                .wrap_err()?,
         })
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut args = Args::parse(std::env::args())?;
+fn main() -> Result<()> {
+    let mut args = Args::parse(std::env::args()).map_err(Error::simple)?;
 
     let has_this_type = if args.abi.this_type.is_none() {
         args.abi.this_type = Some(abi::Type::Struct(abi::Struct {
@@ -207,9 +210,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.inputs(|v| polylang_prover::hash_this(args.abi.this_type.clone().unwrap(), v))?;
 
     let mut masm_code = String::new();
-    std::io::stdin().read_to_string(&mut masm_code)?;
+    std::io::stdin()
+        .read_to_string(&mut masm_code)
+        .context(IoSnafu)?;
 
-    let program = polylang_prover::compile_program(&args.abi, &masm_code)?;
+    let program = polylang_prover::compile_program(&args.abi, &masm_code)
+        .map_err(|e| e.add_source(masm_code))?;
 
     let (output, prove) = polylang_prover::run(&program, &inputs)?;
 
@@ -220,14 +226,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if has_this_type {
         println!(
             "this_json: {}",
-            Into::<serde_json::Value>::into(output.this(&args.abi)?)
+            TryInto::<serde_json::Value>::try_into(output.this(&args.abi)?)?
         );
     }
 
     if let Some(out) = args.proof_output {
         let proof = prove()?;
-        let mut file = std::fs::File::create(&out)?;
-        file.write_all(&proof.to_bytes())?;
+        let mut file = std::fs::File::create(&out).context(IoSnafu)?;
+        file.write_all(&proof.to_bytes()).context(IoSnafu)?;
 
         println!("Proof saved to {out}");
     }
