@@ -1,5 +1,7 @@
+use abi::publickey::Key;
+use error::prelude::*;
+
 use super::{encoder::Instruction, *};
-use publickey::Key;
 
 // Layout: [key, crv, alg, use, extra_ptr]
 // `extra_ptr` in secp256k1 is pointer to 64 bytes of data,
@@ -205,9 +207,16 @@ pub(crate) fn to_hex(compiler: &mut Compiler, args: &[Symbol]) -> Symbol {
     result
 }
 
-pub(crate) fn hash(compiler: &mut Compiler, args: &[Symbol]) -> Symbol {
-    let public_key = args.get(0).unwrap();
-    assert_eq!(public_key.type_, Type::PublicKey);
+pub(crate) fn hash(compiler: &mut Compiler, args: &[Symbol]) -> Result<Symbol> {
+    ensure!(
+        args.len() == 1,
+        ArgumentsCountSnafu {
+            found: args.len(),
+            expected: 1usize
+        }
+    );
+    let public_key = &args[0];
+    ensure_eq_type!(public_key, Type::PublicKey);
 
     let result = compiler.memory.allocate_symbol(Type::Hash);
 
@@ -288,5 +297,5 @@ pub(crate) fn hash(compiler: &mut Compiler, args: &[Symbol]) -> Symbol {
         ],
     );
 
-    result
+    Ok(result)
 }

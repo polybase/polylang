@@ -191,73 +191,73 @@ ArrayValues: Vec<Expression> = {
 
 pub Expression: Expression = {
     #[precedence(level="0")]
-    <p:Primitive> => Expression::Primitive(p),
+    <lo:@L> <p:Primitive> <hi:@R> => ExpressionKind::Primitive(p).with_span(lo, hi).into(),
     #[precedence(level="0")]
-    <b:Boolean> => Expression::Boolean(b),
+    <lo:@L> <b:Boolean> <hi:@R> => ExpressionKind::Boolean(b).with_span(lo, hi).into(),
     #[precedence(level="0")]
-    <id:Ident> => Expression::Ident(id),
+    <lo:@L> <id:Ident> <hi:@R> => ExpressionKind::Ident(id).with_span(lo, hi).into(),
     #[precedence(level="0")]
-    "{" <fields:ObjectFieldValues> "}" => Expression::Object(Object { fields }),
+    <lo:@L> "{" <fields:ObjectFieldValues> "}" <hi:@R> => ExpressionKind::Object(Object { fields }).with_span(lo, hi).into(),
     #[precedence(level="1")]
-    <l:Expression> "[" <r:Expression> "]" => Expression::Index(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "[" <r:Expression> "]" <hi:@R> => ExpressionKind::Index(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="1")]
-    <l:Expression> "." <id:Ident> => Expression::Dot(Box::new(l), id),
+    <lo:@L> <l:Expression> "." <id:Ident> <hi:@R> => ExpressionKind::Dot(Box::new(l), id).with_span(lo, hi).into(),
     #[precedence(level="1")]
-    <l:Expression> "(" <args:ArgumentList> ")" => Expression::Call(Box::new(l), args),
+    <lo:@L> <l:Expression> "(" <args:ArgumentList> ")" <hi:@R> => ExpressionKind::Call(Box::new(l), args).with_span(lo, hi).into(),
     #[precedence(level="1")]
     "(" <e:Expression> ")" => e,
     #[precedence(level="2")]
-    <array:Array> => Expression::Array(array),
+    <lo:@L> <array:Array> <hi:@R> => ExpressionKind::Array(array).with_span(lo, hi).into(),
     #[precedence(level="2")]
-    "!" <l:Expression> => Expression::Not(Box::new(l)),
+    <lo:@L> "!" <l:Expression> <hi:@R> => ExpressionKind::Not(Box::new(l)).with_span(lo, hi).into(),
     #[precedence(level="2")]
-    "~" <l:Expression> => Expression::BitNot(Box::new(l)),
+    <lo:@L> "~" <l:Expression> <hi:@R> => ExpressionKind::BitNot(Box::new(l)).with_span(lo, hi).into(),
     #[precedence(level="3")] #[assoc(side="left")]
-    <l:Expression> "**" <r:Expression> => Expression::Exponent(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "**" <r:Expression> <hi:@R> => ExpressionKind::Exponent(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="4")] #[assoc(side="left")]
-    <l:Expression> "*" <r:Expression> => Expression::Multiply(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "*" <r:Expression> <hi:@R> => ExpressionKind::Multiply(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="4")] #[assoc(side="left")]
-    <l:Expression> "/" <r:Expression> => Expression::Divide(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "/" <r:Expression> <hi:@R> => ExpressionKind::Divide(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="4")] #[assoc(side="left")]
-    <l:Expression> "%" <r:Expression> => Expression::Modulo(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "%" <r:Expression> <hi:@R> => ExpressionKind::Modulo(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="5")] #[assoc(side="left")]
-    <l:Expression> "+" <r:Expression> => Expression::Add(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "+" <r:Expression> <hi:@R> => ExpressionKind::Add(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="5")] #[assoc(side="left")]
-    <l:Expression> "-" <r:Expression> => Expression::Subtract(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "-" <r:Expression> <hi:@R> => ExpressionKind::Subtract(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="6")] #[assoc(side="left")]
-    <l:Expression> "<" <second:("<")?> <r:Expression> => match second {
-        None => Expression::LessThan(Box::new(l), Box::new(r)),
-        Some(_) => Expression::ShiftLeft(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "<" <second:("<")?> <r:Expression> <hi:@R> => match second {
+        None => ExpressionKind::LessThan(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
+        Some(_) => ExpressionKind::ShiftLeft(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     },
     #[precedence(level="6")] #[assoc(side="left")]
-    <l:Expression> ">" <second:(">")?> <r:Expression> => match second {
-        None => Expression::GreaterThan(Box::new(l), Box::new(r)),
-        Some(_) => Expression::ShiftRight(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> ">" <second:(">")?> <r:Expression> <hi:@R> => match second {
+        None => ExpressionKind::GreaterThan(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
+        Some(_) => ExpressionKind::ShiftRight(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     },
     #[precedence(level="7")] #[assoc(side="left")]
-    <l:Expression> "&" <r:Expression> => Expression::BitAnd(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "&" <r:Expression> <hi:@R> => ExpressionKind::BitAnd(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="8")] #[assoc(side="left")]
-    <l:Expression> "^" <r:Expression> => Expression::BitXor(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "^" <r:Expression> <hi:@R> => ExpressionKind::BitXor(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="9")] #[assoc(side="left")]
-    <l:Expression> "|" <r:Expression> => Expression::BitOr(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "|" <r:Expression> <hi:@R> => ExpressionKind::BitOr(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="10")] #[assoc(side="none")]
-    <l:Expression> "<=" <r:Expression> => Expression::LessThanOrEqual(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "<=" <r:Expression> <hi:@R> => ExpressionKind::LessThanOrEqual(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="10")] #[assoc(side="none")]
-    <l:Expression> ">=" <r:Expression> => Expression::GreaterThanOrEqual(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> ">=" <r:Expression> <hi:@R> => ExpressionKind::GreaterThanOrEqual(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="11")] #[assoc(side="none")]
-    <l:Expression> "==" <r:Expression> => Expression::Equal(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "==" <r:Expression> <hi:@R> => ExpressionKind::Equal(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="11")] #[assoc(side="none")]
-    <l:Expression> "!=" <r:Expression> => Expression::NotEqual(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "!=" <r:Expression> <hi:@R> => ExpressionKind::NotEqual(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="12")] #[assoc(side="left")]
-    <l:Expression> "&&" <r:Expression> => Expression::And(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "&&" <r:Expression> <hi:@R> => ExpressionKind::And(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="13")] #[assoc(side="left")]
-    <l:Expression> "||" <r:Expression> => Expression::Or(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "||" <r:Expression> <hi:@R> => ExpressionKind::Or(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="14")] #[assoc(side="left")]
-    <l:Expression> "-=" <r:Expression> => Expression::AssignSub(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "-=" <r:Expression> <hi:@R> => ExpressionKind::AssignSub(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="14")] #[assoc(side="left")]
-    <l:Expression> "+=" <r:Expression> => Expression::AssignAdd(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "+=" <r:Expression> <hi:@R> => ExpressionKind::AssignAdd(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="14")] #[assoc(side="none")]
-    <l:Expression> "=" <r:Expression> => Expression::Assign(Box::new(l), Box::new(r)),
+    <lo:@L> <l:Expression> "=" <r:Expression> <hi:@R> => ExpressionKind::Assign(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
 };
 
 ArgumentList: Vec<Expression> = {
@@ -283,25 +283,25 @@ PrimitiveArgumentList: Vec<Primitive> = {
 };
 
 CompoundStatement: Statement = {
-    <i:If> => Statement::If(i),
-    <w:While> => Statement::While(w),
-    <f:For> => Statement::For(f),
+    <lo:@L> <i:If> <hi:@R> => StatementKind::If(i).with_span(lo, hi),
+    <lo:@L> <w:While> <hi:@R> => StatementKind::While(w).with_span(lo, hi),
+    <lo:@L> <f:For> <hi:@R> => StatementKind::For(f).with_span(lo, hi),
 };
 
 Let: Let = {
     "let" <i:Ident> "=" <e:Expression> => Let { identifier: i, expression: e },
 };
 
-SmallStatement: Statement = {
-    "break" => Statement::Break,
-    "return" <e:Expression> => Statement::Return(e),
-    "throw" <e:Expression> => Statement::Throw(e),
-    <l:Let> => Statement::Let(l),
-    <e:Expression> => Statement::Expression(e),
+SmallStatement: StatementKind = {
+    "break" => StatementKind::Break,
+    "return" <e:Expression> => StatementKind::Return(e),
+    "throw" <e:Expression> => StatementKind::Throw(e),
+    <l:Let> => StatementKind::Let(l),
+    <e:Expression> => StatementKind::Expression(e),
 };
 
 SimpleStatement: Statement = {
-    <s:SmallStatement> ";" => s,
+    <lo:@L> <s:SmallStatement> ";" <hi:@R> => s.with_span(lo, hi),
 };
 
 Statement: Statement = {
@@ -315,9 +315,9 @@ StatementsOrSimpleStatement: Vec<Statement> = {
 };
 
 If: If = {
-    "if" "(" <e:Expression> ")" <s:StatementsOrSimpleStatement> <s2:("else" StatementsOrSimpleStatement)?> => If {
-        condition: e,
-        then_statements: s,
+    "if" "(" <condition:Expression> ")" <then_statements:StatementsOrSimpleStatement> <s2:("else" StatementsOrSimpleStatement)?> => If {
+        condition,
+        then_statements,
         else_statements: s2.map(|s| s.1).unwrap_or(vec![]),
     },
 };
