@@ -38,6 +38,8 @@ extern {
         "else" => lexer::Tok::Else,
         "while" => lexer::Tok::While,
         "for" => lexer::Tok::For,
+        "in" => lexer::Tok::In,
+        "of" => lexer::Tok::Of,
         "function" => lexer::Tok::Function,
         "@index" => lexer::Tok::Index,
         "collection" => lexer::Tok::Collection,
@@ -330,17 +332,32 @@ While: While = {
 };
 
 For: For = {
-    "for" "(" <init:Let> ";" <cond:Expression> ";" <post:Expression> ")" "{" <statements:Statement*> "}" => For {
+    "for" "(" <for_kind: ForKind> ")" "{" <statements:Statement*> "}" => For {
+        for_kind,
+        statements,
+    }
+}
+
+ForKind: ForKind = {
+    <init:Let> ";" <cond:Expression> ";" <post:Expression> => ForKind::Basic {
         initial_statement: ForInitialStatement::Let(init),
         condition: cond,
         post_statement: post,
-        statements,
     },
-    "for" "(" <init:Expression> ";" <cond:Expression> ";" <post:Expression> ")" "{" <statements:Statement*> "}" => For {
+    <init:Expression> ";" <cond:Expression> ";" <post:Expression> => ForKind::Basic {
         initial_statement: ForInitialStatement::Expression(init),
         condition: cond,
         post_statement: post,
-        statements,
+    },
+    "let" <identifier:Ident> "in" <iterable:Expression> => ForKind::ForEach {
+        for_each_type: ForEachType::In,
+        identifier,
+        iterable,
+    },
+    "let" <identifier:Ident> "of" <iterable:Expression> => ForKind::ForEach {
+        for_each_type: ForEachType::Of,
+        identifier,
+        iterable,
     },
 };
 

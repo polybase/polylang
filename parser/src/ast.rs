@@ -205,7 +205,7 @@ pub trait WithSpan: Sized {
 }
 impl<T> WithSpan for T {}
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum ExpressionKind {
     Primitive(Primitive),
     Ident(String),
@@ -263,10 +263,22 @@ pub struct While {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct For {
-    pub initial_statement: ForInitialStatement,
-    pub condition: Expression,
-    pub post_statement: Expression,
+    pub for_kind: ForKind,
     pub statements: Vec<Statement>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ForKind {
+    Basic {
+        initial_statement: ForInitialStatement,
+        condition: Expression,
+        post_statement: Expression,
+    },
+    ForEach {
+        for_each_type: ForEachType,
+        identifier: String,
+        iterable: Expression,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -275,14 +287,24 @@ pub enum ForInitialStatement {
     Expression(Expression),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, derive_more::Display)]
+pub enum ForEachType {
+    // for .. in ..
+    #[display(fmt = "in")]
+    In,
+    // for .. of ..
+    #[display(fmt = "of")]
+    Of,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum Primitive {
     // (value, has_decimal_point)
     Number(f64, bool),
     String(String),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Object {
     pub fields: Vec<(String, Expression)>,
 }
