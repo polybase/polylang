@@ -8,6 +8,8 @@ struct Args {
     advice_tape_json: Option<String>,
     this_values: HashMap<String, String>,
     this_json: Option<serde_json::Value>,
+    /// Map of collection name to a list of records
+    other_records: HashMap<String, Vec<serde_json::Value>>,
     abi: Abi,
     ctx: Ctx,
     proof_output: Option<String>,
@@ -26,6 +28,7 @@ impl Args {
         let mut abi = Abi::default();
         let mut this_values = HashMap::new();
         let mut this_json = None;
+        let mut other_records = HashMap::new();
         let mut ctx = None;
         let mut proof_output = None;
 
@@ -55,6 +58,25 @@ impl Args {
                         .map_err(|e| format!("invalid value for argument {}: {}", value, e))?;
 
                     this_json = Some(this_value);
+                }
+                "--other-record" => {
+                    let collection_name = args
+                        .next()
+                        .ok_or_else(|| format!("missing value for argument {}", arg))?;
+
+                    let record_json_value = args
+                        .next()
+                        .ok_or_else(|| format!("missing value for argument {}", arg))?;
+
+                    let record_json = serde_json::from_str::<serde_json::Value>(&record_json_value)
+                        .map_err(|e| {
+                            format!("invalid value for argument {}: {}", record_json_value, e)
+                        })?;
+
+                    other_records
+                        .entry(collection_name)
+                        .or_insert_with(Vec::new)
+                        .push(record_json);
                 }
                 "--ctx" => {
                     let value = args
@@ -94,6 +116,7 @@ impl Args {
             abi,
             this_values,
             this_json,
+            other_records,
             ctx: ctx.unwrap_or_default(),
             proof_output,
         })
@@ -178,6 +201,7 @@ impl Args {
             ctx_public_key: self.ctx.public_key.clone(),
             this: this.into(),
             this_hash,
+            other_records: self.other_records.clone(),
             args: serde_json::from_str(
                 &self
                     .advice_tape_json
@@ -189,7 +213,7 @@ impl Args {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn try_main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = Args::parse(std::env::args())?;
 
     let has_this_type = if args.abi.this_type.is_none() {
@@ -234,4 +258,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+fn main() {
+    if let Err(e) = try_main() {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    }
 }

@@ -13,7 +13,7 @@ name = "compile"
 path = "src/bin/compile/main.rs"
 
 [workspace]
-members = ["parser", "prover", "abi", "miden-run"]
+members = ["parser", "prover", "abi", "miden-run", "tests"]
 
 [features]
 default = ["parser", "bindings"]
