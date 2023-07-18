@@ -46,7 +46,7 @@ fn run(
     args: Vec<serde_json::Value>,
     ctx_public_key: Option<abi::publickey::Key>,
     other_records: HashMap<String, Vec<serde_json::Value>>,
-) -> Result<(abi::Abi, polylang_prover::RunOutput), Box<dyn std::error::Error>> {
+) -> Result<(abi::Abi, polylang_prover::RunOutput), error::Error> {
     let mut program = None;
     polylang::parse(polylang_code, "test", &mut program).unwrap();
 

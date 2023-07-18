@@ -3525,7 +3525,7 @@ pub fn compile(
         let (this_symbol, arg_symbols) =
             read_collection_inputs(&mut compiler, collection_struct.clone(), &param_types)?;
 
-        let ctx_pk = struct_field(&mut compiler, &ctx, "publicKey").unwrap();
+        let ctx_pk = struct_field(&mut compiler, &ctx, "publicKey")?;
         if function.is_some() {
             let auth_result = compile_call_authorization_proof(
                 &mut compiler,
@@ -3665,7 +3665,7 @@ fn compile_read_authorization_proof(
     }
 
     for field in collection.fields.iter().filter(|f| f.read) {
-        let field_symbol = struct_field(compiler, &struct_symbol, &field.name).unwrap();
+        let field_symbol = struct_field(compiler, &struct_symbol, &field.name)?;
         compiler.memory.read(
             &mut compiler.instructions,
             field_symbol.memory_addr,
@@ -3707,7 +3707,12 @@ fn compile_call_authorization_proof(
     }
 
     let scope = compiler.root_scope;
-    let collection = scope.find_collection(collection_name).unwrap();
+    let Some(collection) = scope.find_collection(collection_name) else {
+        return Err(Error::simple(format!(
+            "Collection not found: {}",
+            collection_name
+        )));
+    };
     // let collection_struct = Struct::from(collection.clone());
     let Some((_, function)) = collection
         .functions
@@ -3840,12 +3845,12 @@ fn compile_check_eq_or_ownership(
                     string::new(compiler, "Record hash does not match the expected hash");
                 compile_function_call(compiler, assert, &[is_hash_eq, error_str], None)?;
 
-                let record_id = struct_field(compiler, &record, "id").unwrap();
+                let record_id = struct_field(compiler, &record, "id")?;
                 let is_id_eq = compile_eq(compiler, &record_id, &id);
                 let (error_str, _) = string::new(compiler, "Record id does not match");
                 compile_function_call(compiler, assert, &[is_id_eq, error_str], None)?;
 
-                let result = compile_check_ownership(compiler, &record, collection_type, auth_pk);
+                let result = compile_check_ownership(compiler, &record, collection_type, auth_pk)?;
 
                 std::mem::swap(compiler.instructions, &mut insts);
                 (insts, result)
@@ -3947,25 +3952,14 @@ fn compile_check_ownership(
     struct_symbol: &Symbol,
     collection: &Collection,
     auth_pk: &Symbol,
-) -> Symbol {
+) -> Result<Symbol> {
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
 
     for delegate_field in collection.fields.iter().filter(|f| f.delegate) {
-        let delegate_symbol = struct_field(compiler, struct_symbol, &delegate_field.name).unwrap();
-
-        let is_eq = match &delegate_symbol.type_ {
-            Type::PublicKey => compile_eq(compiler, &delegate_symbol, auth_pk),
-            Type::Nullable(t) if **t == Type::PublicKey => {
-                compile_eq(compiler, &delegate_symbol, auth_pk)
-            }
-            Type::CollectionReference { collection } => {
-                todo!()
-            }
-            Type::Array(_) => todo!(),
-            _ => todo!(),
-        };
+        let delegate_symbol = struct_field(compiler, struct_symbol, &delegate_field.name)?;
+        let is_eq = compile_check_eq_or_ownership(compiler, delegate_symbol, auth_pk)?;
 
         compiler.instructions.push(encoder::Instruction::If {
             condition: vec![encoder::Instruction::MemLoad(Some(is_eq.memory_addr))],
@@ -3977,7 +3971,7 @@ fn compile_check_ownership(
         });
     }
 
-    result
+    Ok(result)
 }
 
 /// collection_struct is the type used for `record` types

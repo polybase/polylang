@@ -1,11 +1,7 @@
 use abi::{publickey, Abi, Parser, Type, TypeReader, Value};
 use error::prelude::*;
 use miden::{ExecutionProof, ProofOptions};
-use miden_processor::{
-    math::Felt,
-    utils::{IntoBytes, Serializable},
-    Program, ProgramInfo, StackInputs, Word,
-};
+use miden_processor::{math::Felt, utils::Serializable, Program, ProgramInfo, StackInputs};
 use polylang::compiler;
 use std::{collections::HashMap, fmt::Debug};
 
@@ -256,7 +252,7 @@ impl Inputs {
         }
 
         let mut advice_map = Vec::<([u8; 32], _)>::new();
-        for (collection, records) in other_records {
+        for (_collection, records) in other_records {
             for (position, (id_type, id, record)) in records.iter().enumerate() {
                 let id_hash = hash_this(id_type.clone(), id)?;
 

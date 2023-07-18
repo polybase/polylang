@@ -9,5 +9,6 @@ edition = "2021"
 polylang-prover = { path = "../prover" }
 polylang = { path = ".." }
 abi = { path = "../abi" }
+error = { path = "../error" }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
