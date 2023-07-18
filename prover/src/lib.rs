@@ -20,6 +20,7 @@ const fn mont_red_cst(x: u128) -> u64 {
 pub struct Output {
     pub run_output: RunOutput,
     pub stack: Vec<u64>,
+    pub input_stack: Vec<u64>,
     pub self_destructed: bool,
     pub new_this: Value,
     pub new_hash: [u64; 4],
@@ -327,6 +328,7 @@ pub fn prove(program: &Program, inputs: &Inputs) -> Result<Output> {
         new_hash: output.stack[0..4].try_into().wrap_err()?,
         proof: proof.to_bytes(),
         stack: output.stack.clone(),
+        input_stack: output.input_stack.clone(),
         run_output: output,
     })
 }
@@ -335,6 +337,7 @@ pub fn prove(program: &Program, inputs: &Inputs) -> Result<Output> {
 pub struct RunOutput {
     memory: HashMap<u64, [u64; 4]>,
     stack: Vec<u64>,
+    input_stack: Vec<u64>,
 }
 
 impl RunOutput {
@@ -479,6 +482,12 @@ pub fn run<'a>(
         .map(|x| mont_red_cst(x.inner() as _))
         .collect::<Vec<_>>();
 
+    let input_stack_values = input_stack
+        .values()
+        .iter()
+        .map(|x| mont_red_cst(x.inner() as _))
+        .collect::<Vec<_>>();
+
     let memory = last_ok_state
         .memory
         .iter()
@@ -498,6 +507,7 @@ pub fn run<'a>(
     Ok((
         RunOutput {
             stack: output_stack,
+            input_stack: input_stack_values,
             memory,
         },
         move || {
