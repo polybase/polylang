@@ -3386,7 +3386,7 @@ pub fn compile(
                 .parameters
                 .iter()
                 .map(|p| ast_param_type_to_type(p.required, &p.type_, collection_struct.as_ref()))
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>>>()?;
 
             (Some(function), param_types)
         }
@@ -3459,7 +3459,7 @@ pub fn compile(
                 // [full_width]
             ]);
 
-            let ptr = dynamic_alloc(&mut compiler, &[full_width.clone()]);
+            let ptr = dynamic_alloc(&mut compiler, &[full_width.clone()])?;
 
             compiler.instructions.extend([
                 encoder::Instruction::While {
@@ -3533,14 +3533,14 @@ pub fn compile(
                 this_symbol.as_ref().unwrap(),
                 collection_name.unwrap(),
                 function_name,
-            );
+            )?;
 
             let assert_fn = compiler.root_scope.find_function("assert").unwrap();
             let (error_str, _) = string::new(
                 &mut compiler,
                 "You are not authorized to call this function",
             );
-            compile_function_call(&mut compiler, assert_fn, &[auth_result, error_str], None);
+            compile_function_call(&mut compiler, assert_fn, &[auth_result, error_str], None)?;
         }
 
         this_addr = this_symbol.as_ref().map(|ts| ts.memory_addr);
@@ -3568,7 +3568,7 @@ pub fn compile(
                 this_symbol.as_ref().unwrap(),
                 collection.as_ref().unwrap(),
                 &ctx_pk,
-            ),
+            )?,
             Some(function) => compile_ast_function_call(
                 function,
                 &mut compiler,
@@ -3651,7 +3651,7 @@ fn compile_read_authorization_proof(
     struct_symbol: &Symbol,
     collection: &Collection,
     auth_pk: &Symbol,
-) -> Symbol {
+) -> Result<Symbol> {
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
@@ -3661,7 +3661,7 @@ fn compile_read_authorization_proof(
         compiler
             .instructions
             .push(encoder::Instruction::MemStore(Some(result.memory_addr)));
-        return result;
+        return Ok(result);
     }
 
     for field in collection.fields.iter().filter(|f| f.read) {
@@ -3672,7 +3672,7 @@ fn compile_read_authorization_proof(
             field_symbol.type_.miden_width(),
         );
 
-        let passed = compile_check_eq_or_ownership(compiler, field_symbol, auth_pk);
+        let passed = compile_check_eq_or_ownership(compiler, field_symbol, auth_pk)?;
         compiler.instructions.push(encoder::Instruction::If {
             condition: vec![encoder::Instruction::MemLoad(Some(passed.memory_addr))],
             then: vec![
@@ -3683,7 +3683,7 @@ fn compile_read_authorization_proof(
         });
     }
 
-    result
+    Ok(result)
 }
 
 fn compile_call_authorization_proof(
@@ -3693,7 +3693,7 @@ fn compile_call_authorization_proof(
     collection_symbol: &Symbol,
     collection_name: &str,
     function_name: &str,
-) -> Symbol {
+) -> Result<Symbol> {
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
@@ -3703,7 +3703,7 @@ fn compile_call_authorization_proof(
         compiler
             .instructions
             .push(encoder::Instruction::MemStore(Some(result.memory_addr)));
-        return result;
+        return Ok(result);
     }
 
     let scope = compiler.root_scope;
@@ -3734,11 +3734,11 @@ fn compile_call_authorization_proof(
             compiler
                 .instructions
                 .push(encoder::Instruction::MemStore(Some(result.memory_addr)));
-            return result;
+            return Ok(result);
         }
         // Neither the collection nor the function have a @call directive,
         // no calls are allowed.
-        (false, false) => return result,
+        (false, false) => return Ok(result),
     }
 
     let mut call_fields = call_decorators
@@ -3752,19 +3752,16 @@ fn compile_call_authorization_proof(
         compiler
             .instructions
             .push(encoder::Instruction::MemStore(Some(result.memory_addr)));
-        return result;
+        return Ok(result);
     }
 
     for call_field_path in call_fields {
         let mut current_field = collection_symbol.clone();
         for field in call_field_path {
-            current_field = match struct_field(compiler, &current_field, field) {
-                Some(s) => s,
-                None => panic!("Field {field} not found in {current_field:?}"),
-            };
+            current_field = struct_field(compiler, &current_field, field)?;
         }
 
-        let passed = compile_check_eq_or_ownership(compiler, current_field, auth_pk);
+        let passed = compile_check_eq_or_ownership(compiler, current_field, auth_pk)?;
         compiler.instructions.push(encoder::Instruction::If {
             condition: vec![encoder::Instruction::MemLoad(Some(passed.memory_addr))],
             then: vec![
@@ -3775,14 +3772,14 @@ fn compile_call_authorization_proof(
         });
     }
 
-    result
+    Ok(result)
 }
 
 fn compile_check_eq_or_ownership(
     compiler: &mut Compiler,
     field: Symbol,
     auth_pk: &Symbol,
-) -> Symbol {
+) -> Result<Symbol> {
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
@@ -3795,7 +3792,7 @@ fn compile_check_eq_or_ownership(
             let collection_record_hashes = compiler.get_record_dependency(collection_type).unwrap();
             let id = struct_field(compiler, &field, "id").unwrap();
 
-            let hash_id = hash(compiler, id.clone());
+            let hash_id = hash(compiler, id.clone())?;
             compiler.memory.read(
                 compiler.instructions,
                 hash_id.memory_addr,
@@ -3812,7 +3809,7 @@ fn compile_check_eq_or_ownership(
             let public_hash_position = read_advice_generic(
                 compiler,
                 &Type::Nullable(Box::new(Type::PrimitiveType(PrimitiveType::UInt32))),
-            );
+            )?;
 
             let (not_null_instructions, result) = {
                 let mut insts = vec![];
@@ -3830,8 +3827,8 @@ fn compile_check_eq_or_ownership(
                     compiler,
                     &record,
                     &Struct::from(collection_type.clone()),
-                );
-                let actual_record_hash = hash(compiler, record.clone());
+                )?;
+                let actual_record_hash = hash(compiler, record.clone())?;
 
                 let is_hash_eq = compile_eq(
                     compiler,
@@ -3841,12 +3838,12 @@ fn compile_check_eq_or_ownership(
                 let assert = compiler.root_scope.find_function("assert").unwrap();
                 let (error_str, _) =
                     string::new(compiler, "Record hash does not match the expected hash");
-                compile_function_call(compiler, assert, &[is_hash_eq, error_str], None);
+                compile_function_call(compiler, assert, &[is_hash_eq, error_str], None)?;
 
                 let record_id = struct_field(compiler, &record, "id").unwrap();
                 let is_id_eq = compile_eq(compiler, &record_id, &id);
                 let (error_str, _) = string::new(compiler, "Record id does not match");
-                compile_function_call(compiler, assert, &[is_id_eq, error_str], None);
+                compile_function_call(compiler, assert, &[is_id_eq, error_str], None)?;
 
                 let result = compile_check_ownership(compiler, &record, collection_type, auth_pk);
 
@@ -3864,7 +3861,7 @@ fn compile_check_eq_or_ownership(
 
             result
         }
-        Type::Array(t) => {
+        Type::Array(_) => {
             // We need to iterate over the array and check if any of the elements match
             let index = compiler
                 .memory
@@ -3884,8 +3881,11 @@ fn compile_check_eq_or_ownership(
                 let mut insts = vec![];
                 std::mem::swap(compiler.instructions, &mut insts);
 
-                let result =
-                    compile_check_eq_or_ownership(compiler, current_array_element.clone(), auth_pk);
+                let result = compile_check_eq_or_ownership(
+                    compiler,
+                    current_array_element.clone(),
+                    auth_pk,
+                )?;
 
                 std::mem::swap(compiler.instructions, &mut insts);
                 (result, insts)
@@ -3939,7 +3939,7 @@ fn compile_check_eq_or_ownership(
         else_: vec![],
     });
 
-    result
+    Ok(result)
 }
 
 fn compile_check_ownership(
@@ -3951,8 +3951,6 @@ fn compile_check_ownership(
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
-
-    let collection_struct = Struct::from(collection.clone());
 
     for delegate_field in collection.fields.iter().filter(|f| f.delegate) {
         let delegate_symbol = struct_field(compiler, struct_symbol, &delegate_field.name).unwrap();

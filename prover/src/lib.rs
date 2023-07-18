@@ -57,12 +57,8 @@ fn json_to_this_value(this_json: &serde_json::Value, this_type: &Type) -> Result
     Ok(Value::StructValue(struct_values))
 }
 
-pub fn hash_this(type_: Type, this: &Value) -> Result<[u64; 4], Box<dyn std::error::Error>> {
-    let Type::Struct(struct_type) = struct_type else {
-        return Err(Error::simple("This type is not a struct"));
-    };
-
-    let hasher_program = compiler::compile_struct_hasher(struct_type)?;
+pub fn hash_this(type_: Type, this: &Value) -> Result<[u64; 4]> {
+    let hasher_program = compiler::compile_hasher(type_)?;
 
     let assembler = miden::Assembler::default()
         .with_library(&miden_stdlib::StdLibrary::default())
@@ -168,9 +164,7 @@ impl Inputs {
     }
 
     /// Returns a map from collection name to a vector of record id type, record id and record value.
-    fn other_records(
-        &self,
-    ) -> Result<HashMap<String, Vec<(Type, Value, Value)>>, Box<dyn std::error::Error>> {
+    fn other_records(&self) -> Result<HashMap<String, Vec<(Type, Value, Value)>>> {
         let mut result = HashMap::new();
 
         for x in &self.abi.other_records {
@@ -216,7 +210,7 @@ impl Inputs {
     fn all_known_records(
         &self,
         other_records: &HashMap<String, Vec<(Type, Value, Value)>>,
-    ) -> Result<Vec<(Type, Value)>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<(Type, Value)>> {
         let mut result = vec![];
 
         let this_value = self.this_value()?;
@@ -228,13 +222,15 @@ impl Inputs {
             .chain([&this_value]);
 
         for known_record in known_records {
-            known_record.visit(&mut |value| {
-                if let Value::CollectionReference(id) = value {
-                    result.push((Type::String, Value::String(String::from_utf8(id.clone())?)));
-                }
+            known_record
+                .visit(&mut |value| {
+                    if let Value::CollectionReference(id) = value {
+                        result.push((Type::String, Value::String(String::from_utf8(id.clone())?)));
+                    }
 
-                Ok::<_, Box<dyn std::error::Error>>(())
-            })?;
+                    Ok::<_, std::string::FromUtf8Error>(())
+                })
+                .wrap_err()?;
         }
 
         Ok(result)
@@ -318,9 +314,9 @@ impl Inputs {
 
         Ok(miden::MemAdviceProvider::from(
             miden::AdviceInputs::default()
-                .with_stack_values(advice_tape)?
-                .with_map(advice_map)
-                .wrap_err()?,
+                .with_stack_values(advice_tape)
+                .wrap_err()?
+                .with_map(advice_map),
         ))
     }
 }
@@ -427,10 +423,7 @@ impl RunOutput {
 pub fn run<'a>(
     program: &'a Program,
     inputs: &Inputs,
-) -> Result<(
-    RunOutput,
-    impl FnOnce() -> Result<ExecutionProof, Box<dyn std::error::Error>> + 'a,
-)> {
+) -> Result<(RunOutput, impl FnOnce() -> Result<ExecutionProof> + 'a)> {
     let other_records = inputs.other_records()?;
     let input_stack = inputs.stack(&other_records)?;
     let advice_tape = inputs.advice_tape(&other_records)?;
@@ -458,7 +451,7 @@ pub fn run<'a>(
         }
         (Some(state), Some(e)) => {
             if state.memory.iter().find(|(a, _)| *a == 1).is_none() {
-                return Err(Box::new(e));
+                return Err(e);
             }
 
             let Value::String(s) = Type::String.read(
