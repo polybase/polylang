@@ -14,9 +14,10 @@ mod string;
 mod uint32;
 mod uint64;
 
+use abi::{Abi, PrimitiveType, StdVersion, Struct, Type};
+use error::prelude::*;
+
 use crate::ast::{self, Expression, Statement};
-use abi::{self, publickey::Key, Abi, PrimitiveType, StdVersion, Struct, Type};
-use std::ops::Deref;
 
 macro_rules! comment {
     ($compiler:expr, $($arg:tt)*) => {
@@ -112,12 +113,12 @@ lazy_static::lazy_static! {
             "writeMemory".to_string(),
             None,
             Function::Builtin(Box::new(&|compiler, _, args| {
-                assert_eq!(args.len(), 2);
+                ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
                 let address = args.get(0).unwrap();
                 let value = args.get(1).unwrap();
 
-                assert_eq!(address.type_, Type::PrimitiveType(PrimitiveType::UInt32));
-                assert_eq!(value.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+                ensure_eq_type!(address, Type::PrimitiveType(PrimitiveType::UInt32));
+                ensure_eq_type!(value, Type::PrimitiveType(PrimitiveType::UInt32));
 
                 compiler.memory.read(
                     compiler.instructions,
@@ -136,11 +137,10 @@ lazy_static::lazy_static! {
                     .push(encoder::Instruction::MemStore(None));
                 // []
 
-                Symbol {
+                Ok(Symbol {
                     type_: Type::PrimitiveType(PrimitiveType::UInt32),
                     memory_addr: 0,
-
-                }
+                })
             })),
         ));
 
@@ -159,7 +159,7 @@ lazy_static::lazy_static! {
                     &[ValueSource::Stack],
                 );
 
-                symbol
+                Ok(symbol)
             })),
         ));
 
@@ -167,14 +167,15 @@ lazy_static::lazy_static! {
             "unsafeToString".to_string(),
             None,
             Function::Builtin(Box::new(&|compiler, _, args| {
+                ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
                 let length = args.get(0).unwrap();
                 let address_ptr = args.get(1).unwrap();
 
-                assert_eq!(length.type_, Type::PrimitiveType(PrimitiveType::UInt32));
-                assert_eq!(address_ptr.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+                ensure_eq_type!(length, Type::PrimitiveType(PrimitiveType::UInt32));
+                ensure_eq_type!(address_ptr, Type::PrimitiveType(PrimitiveType::UInt32));
 
                 let two = uint32::new(compiler, 2);
-                let mut s = dynamic_alloc(compiler, &[two]);
+                let mut s = dynamic_alloc(compiler, &[two])?;
                 s.type_ = Type::String;
 
                 compiler.memory.read(
@@ -199,7 +200,7 @@ lazy_static::lazy_static! {
                     &vec![ValueSource::Stack; address_ptr.type_.miden_width() as _],
                 );
 
-                s
+                Ok(s)
             })),
         ));
 
@@ -207,11 +208,12 @@ lazy_static::lazy_static! {
             "unsafeToBytes".to_string(),
             None,
             Function::Builtin(Box::new(&|compiler, _, args| {
+                ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
                 let length = args.get(0).unwrap();
                 let address_ptr = args.get(1).unwrap();
 
-                assert_eq!(length.type_, Type::PrimitiveType(PrimitiveType::UInt32));
-                assert_eq!(address_ptr.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+                ensure_eq_type!(length, Type::PrimitiveType(PrimitiveType::UInt32));
+                ensure_eq_type!(address_ptr, Type::PrimitiveType(PrimitiveType::UInt32));
 
                 let s = compiler.memory.allocate_symbol(Type::Bytes);
 
@@ -237,7 +239,7 @@ lazy_static::lazy_static! {
                     &vec![ValueSource::Stack; address_ptr.type_.miden_width() as _],
                 );
 
-                s
+                Ok(s)
             })),
         ));
 
@@ -245,18 +247,14 @@ lazy_static::lazy_static! {
             "unsafeToPublicKey".to_string(),
             None,
             Function::Builtin(Box::new(&|compiler, _, args| {
-                let kty = args.get(0).unwrap();
-                assert_eq!(kty.type_, Type::PrimitiveType(PrimitiveType::UInt32));
-                let crv = args.get(1).unwrap();
-                assert_eq!(crv.type_, Type::PrimitiveType(PrimitiveType::UInt32));
-                let alg = args.get(2).unwrap();
-                assert_eq!(alg.type_, Type::PrimitiveType(PrimitiveType::UInt32));
-                let use_ = args.get(3).unwrap();
-                assert_eq!(use_.type_, Type::PrimitiveType(PrimitiveType::UInt32));
-                let extra_ptr = args.get(4).unwrap();
-                assert_eq!(extra_ptr.type_, Type::PrimitiveType(PrimitiveType::UInt32));
-
-                assert!(args.get(5).is_none());
+                let [kty, crv, alg, use_, extra_ptr] = args else {
+                    return ArgumentsCountSnafu { found: args.len(), expected: 5usize }.fail().map_err(Into::into);
+                };
+                ensure_eq_type!(kty, Type::PrimitiveType(PrimitiveType::UInt32));
+                ensure_eq_type!(crv, Type::PrimitiveType(PrimitiveType::UInt32));
+                ensure_eq_type!(alg, Type::PrimitiveType(PrimitiveType::UInt32));
+                ensure_eq_type!(use_, Type::PrimitiveType(PrimitiveType::UInt32));
+                ensure_eq_type!(extra_ptr, Type::PrimitiveType(PrimitiveType::UInt32));
 
                 let pk = compiler.memory.allocate_symbol(Type::PublicKey);
 
@@ -320,14 +318,15 @@ lazy_static::lazy_static! {
                     &vec![ValueSource::Stack; extra_ptr.type_.miden_width() as _],
                 );
 
-                pk
+                Ok(pk)
             })),
         ));
 
         builtins.push(("deref".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+            ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
             let address = args.get(0).unwrap();
 
-            assert_eq!(address.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+            ensure_eq_type!(address, Type::PrimitiveType(PrimitiveType::UInt32));
 
             let result = compiler
                 .memory
@@ -345,85 +344,85 @@ lazy_static::lazy_static! {
                 &[ValueSource::Stack],
             );
 
-            result
+            Ok(result)
          }))));
 
-         builtins.push(("addressOf".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
-            let a = args.get(0).unwrap();
+        builtins.push(("addressOf".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+           ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
+           let a = args.get(0).unwrap();
+           Ok(uint32::new(compiler, a.memory_addr))
+        }))));
 
 
+        builtins.push(("hashString".to_string(), None, Function::Builtin(Box::new(&|compiler, scope, args| string::hash(compiler, scope, args)))));
 
-            uint32::new(compiler, a.memory_addr)
-         }))));
+        // bytes and collection reference have the same layout as strings,
+        // so we can reuse the hashing function
+        builtins.push(("hashBytes".to_owned(), None, Function::Builtin(Box::new(&|compiler, scope, args| string::hash(compiler, scope, args)))));
+        builtins.push(("hashCollectionReference".to_owned(), None, Function::Builtin(Box::new(&|compiler, scope, args| string::hash(compiler, scope, args)))));
 
-
-         builtins.push(("hashString".to_string(), None, Function::Builtin(Box::new(&|compiler, scope, args| string::hash(compiler, scope, args)))));
-
-         // bytes and collection reference have the same layout as strings,
-         // so we can reuse the hashing function
-         builtins.push(("hashBytes".to_owned(), None, Function::Builtin(Box::new(&|compiler, scope, args| string::hash(compiler, scope, args)))));
-         builtins.push(("hashCollectionReference".to_owned(), None, Function::Builtin(Box::new(&|compiler, scope, args| string::hash(compiler, scope, args)))));
-
-         builtins.push(("hashArray".to_owned(), None, Function::Builtin(Box::new(&|compiler, scope, args| array::hash(compiler, scope, args)))));
+        builtins.push(("hashArray".to_owned(), None, Function::Builtin(Box::new(&array::hash))));
 
         builtins.push(("hashMap".to_owned(), None, Function::Builtin(Box::new(&|compiler, _scope, args| {
-            let map = args.get(0).unwrap();
+           ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
+           let map = args.get(0).unwrap();
 
-            let keys = map::keys_arr(map);
-            let values = map::values_arr(map);
+           let (keys, values) = map::key_values_arr(map)?;
 
-            let (_, _, hash_array_fn) = HIDDEN_BUILTINS.iter().find(|(name, _, _)| name == "hashArray").unwrap();
+           let (_, _, hash_array_fn) = HIDDEN_BUILTINS.iter().find(|(name, _, _)| name == "hashArray").unwrap();
 
-            let keys_hash = compile_function_call(compiler, hash_array_fn, &[keys], None);
-            let values_hash = compile_function_call(compiler, hash_array_fn, &[values], None);
+           let keys_hash = compile_function_call(compiler, hash_array_fn, &[keys], None)?;
+           let values_hash = compile_function_call(compiler, hash_array_fn, &[values], None)?;
 
-            let result = compiler
-                .memory
-                .allocate_symbol(Type::Hash);
+           let result = compiler
+               .memory
+               .allocate_symbol(Type::Hash);
 
-            compiler.memory.read(
-                compiler.instructions,
-                keys_hash.memory_addr,
-                keys_hash.type_.miden_width(),
-            );
-            compiler.memory.read(
-                compiler.instructions,
-                values_hash.memory_addr,
-                values_hash.type_.miden_width(),
-            );
+           compiler.memory.read(
+               compiler.instructions,
+               keys_hash.memory_addr,
+               keys_hash.type_.miden_width(),
+           );
+           compiler.memory.read(
+               compiler.instructions,
+               values_hash.memory_addr,
+               values_hash.type_.miden_width(),
+           );
 
-            compiler.instructions.push(encoder::Instruction::HMerge);
+           compiler.instructions.push(encoder::Instruction::HMerge);
 
-            compiler.memory.write(
-                compiler.instructions,
-                result.memory_addr,
-                &[ValueSource::Stack, ValueSource::Stack, ValueSource::Stack, ValueSource::Stack],
-            );
+           compiler.memory.write(
+               compiler.instructions,
+               result.memory_addr,
+               &[ValueSource::Stack, ValueSource::Stack, ValueSource::Stack, ValueSource::Stack],
+           );
 
-            result
-        }))));
+           Ok(result)
+       }))));
 
-         builtins.push(("hashPublicKey".to_owned(), None, Function::Builtin(Box::new(&|compiler, _, args| {
-            publickey::hash(compiler, args)
-        }))));
+       builtins.push(("hashPublicKey".to_owned(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+           publickey::hash(compiler, args)
+       }))));
 
-        builtins.push((
-            "uintToFloat".to_string(),
-            None,
-            Function::Builtin(Box::new(&|compiler, _scope, args| {
-                float32::from_uint32(compiler, &args[0])
-            }))
-        ));
+       builtins.push((
+           "uintToFloat".to_string(),
+           None,
+           Function::Builtin(Box::new(&|compiler, _scope, args| {
+               ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
+               Ok(float32::from_uint32(compiler, &args[0]))
+           }))
+       ));
 
-        builtins.push((
-            "intToFloat".to_string(),
-            None,
-            Function::Builtin(Box::new(&|compiler, _scope, args| {
-                float32::from_int32(compiler, &args[0])
-            }))
-        ));
+       builtins.push((
+           "intToFloat".to_string(),
+           None,
+           Function::Builtin(Box::new(&|compiler, _scope, args| {
+               ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
+               Ok(float32::from_int32(compiler, &args[0]))
+           }))
+       ));
 
-        Box::leak(Box::new(builtins))
+       Box::leak(Box::new(builtins))
     };
     static ref USABLE_BUILTINS: &'static [(String, Option<Type>, Function<'static>)] = {
         let mut builtins = Vec::new();
@@ -432,11 +431,12 @@ lazy_static::lazy_static! {
             "assert".to_string(),
             None,
             Function::Builtin(Box::new(&|compiler, _, args| {
-                let condition = args.get(0).unwrap();
-                let message = args.get(1).unwrap();
+                ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
+                let condition = &args[0];
+                let message = &args[1];
 
-                assert_eq!(condition.type_, Type::PrimitiveType(PrimitiveType::Boolean));
-                assert_eq!(message.type_, Type::String);
+                ensure_eq_type!(condition, Type::PrimitiveType(PrimitiveType::Boolean));
+                ensure_eq_type!(message, Type::String);
 
                 let mut failure_branch = vec![];
                 let mut failure_compiler = Compiler::new(&mut failure_branch, compiler.memory, compiler.root_scope);
@@ -446,7 +446,7 @@ lazy_static::lazy_static! {
                     .find(|(name, _, _)| name == "error")
                     .unwrap()
                     .2;
-                compile_function_call(&mut failure_compiler, error_fn, &[message.clone()], None);
+                compile_function_call(&mut failure_compiler, error_fn, &[message.clone()], None)?;
 
                 compiler.instructions.push(encoder::Instruction::If {
                     condition: vec![encoder::Instruction::MemLoad(Some(condition.memory_addr))],
@@ -454,10 +454,10 @@ lazy_static::lazy_static! {
                     else_: failure_branch,
                 });
 
-                Symbol {
+                Ok(Symbol {
                     type_: Type::PrimitiveType(PrimitiveType::Boolean),
                     memory_addr: 0,
-                }
+                })
             })),
         ));
 
@@ -465,8 +465,9 @@ lazy_static::lazy_static! {
             "error".to_string(),
             None,
             Function::Builtin(Box::new(&|compiler, _, args| {
-                let message = args.get(0).unwrap();
-                assert_eq!(message.type_, Type::String);
+                ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
+                let message = &args[0];
+                ensure_eq_type!(message, Type::String);
 
                 let str_len = string::length(message);
                 let str_data_ptr = string::data_ptr(message);
@@ -485,10 +486,10 @@ lazy_static::lazy_static! {
                     .instructions
                     .push(encoder::Instruction::Assert);
 
-                Symbol {
+                Ok(Symbol {
                     type_: Type::PrimitiveType(PrimitiveType::Boolean),
                     memory_addr: 0,
-                }
+                })
             })),
         ));
 
@@ -514,9 +515,9 @@ lazy_static::lazy_static! {
                 let old_root_scope = compiler.root_scope;
                 compiler.root_scope = &BUILTINS_SCOPE;
 
-                let result = read_advice_string(compiler);
+                let result = read_advice_string(compiler)?;
                 compiler.root_scope = old_root_scope;
-                result
+                Ok(result)
             })),
         ));
 
@@ -527,14 +528,14 @@ lazy_static::lazy_static! {
                 let old_root_scope = compiler.root_scope;
                 compiler.root_scope = &BUILTINS_SCOPE;
 
-                let result_str = read_advice_string(compiler);
+                let result_str = read_advice_string(compiler)?;
                 let result = Symbol {
                     type_: Type::Bytes,
                     ..result_str
                 };
 
                 compiler.root_scope = old_root_scope;
-                result
+                Ok(result)
             })),
         ));
 
@@ -545,7 +546,7 @@ lazy_static::lazy_static! {
                 let old_root_scope = compiler.root_scope;
                 compiler.root_scope = &BUILTINS_SCOPE;
 
-                let result_str = read_advice_string(compiler);
+                let result_str = read_advice_string(compiler)?;
                 let result = Symbol {
                     type_: Type::Bytes,
                     ..result_str
@@ -553,10 +554,10 @@ lazy_static::lazy_static! {
 
                 compiler.root_scope = old_root_scope;
 
-                Symbol {
+                Ok(Symbol {
                     type_: Type::CollectionReference { collection: "".to_owned() },
                     ..result
-                }
+                })
             })),
         ));
 
@@ -575,17 +576,17 @@ lazy_static::lazy_static! {
         ));
 
         builtins.push(("readAdviceUInt32".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
-            assert_eq!(args.len(), 0);
+            ensure!(args.is_empty(), ArgumentsCountSnafu { found: args.len(), expected: 0usize });
 
             compiler.instructions.push(encoder::Instruction::AdvPush(1));
             // TODO: assert that the number is actually a u32
             let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
             compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
-            symbol
+            Ok(symbol)
         }))));
 
         builtins.push(("readAdviceUInt64".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
-            assert_eq!(args.len(), 0);
+            ensure!(args.is_empty(), ArgumentsCountSnafu { found: args.len(), expected: 0usize });
 
             let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt64));
 
@@ -597,21 +598,21 @@ lazy_static::lazy_static! {
             compiler.instructions.push(encoder::Instruction::AdvPush(1));
             compiler.memory.write(compiler.instructions, result.memory_addr + 1, &[ValueSource::Stack]);
 
-            result
+            Ok(result)
         }))));
 
         builtins.push(("readAdviceInt32".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
-            assert_eq!(args.len(), 0);
+            ensure!(args.is_empty(), ArgumentsCountSnafu { found: args.len(), expected: 0usize });
 
             compiler.instructions.push(encoder::Instruction::AdvPush(1));
             // TODO: assert that the number is actually a u32
             let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Int32));
             compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
-            symbol
+            Ok(symbol)
         }))));
 
         builtins.push(("readAdviceInt64".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
-            assert_eq!(args.len(), 0);
+            ensure!(args.is_empty(), ArgumentsCountSnafu { found: args.len(), expected: 0usize });
 
             let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Int64));
 
@@ -623,22 +624,22 @@ lazy_static::lazy_static! {
             compiler.instructions.push(encoder::Instruction::AdvPush(1));
             compiler.memory.write(compiler.instructions, result.memory_addr + 1, &[ValueSource::Stack]);
 
-            result
+            Ok(result)
         }))));
 
         builtins.push(("readAdviceFloat32".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
-            assert_eq!(args.len(), 0);
+            ensure!(args.is_empty(), ArgumentsCountSnafu { found: args.len(), expected: 0usize });
 
             compiler.instructions.push(encoder::Instruction::AdvPush(1));
             // TODO: assert that the number is actually a u32
             let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Float32));
             compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
-            symbol
+            Ok(symbol)
         }))));
 
 
         builtins.push(("readAdviceFloat64".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
-            assert_eq!(args.len(), 0);
+            ensure!(args.is_empty(), ArgumentsCountSnafu { found: args.len(), expected: 0usize });
 
             let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Float64));
 
@@ -650,17 +651,17 @@ lazy_static::lazy_static! {
             compiler.instructions.push(encoder::Instruction::AdvPush(1));
             compiler.memory.write(compiler.instructions, result.memory_addr + 1, &[ValueSource::Stack]);
 
-            result
+            Ok(result)
         }))));
 
         builtins.push(("readAdviceBoolean".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
-            assert_eq!(args.len(), 0);
+            ensure!(args.is_empty(), ArgumentsCountSnafu { found: args.len(), expected: 0usize });
 
             compiler.instructions.push(encoder::Instruction::AdvPush(1));
             // TODO: assert that the number is actually a boolean
             let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
             compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
-            symbol
+            Ok(symbol)
         }))));
 
         builtins.push(("uint32ToString".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
@@ -672,12 +673,13 @@ lazy_static::lazy_static! {
         }))));
 
         builtins.push(("uint32WrappingAdd".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+            ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
             let a = &args[0];
             let b = &args[1];
-            assert_eq!(a.type_, Type::PrimitiveType(PrimitiveType::UInt32));
-            assert_eq!(b.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+            ensure_eq_type!(a, Type::PrimitiveType(PrimitiveType::UInt32));
+            ensure_eq_type!(b, Type::PrimitiveType(PrimitiveType::UInt32));
 
-            let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+            let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
 
             compiler.memory.read(
                 compiler.instructions,
@@ -690,17 +692,18 @@ lazy_static::lazy_static! {
                 b.type_.miden_width(),
             );
             compiler.instructions.push(encoder::Instruction::U32WrappingAdd);
-            compiler.memory.write(compiler.instructions, result.memory_addr, &[ValueSource::Stack]);
-            result
+            compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
+            Ok(symbol)
         }))));
 
         builtins.push(("uint32WrappingSub".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+            ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
             let a = &args[0];
             let b = &args[1];
-            assert_eq!(a.type_, Type::PrimitiveType(PrimitiveType::UInt32));
-            assert_eq!(b.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+            ensure_eq_type!(a, Type::PrimitiveType(PrimitiveType::UInt32));
+            ensure_eq_type!(b, Type::PrimitiveType(PrimitiveType::UInt32));
 
-            let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+            let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
 
             compiler.memory.read(
                 compiler.instructions,
@@ -713,17 +716,18 @@ lazy_static::lazy_static! {
                 b.type_.miden_width(),
             );
             compiler.instructions.push(encoder::Instruction::U32WrappingSub);
-            compiler.memory.write(compiler.instructions, result.memory_addr, &[ValueSource::Stack]);
-            result
+            compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
+            Ok(symbol)
         }))));
 
         builtins.push(("uint32WrappingMul".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+            ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
             let a = &args[0];
             let b = &args[1];
-            assert_eq!(a.type_, Type::PrimitiveType(PrimitiveType::UInt32));
-            assert_eq!(b.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+            ensure_eq_type!(a, Type::PrimitiveType(PrimitiveType::UInt32));
+            ensure_eq_type!(b, Type::PrimitiveType(PrimitiveType::UInt32));
 
-            let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+            let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
 
             compiler.memory.read(
                 compiler.instructions,
@@ -736,15 +740,16 @@ lazy_static::lazy_static! {
                 b.type_.miden_width(),
             );
             compiler.instructions.push(encoder::Instruction::U32WrappingMul);
-            compiler.memory.write(compiler.instructions, result.memory_addr, &[ValueSource::Stack]);
-            result
+            compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
+            Ok(symbol)
         }))));
 
         builtins.push(("uint32CheckedXor".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+            ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
             let a = &args[0];
             let b = &args[1];
-            assert_eq!(a.type_, Type::PrimitiveType(PrimitiveType::UInt32));
-            assert_eq!(b.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+            ensure_eq_type!(a, Type::PrimitiveType(PrimitiveType::UInt32));
+            ensure_eq_type!(b, Type::PrimitiveType(PrimitiveType::UInt32));
 
             let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
 
@@ -760,23 +765,24 @@ lazy_static::lazy_static! {
             );
             compiler.instructions.push(encoder::Instruction::U32CheckedXOR);
             compiler.memory.write(compiler.instructions, result.memory_addr, &[ValueSource::Stack]);
-            result
+            Ok(result)
         }))));
 
         builtins.push(("int32".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+            ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
             let a = &args[0];
-            assert_eq!(a.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+            ensure_eq_type!(a, Type::PrimitiveType(PrimitiveType::UInt32));
 
-            let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Int32));
+            let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Int32));
 
             compiler.memory.read(
                 compiler.instructions,
                 a.memory_addr,
                 a.type_.miden_width(),
             );
-            compiler.memory.write(compiler.instructions, result.memory_addr, &[ValueSource::Stack]);
+            compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
 
-            result
+            Ok(symbol)
         }))));
 
         builtins.push((
@@ -787,7 +793,7 @@ lazy_static::lazy_static! {
                 compiler.root_scope = &BUILTINS_SCOPE;
                 let result = publickey::to_hex(compiler, args);
                 compiler.root_scope = old_root_scope;
-                result
+                Ok(result)
             })),
         ));
 
@@ -803,10 +809,11 @@ lazy_static::lazy_static! {
             "mapLength".to_string(),
             None,
             Function::Builtin(Box::new(&|_compiler, _scope, args| {
+                ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
                 let m = &args[0];
-                assert!(matches!(m.type_, Type::Map(_, _)));
+                ensure_eq_type!(m, Type::Map(_, _));
 
-                array::length(&map::keys_arr(m))
+                Ok(array::length(&map::keys_arr(m)?))
             }))
         ));
 
@@ -820,10 +827,10 @@ lazy_static::lazy_static! {
                     &[ValueSource::Immediate(1)],
                 );
 
-                Symbol {
+                Ok(Symbol {
                     type_: Type::PrimitiveType(PrimitiveType::Boolean),
                     memory_addr: 0,
-                }
+                })
             })),
         ));
 
@@ -835,22 +842,27 @@ fn struct_field(
     _compiler: &mut Compiler,
     struct_symbol: &Symbol,
     field_name: &str,
-) -> Option<Symbol> {
+) -> Result<Symbol> {
     let struct_ = match &struct_symbol.type_ {
         Type::Struct(struct_) => struct_,
         Type::CollectionReference { collection: _ } if field_name == "id" => {
-            return Some(Symbol {
+            return Ok(Symbol {
                 type_: Type::String,
                 memory_addr: struct_symbol.memory_addr,
             });
         }
-        t => panic!("cannot access field {field_name} on type {t:?}"),
+        t => {
+            return Err(ErrorKind::TypeMismatch {
+                context: format!("expected struct, got: {:?}", t),
+            }
+            .into())
+        }
     };
 
     let mut offset = 0;
     for (name, field_type) in &struct_.fields {
         if name == field_name {
-            return Some(Symbol {
+            return Ok(Symbol {
                 type_: field_type.clone(),
                 memory_addr: struct_symbol.memory_addr + offset,
             });
@@ -859,7 +871,12 @@ fn struct_field(
         offset += field_type.miden_width();
     }
 
-    None
+    NotFoundSnafu {
+        type_name: "struct field",
+        item: field_name,
+    }
+    .fail()
+    .map_err(Into::into)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -899,7 +916,8 @@ impl From<Collection<'_>> for Struct {
     }
 }
 
-type BuiltinFn<'a> = Box<&'a (dyn Fn(&mut Compiler, &mut Scope, &[Symbol]) -> Symbol + Sync)>;
+type BuiltinFn<'a> =
+    Box<&'a (dyn Fn(&mut Compiler, &mut Scope, &[Symbol]) -> Result<Symbol> + Sync)>;
 
 #[derive(Clone)]
 enum Function<'ast> {
@@ -1158,64 +1176,65 @@ fn convert_f64_to_f32(n: f64) -> Option<f32> {
     }
 }
 
-fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope) -> Symbol {
+fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope) -> Result<Symbol> {
     comment!(compiler, "Compiling expression {expr:?}");
 
-    let symbol = match expr {
-        Expression::Ident(id) => scope
-            .find_symbol(id)
-            .expect(&format!("symbol {} not found", id)),
-        Expression::Primitive(ast::Primitive::Number(n, _has_decimal_point)) => {
-            let n = convert_f64_to_f32(*n).expect("silent truncation");
+    maybe_start!(expr.span());
+
+    use ast::ExpressionKind;
+    let symbol: Symbol = match &**expr {
+        ExpressionKind::Ident(id) => scope.find_symbol(id).not_found("symbol", id)?,
+        ExpressionKind::Primitive(ast::Primitive::Number(n, _has_decimal_point)) => {
+            let n = convert_f64_to_f32(*n).ok_or_else(|| Error::simple("silent f64 truncation"))?;
 
             float32::new(compiler, n)
         }
-        Expression::Primitive(ast::Primitive::String(s)) => string::new(compiler, s).0,
-        Expression::Boolean(b) => boolean::new(compiler, *b),
-        Expression::Add(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::Primitive(ast::Primitive::String(s)) => string::new(compiler, s).0,
+        ExpressionKind::Boolean(b) => boolean::new(compiler, *b),
+        ExpressionKind::Add(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
-            compile_add(compiler, &a, &b)
+            compile_add(compiler, &a, &b)?
         }
-        Expression::Subtract(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::Subtract(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
             compile_sub(compiler, &a, &b)
         }
-        Expression::Modulo(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::Modulo(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
             compile_mod(compiler, &a, &b)
         }
-        Expression::Divide(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::Divide(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
             compile_div(compiler, &a, &b)
         }
-        Expression::Multiply(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::Multiply(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
             compile_mul(compiler, &a, &b)
         }
-        Expression::Equal(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::Equal(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
             compile_eq(compiler, &a, &b)
         }
-        Expression::NotEqual(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::NotEqual(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
             compile_neq(compiler, &a, &b)
         }
-        Expression::Not(x) => {
-            let x = compile_expression(x, compiler, scope);
+        ExpressionKind::Not(x) => {
+            let x = compile_expression(x, compiler, scope)?;
             match x.type_ {
                 Type::PrimitiveType(PrimitiveType::Boolean) => {
                     compiler.memory.read(
@@ -1256,59 +1275,73 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
                 _ => panic!("expected boolean or nullable for NOT (!)"),
             }
         }
-        Expression::Call(func, args) => {
+        ExpressionKind::Call(func, args) => {
             let is_in_hidden_builtin = scope.find_function("hiddenNoopMarker").is_some();
-            let (func, args_symbols) = match func.deref() {
-                Expression::Ident(id) if id == "u32_" && is_in_hidden_builtin => {
-                    assert_eq!(args.len(), 1);
-
-                    match args[0] {
-                        Expression::Primitive(ast::Primitive::Number(n, _has_decimal_point)) => {
-                            return uint32::new(compiler, n as u32)
+            let (func, args_symbols) = match &***func {
+                ExpressionKind::Ident(id) if id == "u32_" && is_in_hidden_builtin => {
+                    ensure!(
+                        args.len() == 1,
+                        ArgumentsCountSnafu {
+                            found: args.len(),
+                            expected: 1usize
                         }
-                        _ => panic!("expected number"),
+                    );
+
+                    match &*args[0] {
+                        ExpressionKind::Primitive(ast::Primitive::Number(
+                            n,
+                            _has_decimal_point,
+                        )) => return Ok(uint32::new(compiler, *n as u32)),
+                        _ => {
+                            return TypeMismatchSnafu {
+                                context: "expected number at u32_",
+                            }
+                            .fail()
+                            .map_err(Into::into)
+                        }
                     }
                 }
-                Expression::Ident(id) => (
+                ExpressionKind::Ident(func_name) => (
                     scope
-                        .find_function(id)
-                        .expect(&format!("function {} not found", id)),
-                    {
-                        let mut args_symbols = vec![];
-                        for arg in args {
-                            args_symbols.push(compile_expression(arg, compiler, scope));
-                        }
-                        args_symbols
-                    },
+                        .find_function(func_name)
+                        .not_found("function", func_name)?,
+                    args.iter()
+                        .map(|arg| compile_expression(arg, compiler, scope))
+                        .collect::<Result<Vec<_>>>()?,
                 ),
-                Expression::Dot(obj_expr, func_name) => {
-                    let obj = compile_expression(obj_expr, compiler, scope);
+                ExpressionKind::Dot(obj_expr, func_name) => {
+                    let obj = compile_expression(obj_expr, compiler, scope)?;
 
-                    let func = scope.find_method(&obj.type_, &func_name).expect(&format!(
-                        "method {} not found on type {:?}",
-                        func_name, &obj.type_
-                    ));
+                    let func = scope
+                        .find_method(&obj.type_, func_name)
+                        .not_found("object method", func_name)?;
 
                     (func, {
                         let mut args_symbols = vec![obj];
                         for arg in args {
-                            args_symbols.push(compile_expression(arg, compiler, scope));
+                            args_symbols.push(compile_expression(arg, compiler, scope)?);
                         }
                         args_symbols
                     })
                 }
-                _ => panic!("expected function name to be an identifier"),
+                _ => {
+                    return TypeMismatchSnafu {
+                        context: "tried to call function by not ident",
+                    }
+                    .fail()
+                    .map_err(Into::into)
+                }
             };
 
-            compile_function_call(compiler, func, &args_symbols, None)
+            compile_function_call(compiler, func, &args_symbols, None)?
         }
-        Expression::Assign(a, b) => {
-            if let (Expression::Index(a, index), b) = (&**a, b) {
-                let a = compile_expression(a, compiler, scope);
-                let b = compile_expression(b, compiler, scope);
-                let index = compile_expression(index, compiler, scope);
+        ExpressionKind::Assign(a, b) => {
+            if let (ExpressionKind::Index(a, index), b) = (&***a, b) {
+                let a = compile_expression(a, compiler, scope)?;
+                let b = compile_expression(b, compiler, scope)?;
+                let index = compile_expression(index, compiler, scope)?;
 
-                let (_key, _value, value_ptr, did_find) = map::get(compiler, &a, &index);
+                let (_key, _value, value_ptr, did_find) = map::get(compiler, &a, &index)?;
 
                 let mut if_found_instructions = vec![];
                 {
@@ -1343,8 +1376,9 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
                 {
                     std::mem::swap(compiler.instructions, &mut if_not_found);
 
-                    array_push(compiler, scope, &[map::keys_arr(&a), index]);
-                    array_push(compiler, scope, &[map::values_arr(&a), b.clone()]);
+                    let (keys, values) = map::key_values_arr(&a)?;
+                    array_push(compiler, scope, &[keys, index])?;
+                    array_push(compiler, scope, &[values, b.clone()])?;
 
                     std::mem::swap(compiler.instructions, &mut if_not_found);
                 }
@@ -1355,20 +1389,19 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
                     else_: if_not_found,
                 }]);
 
-                return b;
+                return Ok(b);
             }
 
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
             match (&a.type_, &b.type_) {
                 (Type::Struct(a_struct), Type::Struct(_b_struct)) => {
                     for (field, ty) in &a_struct.fields {
-                        let a_field = struct_field(compiler, &a, field).unwrap();
-                        let b_field = struct_field(compiler, &b, field)
-                            .unwrap_or_else(|| panic!("field {} not found", field));
+                        let a_field = struct_field(compiler, &a, field)?;
+                        let b_field = struct_field(compiler, &b, field)?;
 
-                        assert_eq!(ty, &b_field.type_);
+                        ensure_eq_type!(b_field, @ty);
 
                         compiler.memory.read(
                             compiler.instructions,
@@ -1383,7 +1416,7 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
                     }
                 }
                 (Type::Nullable(a_inner_type), b_type) if !matches!(b_type, Type::Nullable(_)) => {
-                    assert_eq!(a_inner_type.as_ref(), b_type);
+                    ensure_eq_type!(@a_inner_type.as_ref(), @b_type);
 
                     compiler.memory.write(
                         compiler.instructions,
@@ -1403,12 +1436,7 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
                     );
                 }
                 (a_type, b_type) => {
-                    assert!(
-                        a_type == b_type,
-                        "type mismatch at assign: {:?} != {:?}",
-                        a_type,
-                        b_type
-                    );
+                    ensure_eq_type!(@a_type, @b_type);
 
                     compiler.memory.read(
                         compiler.instructions,
@@ -1425,69 +1453,68 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             a
         }
-        Expression::Dot(a, b) => {
-            let a = compile_expression(a, compiler, scope);
+        ExpressionKind::Dot(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
 
-            struct_field(compiler, &a, b).unwrap()
+            struct_field(compiler, &a, b)?
         }
-        Expression::GreaterThanOrEqual(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::GreaterThanOrEqual(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
             compile_gte(compiler, &a, &b)
         }
-        Expression::GreaterThan(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::GreaterThan(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
             compile_gt(compiler, &a, &b)
         }
-        Expression::LessThanOrEqual(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::LessThanOrEqual(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
             compile_lte(compiler, &a, &b)
         }
-        Expression::LessThan(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::LessThan(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
             compile_lt(compiler, &a, &b)
         }
-        Expression::ShiftLeft(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::ShiftLeft(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
             compile_shift_left(compiler, &a, &b)
         }
-        Expression::ShiftRight(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::ShiftRight(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
             compile_shift_right(compiler, &a, &b)
         }
-        Expression::And(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::And(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
             boolean::compile_and(compiler, &a, &b)
         }
-        Expression::Or(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::Or(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
             boolean::compile_or(compiler, &a, &b)
         }
-        Expression::Array(exprs) => {
+        ExpressionKind::Array(exprs) => {
             let mut symbols = vec![];
             for expr in exprs {
-                symbols.push(compile_expression(expr, compiler, scope));
+                symbols.push(compile_expression(expr, compiler, scope)?);
             }
 
-            assert!(
-                symbols.iter().all(|s| s.type_ == symbols[0].type_),
-                "all array elements must be of the same type"
-            );
+            for (a, b) in symbols.iter().zip(symbols.iter().skip(1)) {
+                ensure_eq_type!(@a.type_, @b.type_);
+            }
 
             if symbols.is_empty() {
                 array::new(
@@ -1519,11 +1546,11 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
                 array
             }
         }
-        Expression::Object(obj) => {
+        ExpressionKind::Object(obj) => {
             let mut types = Vec::new();
             let mut values = Vec::new();
             for (field, expr) in &obj.fields {
-                let symbol = compile_expression(expr, compiler, scope);
+                let symbol = compile_expression(expr, compiler, scope)?;
                 types.push((field.clone(), symbol.type_.clone()));
                 values.push((field, symbol));
             }
@@ -1535,7 +1562,7 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             let symbol = compiler.memory.allocate_symbol(struct_type);
             for (field, expr_symbol) in values {
-                let field = struct_field(compiler, &symbol, field).unwrap();
+                let field = struct_field(compiler, &symbol, field)?;
                 compiler.memory.read(
                     compiler.instructions,
                     expr_symbol.memory_addr,
@@ -1550,13 +1577,13 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             symbol
         }
-        Expression::Index(a, b) => {
-            let a = compile_expression(a, compiler, scope);
-            let b = compile_expression(b, compiler, scope);
+        ExpressionKind::Index(a, b) => {
+            let a = compile_expression(a, compiler, scope)?;
+            let b = compile_expression(b, compiler, scope)?;
 
-            compile_index(compiler, &a, &b)
+            compile_index(compiler, &a, &b)?
         }
-        e => unimplemented!("{:?}", e),
+        e => return Err(Error::unimplemented(format!("compile {e:?}"))),
     };
 
     let symbol = match &symbol.type_ {
@@ -1576,7 +1603,7 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
         "Compiled expression {expr:?} to symbol {symbol:?}",
     );
 
-    symbol
+    Ok(symbol)
 }
 
 fn compile_statement(
@@ -1584,10 +1611,11 @@ fn compile_statement(
     compiler: &mut Compiler,
     scope: &mut Scope,
     return_result: &mut Symbol,
-) {
-    match statement {
-        Statement::Return(expr) => {
-            let symbol = compile_expression(expr, compiler, scope);
+) -> Result<()> {
+    maybe_start!(statement.span());
+    match &**statement {
+        ast::StatementKind::Return(expr) => {
+            let symbol = compile_expression(expr, compiler, scope)?;
             compiler.memory.read(
                 compiler.instructions,
                 symbol.memory_addr,
@@ -1602,12 +1630,12 @@ fn compile_statement(
                 encoder::AbstractInstruction::Return,
             ));
         }
-        Statement::Break => {
+        ast::StatementKind::Break => {
             compiler.instructions.push(encoder::Instruction::Abstract(
                 encoder::AbstractInstruction::Break,
             ));
         }
-        Statement::If(ast::If {
+        ast::StatementKind::If(ast::If {
             condition,
             then_statements,
             else_statements,
@@ -1619,7 +1647,7 @@ fn compile_statement(
                 compiler.memory,
                 compiler.root_scope,
             );
-            let condition_symbol = compile_expression(condition, &mut condition_compiler, &scope);
+            let condition_symbol = compile_expression(condition, &mut condition_compiler, &scope)?;
             // let mut then_cleanup = None;
             let mut then_scope = scope.deeper();
             let condition_symbol = match condition_symbol.type_ {
@@ -1651,7 +1679,7 @@ fn compile_statement(
                     &mut body_compiler,
                     &mut then_scope,
                     return_result,
-                );
+                )?;
             }
             // then_cleanup.map(|f| f());
 
@@ -1667,7 +1695,7 @@ fn compile_statement(
                     &mut else_body_compiler,
                     &mut scope,
                     return_result,
-                );
+                )?;
             }
 
             compiler.instructions.push(encoder::Instruction::If {
@@ -1676,7 +1704,7 @@ fn compile_statement(
                 else_: else_body_instructions,
             })
         }
-        Statement::While(ast::While {
+        ast::StatementKind::While(ast::While {
             condition,
             statements,
         }) => {
@@ -1687,9 +1715,9 @@ fn compile_statement(
                 compiler.memory,
                 compiler.root_scope,
             );
-            let condition_symbol = compile_expression(condition, &mut condition_compiler, &scope);
-            assert_eq!(
-                condition_symbol.type_,
+            let condition_symbol = compile_expression(condition, &mut condition_compiler, &scope)?;
+            ensure_eq_type!(
+                condition_symbol,
                 Type::PrimitiveType(PrimitiveType::Boolean)
             );
             condition_compiler.memory.read(
@@ -1702,7 +1730,7 @@ fn compile_statement(
             let mut body_compiler =
                 Compiler::new(&mut body_instructions, compiler.memory, compiler.root_scope);
             for statement in statements {
-                compile_statement(statement, &mut body_compiler, &mut scope, return_result);
+                compile_statement(statement, &mut body_compiler, &mut scope, return_result)?;
             }
 
             compiler.instructions.push(encoder::Instruction::While {
@@ -1710,7 +1738,7 @@ fn compile_statement(
                 body: body_instructions,
             })
         }
-        Statement::For(ast::For {
+        ast::StatementKind::For(ast::For {
             initial_statement,
             condition,
             post_statement,
@@ -1730,9 +1758,9 @@ fn compile_statement(
                     compile_let_statement(l, &mut initial_compiler, &mut scope)
                 }
                 ast::ForInitialStatement::Expression(e) => {
-                    compile_expression(e, &mut initial_compiler, &scope);
+                    compile_expression(e, &mut initial_compiler, &scope).map(|_| ())
                 }
-            };
+            }?;
 
             let mut condition_instructions = vec![];
             let mut condition_compiler = Compiler::new(
@@ -1740,9 +1768,9 @@ fn compile_statement(
                 compiler.memory,
                 compiler.root_scope,
             );
-            let condition_symbol = compile_expression(condition, &mut condition_compiler, &scope);
-            assert_eq!(
-                condition_symbol.type_,
+            let condition_symbol = compile_expression(condition, &mut condition_compiler, &scope)?;
+            ensure_eq_type!(
+                condition_symbol,
                 Type::PrimitiveType(PrimitiveType::Boolean)
             );
             condition_compiler.memory.read(
@@ -1754,7 +1782,7 @@ fn compile_statement(
             let mut post_instructions = vec![];
             let mut post_compiler =
                 Compiler::new(&mut post_instructions, compiler.memory, compiler.root_scope);
-            compile_expression(post_statement, &mut post_compiler, &scope);
+            compile_expression(post_statement, &mut post_compiler, &scope)?;
 
             let mut body_instructions = vec![];
             let mut body_compiler =
@@ -1766,7 +1794,7 @@ fn compile_statement(
                     &mut body_compiler,
                     &mut body_scope,
                     return_result,
-                );
+                )?;
             }
 
             compiler.instructions.extend(initial_instructions);
@@ -1778,18 +1806,26 @@ fn compile_statement(
                 },
             });
         }
-        Statement::Let(let_statement) => compile_let_statement(let_statement, compiler, scope),
-        Statement::Expression(expr) => {
-            compile_expression(expr, compiler, scope);
+        ast::StatementKind::Let(let_statement) => {
+            compile_let_statement(let_statement, compiler, scope)?
         }
-        Statement::Throw(expr) => {
-            compile_expression(expr, compiler, scope);
+        ast::StatementKind::Expression(expr) => {
+            compile_expression(expr, compiler, scope)?;
+        }
+        ast::StatementKind::Throw(expr) => {
+            compile_expression(expr, compiler, scope)?;
         }
     }
+
+    Ok(())
 }
 
-fn compile_let_statement(let_statement: &ast::Let, compiler: &mut Compiler, scope: &mut Scope) {
-    let symbol = compile_expression(&let_statement.expression, compiler, scope);
+fn compile_let_statement(
+    let_statement: &ast::Let,
+    compiler: &mut Compiler,
+    scope: &mut Scope,
+) -> Result<()> {
+    let symbol = compile_expression(&let_statement.expression, compiler, scope)?;
     // we need to copy symbol to a new symbol,
     // because Ident expressions return symbols of variables
     let new_symbol = compiler.memory.allocate_symbol(symbol.type_);
@@ -1805,6 +1841,7 @@ fn compile_let_statement(let_statement: &ast::Let, compiler: &mut Compiler, scop
     );
 
     scope.add_symbol(let_statement.identifier.to_string(), new_symbol);
+    Ok(())
 }
 
 fn compile_ast_function_call(
@@ -1812,7 +1849,7 @@ fn compile_ast_function_call(
     compiler: &mut Compiler,
     args: &[Symbol],
     this: Option<Symbol>,
-) -> Symbol {
+) -> Result<Symbol> {
     let mut function_instructions = vec![];
     let mut function_compiler = Compiler::new(
         &mut function_instructions,
@@ -1844,10 +1881,18 @@ fn compile_ast_function_call(
             Some(ast::Type::ForeignRecord { collection }) => Type::CollectionReference {
                 collection: collection.clone(),
             },
-            Some(ast::Type::Boolean) => todo!(),
-            Some(ast::Type::Array(_)) => todo!(),
-            Some(ast::Type::Map(_, _)) => todo!(),
-            Some(ast::Type::Object(_)) => todo!(),
+            Some(ast::Type::Boolean) => {
+                return Err(Error::simple("unexpected function call of boolean"))
+            }
+            Some(ast::Type::Array(_)) => {
+                return Err(Error::simple("unexpected function call of array"))
+            }
+            Some(ast::Type::Map(_, _)) => {
+                return Err(Error::simple("unexpected function call of map"))
+            }
+            Some(ast::Type::Object(_)) => {
+                return Err(Error::simple("unexpected function call of object"))
+            }
         });
     for (arg, param) in args.iter().zip(function.parameters.iter()) {
         // We need to make a copy of the arg, because Ident expressions return symbols of variables.
@@ -1869,14 +1914,14 @@ fn compile_ast_function_call(
     }
 
     for statement in &function.statements {
-        compile_statement(statement, &mut function_compiler, scope, &mut return_result);
+        compile_statement(statement, &mut function_compiler, scope, &mut return_result)?;
     }
 
     compiler.instructions.push(encoder::Instruction::Abstract(
         encoder::AbstractInstruction::InlinedFunction(function_instructions),
     ));
 
-    return_result
+    Ok(return_result)
 }
 
 fn compile_function_call(
@@ -1884,7 +1929,7 @@ fn compile_function_call(
     function: &Function,
     args: &[Symbol],
     this: Option<Symbol>,
-) -> Symbol {
+) -> Result<Symbol> {
     match function {
         Function::Ast(a) => compile_ast_function_call(a, compiler, args, this),
         Function::Builtin(b) => b(compiler, &mut Scope::new(), args),
@@ -1901,8 +1946,8 @@ fn cast(compiler: &mut Compiler, from: &Symbol, to: &Symbol) {
     }
 }
 
-fn compile_add(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
-    match (&a.type_, &b.type_) {
+fn compile_add(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Result<Symbol> {
+    Ok(match (&a.type_, &b.type_) {
         (
             Type::PrimitiveType(PrimitiveType::UInt32),
             Type::PrimitiveType(PrimitiveType::UInt32),
@@ -1929,9 +1974,9 @@ fn compile_add(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             Type::PrimitiveType(PrimitiveType::Float32),
             Type::PrimitiveType(PrimitiveType::Float32),
         ) => float32::add(compiler, a, b),
-        (Type::String, Type::String) => string::concat(compiler, a, b),
-        e => unimplemented!("{:?}", e),
-    }
+        (Type::String, Type::String) => string::concat(compiler, a, b)?,
+        (a, b) => return Err(Error::unimplemented(format!("{a:?} add {b:?}"))),
+    })
 }
 
 fn compile_sub(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
@@ -2350,21 +2395,30 @@ fn compile_shift_right(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbo
     }
 }
 
-fn compile_index(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
+fn compile_index(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Result<Symbol> {
     match &a.type_ {
         Type::Map(k, _v) => {
-            assert_eq!(k.as_ref(), &b.type_);
+            ensure_eq_type!(@k.as_ref(), @&b.type_);
 
-            let (_key, value, _value_ptr, _found) = map::get(compiler, a, b);
-            value
+            let (_key, value, _value_ptr, _found) = map::get(compiler, a, b)?;
+            Ok(value)
         }
-        x => todo!("can't index into {x:?}"),
+        x => TypeMismatchSnafu {
+            context: format!("expected map but found {x:?}"),
+        }
+        .fail()
+        .map_err(Into::into),
     }
 }
 
-fn dynamic_alloc(compiler: &mut Compiler, args: &[Symbol]) -> Symbol {
+fn dynamic_alloc(compiler: &mut Compiler, args: &[Symbol]) -> Result<Symbol> {
     let size = &args[0];
-    assert_eq!(size.type_, Type::PrimitiveType(PrimitiveType::UInt32));
+    ensure!(
+        matches!(size.type_, Type::PrimitiveType(PrimitiveType::UInt32)),
+        TypeMismatchSnafu {
+            context: "cannot alloc of size other than UInt32"
+        }
+    );
 
     let addr = compiler
         .memory
@@ -2395,10 +2449,10 @@ fn dynamic_alloc(compiler: &mut Compiler, args: &[Symbol]) -> Symbol {
         .push(encoder::Instruction::MemStore(Some(3)));
 
     // return old addr
-    addr
+    Ok(addr)
 }
 
-fn log(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Symbol {
+fn log(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Result<Symbol> {
     let mut str_args = vec![];
 
     for arg in args {
@@ -2409,7 +2463,7 @@ fn log(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Symbol {
                 scope.find_function("uint32ToString").unwrap(),
                 &[arg.clone()],
                 None,
-            ),
+            )?,
             Type::PrimitiveType(PrimitiveType::Boolean) => compile_function_call(
                 compiler,
                 scope.find_function("uint32ToString").unwrap(),
@@ -2418,24 +2472,28 @@ fn log(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Symbol {
                     ..arg.clone()
                 }],
                 None,
-            ),
-            t => unimplemented!("You can't log a {:?} yet", t),
+            )?,
+            t => {
+                return Err(Error::unimplemented(format!(
+                    "logging of {t:?} is not supported yet"
+                )))
+            }
         };
 
         str_args.push(message);
     }
 
     for arg in str_args {
-        compile_function_call(compiler, &Function::Ast(&LOG_STRING), &[arg], None);
+        compile_function_call(compiler, &Function::Ast(&LOG_STRING), &[arg], None)?;
     }
 
-    Symbol {
+    Ok(Symbol {
         type_: Type::PrimitiveType(PrimitiveType::Boolean),
         memory_addr: 0,
-    }
+    })
 }
 
-fn read_advice_collection_reference(compiler: &mut Compiler, collection: String) -> Symbol {
+fn read_advice_collection_reference(compiler: &mut Compiler, collection: String) -> Result<Symbol> {
     let r = compile_function_call(
         compiler,
         BUILTINS_SCOPE
@@ -2443,15 +2501,15 @@ fn read_advice_collection_reference(compiler: &mut Compiler, collection: String)
             .unwrap(),
         &[],
         None,
-    );
+    )?;
 
-    Symbol {
+    Ok(Symbol {
         type_: Type::CollectionReference { collection },
         ..r
-    }
+    })
 }
 
-fn read_advice_public_key(compiler: &mut Compiler) -> Symbol {
+fn read_advice_public_key(compiler: &mut Compiler) -> Result<Symbol> {
     let result = compiler.memory.allocate_symbol(Type::PublicKey);
 
     compiler.instructions.push(encoder::Instruction::AdvPush(1));
@@ -2483,7 +2541,7 @@ fn read_advice_public_key(compiler: &mut Compiler) -> Symbol {
     );
 
     let n64 = uint32::new(compiler, 64);
-    let extra_ptr = dynamic_alloc(compiler, &[n64]);
+    let extra_ptr = dynamic_alloc(compiler, &[n64])?;
 
     compiler
         .memory
@@ -2522,10 +2580,10 @@ fn read_advice_public_key(compiler: &mut Compiler) -> Symbol {
     compiler.instructions.push(encoder::Instruction::Drop);
     // []
 
-    result
+    Ok(result)
 }
 
-fn read_advice_string(compiler: &mut Compiler) -> Symbol {
+fn read_advice_string(compiler: &mut Compiler) -> Result<Symbol> {
     let result = compiler.memory.allocate_symbol(Type::String);
 
     compiler.instructions.push(encoder::Instruction::AdvPush(1));
@@ -2541,7 +2599,7 @@ fn read_advice_string(compiler: &mut Compiler) -> Symbol {
     );
     // [str_len]
 
-    let data_ptr = dynamic_alloc(compiler, &[str_len]);
+    let data_ptr = dynamic_alloc(compiler, &[str_len])?;
     compiler.memory.write(
         compiler.instructions,
         string::data_ptr(&result).memory_addr,
@@ -2597,10 +2655,10 @@ fn read_advice_string(compiler: &mut Compiler) -> Symbol {
         // []
     ]);
 
-    result
+    Ok(result)
 }
 
-fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
+fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Result<Symbol> {
     compiler.instructions.push(encoder::Instruction::AdvPush(1));
     // [array_len]
 
@@ -2633,13 +2691,13 @@ fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
     );
     // []
 
-    let data_ptr = dynamic_alloc(compiler, &[capacity]);
+    let data_ptr = dynamic_alloc(compiler, &[capacity])?;
 
     let read_element_advice_insts = {
         let mut insts = vec![];
         std::mem::swap(compiler.instructions, &mut insts);
 
-        let el = read_advice_generic(compiler, element_type);
+        let el = read_advice_generic(compiler, element_type)?;
         compiler.memory.read(
             compiler.instructions,
             el.memory_addr,
@@ -2748,22 +2806,23 @@ fn read_advice_array(compiler: &mut Compiler, element_type: &Type) -> Symbol {
         &[ValueSource::Memory(data_ptr.memory_addr)],
     );
 
-    arr
+    Ok(arr)
 }
 
-fn read_advice_map(compiler: &mut Compiler, key_type: &Type, value_type: &Type) -> Symbol {
+fn read_advice_map(compiler: &mut Compiler, key_type: &Type, value_type: &Type) -> Result<Symbol> {
     // Maps are serialized as [keys_arr..., values_arr...]
     let result = compiler.memory.allocate_symbol(Type::Map(
         Box::new(key_type.clone()),
         Box::new(value_type.clone()),
     ));
 
-    let key_array = read_advice_array(compiler, key_type);
-    let value_array = read_advice_array(compiler, value_type);
+    let key_array = read_advice_array(compiler, key_type)?;
+    let value_array = read_advice_array(compiler, value_type)?;
 
+    let (keys, values) = map::key_values_arr(&result)?;
     compiler.memory.write(
         compiler.instructions,
-        map::keys_arr(&result).memory_addr,
+        keys.memory_addr,
         &[
             ValueSource::Memory(array::capacity(&key_array).memory_addr),
             ValueSource::Memory(array::length(&key_array).memory_addr),
@@ -2773,7 +2832,7 @@ fn read_advice_map(compiler: &mut Compiler, key_type: &Type, value_type: &Type) 
 
     compiler.memory.write(
         compiler.instructions,
-        map::values_arr(&result).memory_addr,
+        values.memory_addr,
         &[
             ValueSource::Memory(array::capacity(&value_array).memory_addr),
             ValueSource::Memory(array::length(&value_array).memory_addr),
@@ -2781,15 +2840,19 @@ fn read_advice_map(compiler: &mut Compiler, key_type: &Type, value_type: &Type) 
         ],
     );
 
-    result
+    Ok(result)
 }
 
-fn read_advice_nullable(compiler: &mut Compiler, type_: Type) -> Symbol {
-    assert!(matches!(type_, Type::Nullable(_)));
-
+fn read_advice_nullable(compiler: &mut Compiler, type_: Type) -> Result<Symbol> {
     let value_type = match &type_ {
         Type::Nullable(value_type) => value_type,
-        _ => unreachable!(),
+        _ => {
+            return TypeMismatchSnafu {
+                context: format!("read_advice_nullable for non-null type: {type_:?}"),
+            }
+            .fail()
+            .map_err(Into::into)
+        }
     };
 
     let is_not_null = compile_function_call(
@@ -2797,13 +2860,13 @@ fn read_advice_nullable(compiler: &mut Compiler, type_: Type) -> Symbol {
         BUILTINS_SCOPE.find_function("readAdviceBoolean").unwrap(),
         &[],
         None,
-    );
+    )?;
 
     let (value, read_value_insts) = {
         let mut insts = vec![];
         std::mem::swap(compiler.instructions, &mut insts);
 
-        let value = read_advice_generic(compiler, value_type);
+        let value = read_advice_generic(compiler, value_type)?;
         std::mem::swap(compiler.instructions, &mut insts);
 
         (value, insts)
@@ -2837,15 +2900,22 @@ fn read_advice_nullable(compiler: &mut Compiler, type_: Type) -> Symbol {
         &vec![ValueSource::Stack; value.type_.miden_width() as _],
     );
 
-    s
+    Ok(s)
 }
 
-fn array_push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Symbol {
+fn array_push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Result<Symbol> {
+    ensure!(
+        args.len() == 2,
+        ArgumentsCountSnafu {
+            found: args.len(),
+            expected: 2usize
+        }
+    );
     let arr = args.get(0).unwrap();
     let element = args.get(1).unwrap();
-    assert_eq!(
-        arr.type_.clone(),
-        Type::Array(Box::new(element.type_.clone()))
+    ensure_eq_type!(
+        @arr.type_.clone(),
+        @Type::Array(Box::new(element.type_.clone()))
     );
 
     compiler
@@ -2920,7 +2990,7 @@ fn array_push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Symbo
     // []
 
     // Return the element, same as push does in JS
-    element.clone()
+    Ok(element.clone())
 }
 
 /// A generic hash function that can hash any symbol by hashing each of it's field elements.
@@ -2963,14 +3033,14 @@ fn generic_hash(compiler: &mut Compiler, value: &Symbol) -> Symbol {
     result
 }
 
-fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
+fn hash(compiler: &mut Compiler, value: Symbol) -> Result<Symbol> {
     let result = match &value.type_ {
         Type::Nullable(_) => {
             let h = compiler.memory.allocate_symbol(Type::Hash);
 
             let mut hash_value_instructions = vec![];
             std::mem::swap(compiler.instructions, &mut hash_value_instructions);
-            let non_null_value_hash = hash(compiler, nullable::value(value.clone()));
+            let non_null_value_hash = hash(compiler, nullable::value(value.clone()))?;
             std::mem::swap(compiler.instructions, &mut hash_value_instructions);
 
             compiler.instructions.extend([encoder::Instruction::If {
@@ -3010,13 +3080,13 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
             BUILTINS_SCOPE.find_function("hashString").unwrap(),
             &[value],
             None,
-        ),
+        )?,
         Type::Bytes => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("hashBytes").unwrap(),
             &[value],
             None,
-        ),
+        )?,
         Type::CollectionReference { .. } => compile_function_call(
             compiler,
             BUILTINS_SCOPE
@@ -3024,25 +3094,25 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
                 .unwrap(),
             &[value],
             None,
-        ),
+        )?,
         Type::Array(_) => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("hashArray").unwrap(),
             &[value],
             None,
-        ),
+        )?,
         Type::Map(_, _) => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("hashMap").unwrap(),
             &[value],
             None,
-        ),
+        )?,
         Type::PublicKey => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("hashPublicKey").unwrap(),
             &[value],
             None,
-        ),
+        )?,
         Type::Struct(s) => {
             let mut offset = 0;
             let struct_hash = compiler.memory.allocate_symbol(Type::Hash);
@@ -3054,7 +3124,7 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
                 };
                 offset += width;
 
-                let field_hash = hash(compiler, field);
+                let field_hash = hash(compiler, field)?;
 
                 compiler.memory.read(
                     compiler.instructions,
@@ -3085,12 +3155,12 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Symbol {
         }
     };
 
-    assert_eq!(result.type_, Type::Hash);
+    ensure_eq_type!(result, Type::Hash);
 
-    result
+    Ok(result)
 }
 
-fn read_advice_generic(compiler: &mut Compiler, type_: &Type) -> Symbol {
+fn read_advice_generic(compiler: &mut Compiler, type_: &Type) -> Result<Symbol> {
     match type_ {
         Type::Nullable(_) => read_advice_nullable(compiler, type_.clone()),
         Type::PrimitiveType(PrimitiveType::Boolean) => compile_function_call(
@@ -3153,8 +3223,8 @@ fn read_advice_generic(compiler: &mut Compiler, type_: &Type) -> Symbol {
         Type::Array(t) => read_advice_array(compiler, t),
         Type::Struct(s) => {
             let symbol = compiler.memory.allocate_symbol(type_.clone());
-            read_struct_from_advice_tape(compiler, &symbol, s);
-            symbol
+            read_struct_from_advice_tape(compiler, &symbol, s)?;
+            Ok(symbol)
         }
         Type::PublicKey => compile_function_call(
             compiler,
@@ -3163,7 +3233,9 @@ fn read_advice_generic(compiler: &mut Compiler, type_: &Type) -> Symbol {
             None,
         ),
         Type::Map(k, v) => read_advice_map(compiler, k, v),
-        _ => unimplemented!("{:?}", type_),
+        _ => Err(Error::unimplemented(format!(
+            "read_advice_generic {type_:?}"
+        ))),
     }
 }
 
@@ -3171,11 +3243,11 @@ fn read_struct_from_advice_tape(
     compiler: &mut Compiler,
     struct_symbol: &Symbol,
     struct_type: &Struct,
-) {
+) -> Result<()> {
     for (name, type_) in &struct_type.fields {
-        let symbol = read_advice_generic(compiler, type_);
+        let symbol = read_advice_generic(compiler, type_)?;
 
-        let sf = struct_field(compiler, struct_symbol, name).unwrap();
+        let sf = struct_field(compiler, struct_symbol, name)?;
         compiler.memory.read(
             compiler.instructions,
             symbol.memory_addr,
@@ -3187,32 +3259,31 @@ fn read_struct_from_advice_tape(
             &vec![ValueSource::Stack; symbol.type_.miden_width() as _],
         );
     }
+
+    Ok(())
 }
 
 fn read_collection_inputs(
     compiler: &mut Compiler,
     this_struct: Option<Struct>,
     args: &[Type],
-) -> (Option<Symbol>, Vec<Symbol>) {
+) -> Result<(Option<Symbol>, Vec<Symbol>)> {
     let this = this_struct.map(|ts| compiler.memory.allocate_symbol(Type::Struct(ts)));
-    let this_struct = this.as_ref().map(|t| {
-        if let Type::Struct(s) = &t.type_ {
-            s
-        } else {
-            unreachable!();
-        }
-    });
 
-    if let Some(this_struct) = this_struct {
-        read_struct_from_advice_tape(compiler, this.as_ref().unwrap(), this_struct);
+    if let Some(this) = this.as_ref() {
+        let struct_ty = match &this.type_ {
+            Type::Struct(s) => s,
+            _ => unreachable!(),
+        };
+        read_struct_from_advice_tape(compiler, this, struct_ty)?;
     }
 
     let mut args_symbols = Vec::new();
     for arg in args {
-        args_symbols.push(read_advice_generic(compiler, arg));
+        args_symbols.push(read_advice_generic(compiler, arg)?);
     }
 
-    (this, args_symbols)
+    Ok((this, args_symbols))
 }
 
 fn prepare_scope(program: &ast::Program) -> Scope {
@@ -3288,7 +3359,7 @@ pub fn compile(
     program: ast::Program,
     collection_name: Option<&str>,
     function_name: &str,
-) -> (String, Abi) {
+) -> Result<(String, Abi)> {
     let mut scope = prepare_scope(&program);
     let collection = collection_name.map(|name| scope.find_collection(name).cloned().unwrap());
     let collection = collection.as_ref();
@@ -3309,7 +3380,7 @@ pub fn compile(
                     Some(Function::Builtin(_)) => todo!(),
                     None => None,
                 })
-                .unwrap();
+                .not_found("function", function_name)?;
 
             let param_types = function
                 .parameters
@@ -3449,10 +3520,10 @@ pub fn compile(
             );
         }
 
-        read_struct_from_advice_tape(&mut compiler, &ctx, &ctx_struct);
+        read_struct_from_advice_tape(&mut compiler, &ctx, &ctx_struct)?;
 
         let (this_symbol, arg_symbols) =
-            read_collection_inputs(&mut compiler, collection_struct.clone(), &param_types);
+            read_collection_inputs(&mut compiler, collection_struct.clone(), &param_types)?;
 
         let ctx_pk = struct_field(&mut compiler, &ctx, "publicKey").unwrap();
         if function.is_some() {
@@ -3475,7 +3546,7 @@ pub fn compile(
         this_addr = this_symbol.as_ref().map(|ts| ts.memory_addr);
 
         if let Some(this_symbol) = &this_symbol {
-            let this_hash = hash(&mut compiler, this_symbol.clone());
+            let this_hash = hash(&mut compiler, this_symbol.clone())?;
             // compiler.memory.read(
             //     &mut compiler.instructions,
             //     this_hash.memory_addr,
@@ -3487,7 +3558,7 @@ pub fn compile(
                 &mut compiler,
                 "Hash of this does not match the expected hash",
             );
-            compile_function_call(&mut compiler, assert_fn, &[is_eq, error_str], None);
+            compile_function_call(&mut compiler, assert_fn, &[is_eq, error_str], None)?;
         }
 
         let result = match function {
@@ -3503,7 +3574,7 @@ pub fn compile(
                 &mut compiler,
                 &arg_symbols,
                 this_symbol.clone(),
-            ),
+            )?,
         };
 
         comment!(compiler, "Reading result from memory");
@@ -3517,7 +3588,7 @@ pub fn compile(
             comment!(compiler, "Reading selfdestruct flag");
             compiler.memory.read(compiler.instructions, 6, 1);
 
-            let this_hash = hash(&mut compiler, this_symbol);
+            let this_hash = hash(&mut compiler, this_symbol)?;
             comment!(compiler, "Reading output `this` hash");
             compiler.memory.read(
                 compiler.instructions,
@@ -3550,12 +3621,12 @@ pub fn compile(
     for instruction in instructions {
         instruction
             .encode(unsafe { miden_code.as_mut_vec() }, 1)
-            .unwrap();
+            .context(IoSnafu)?;
         miden_code.push('\n');
     }
     miden_code.push_str("end\n");
 
-    (
+    Ok((
         miden_code,
         Abi {
             this_addr,
@@ -3572,7 +3643,7 @@ pub fn compile(
                 .collect(),
             std_version: Some(StdVersion::V0_6_1),
         },
-    )
+    ))
 }
 
 fn compile_read_authorization_proof(
@@ -3916,7 +3987,7 @@ fn ast_param_type_to_type(
     required: bool,
     type_: &ast::ParameterType,
     collection_struct: Option<&Struct>,
-) -> Type {
+) -> Result<Type> {
     let t = match type_ {
         ast::ParameterType::String => Type::String,
         ast::ParameterType::Number => Type::PrimitiveType(PrimitiveType::Float32),
@@ -3933,19 +4004,27 @@ fn ast_param_type_to_type(
             collection: collection.clone(),
         },
         ast::ParameterType::Array(t) => Type::Array(Box::new(ast_type_to_type(true, t))),
-        ast::ParameterType::Boolean => todo!(),
+        ast::ParameterType::Boolean => {
+            return Err(Error::unimplemented(
+                "ast_param_type_to_type for Boolean".into(),
+            ))
+        }
         ast::ParameterType::Map(k, v) => Type::Map(
             Box::new(ast_type_to_type(true, k)),
             Box::new(ast_type_to_type(true, v)),
         ),
-        ast::ParameterType::Object(_) => todo!(),
+        ast::ParameterType::Object(_) => {
+            return Err(Error::unimplemented(
+                "ast_param_type_to_type for Object".into(),
+            ))
+        }
     };
 
-    if !required {
+    Ok(if !required {
         Type::Nullable(Box::new(t))
     } else {
         t
-    }
+    })
 }
 
 fn ast_type_to_type(required: bool, type_: &ast::Type) -> Type {
@@ -3992,7 +4071,7 @@ fn ast_type_to_type(required: bool, type_: &ast::Type) -> Type {
 }
 
 /// A function that takes in a struct type and generates a program that hashes a value of that type and returns the hash on the stack.
-pub fn compile_hasher(t: Type) -> String {
+pub fn compile_hasher(t: Type) -> Result<String> {
     let mut instructions = vec![];
     let mut memory = Memory::new();
     let empty_program = ast::Program { nodes: vec![] };
@@ -4002,11 +4081,11 @@ pub fn compile_hasher(t: Type) -> String {
         let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
 
         let this_symbol = match t {
-            Type::Struct(struct_) => read_collection_inputs(&mut compiler, Some(struct_), &[]).0,
-            t => Some(read_advice_generic(&mut compiler, &t)),
+            Type::Struct(struct_) => read_collection_inputs(&mut compiler, Some(struct_), &[])?.0,
+            t => Some(read_advice_generic(&mut compiler, &t)?),
         };
 
-        let hash = hash(&mut compiler, this_symbol.unwrap());
+        let hash = hash(&mut compiler, this_symbol.unwrap())?;
 
         comment!(compiler, "Reading result from memory");
         compiler.memory.read(
@@ -4034,12 +4113,12 @@ pub fn compile_hasher(t: Type) -> String {
     for instruction in instructions {
         instruction
             .encode(unsafe { miden_code.as_mut_vec() }, 1)
-            .unwrap();
+            .context(IoSnafu)?;
         miden_code.push('\n');
     }
     miden_code.push_str("end\n");
 
-    miden_code
+    Ok(miden_code)
 }
 
 #[cfg(test)]
@@ -4051,8 +4130,8 @@ mod tests {
         convert_f64_to_f32(0.0).unwrap();
         convert_f64_to_f32(1.0).unwrap();
 
-        assert_eq!(convert_f64_to_f32(3.14159265359), None);
-        assert_eq!(convert_f64_to_f32(-3.14159265359), None);
+        assert_eq!(convert_f64_to_f32(std::f64::consts::PI), None);
+        assert_eq!(convert_f64_to_f32(-std::f64::consts::PI), None);
 
         assert_eq!(convert_f64_to_f32(std::f64::MAX), None);
         assert_eq!(convert_f64_to_f32(std::f64::MIN), None);

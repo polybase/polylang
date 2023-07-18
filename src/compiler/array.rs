@@ -68,22 +68,25 @@ pub(crate) fn data_ptr(symbol: &Symbol) -> Symbol {
     }
 }
 
-pub(crate) fn hash(compiler: &mut Compiler, _scope: &mut Scope, args: &[Symbol]) -> Symbol {
-    assert_eq!(args.len(), 1);
-    assert!(matches!(args[0].type_, Type::Array(_)));
+pub(crate) fn hash(compiler: &mut Compiler, _scope: &mut Scope, args: &[Symbol]) -> Result<Symbol> {
+    ensure!(
+        args.len() == 1,
+        ArgumentsCountSnafu {
+            found: args.len(),
+            expected: 1usize
+        }
+    );
     let arr = &args[0];
+    ensure_eq_type!(arr, Type::Array(_));
 
-    let inner_type = match args[0].type_ {
-        Type::Array(ref inner_type) => inner_type,
-        _ => unreachable!(),
-    };
+    let Type::Array(inner_type) = &arr.type_ else { unreachable!() };
 
     let (inner_hashing_input, inner_hashing_insts, inner_hashing_output) = {
         let mut insts = Vec::new();
 
         std::mem::swap(compiler.instructions, &mut insts);
         let input = compiler.memory.allocate_symbol(*inner_type.clone());
-        let output = super::hash(compiler, input.clone());
+        let output = super::hash(compiler, input.clone())?;
         std::mem::swap(compiler.instructions, &mut insts);
 
         (input, insts, output)
@@ -103,7 +106,7 @@ pub(crate) fn hash(compiler: &mut Compiler, _scope: &mut Scope, args: &[Symbol])
             condition: vec![
                 Instruction::Dup(None),
                 // [i, i]
-                Instruction::MemLoad(Some(length(&arr).memory_addr)),
+                Instruction::MemLoad(Some(length(arr).memory_addr)),
                 // [len, i, i]
                 Instruction::U32CheckedLT,
                 // [i < len, i]
@@ -115,7 +118,7 @@ pub(crate) fn hash(compiler: &mut Compiler, _scope: &mut Scope, args: &[Symbol])
                 // [inner_width, i, i]
                 Instruction::U32CheckedMul,
                 // [offset = i * inner_width, i]
-                Instruction::MemLoad(Some(data_ptr(&arr).memory_addr)),
+                Instruction::MemLoad(Some(data_ptr(arr).memory_addr)),
                 // [data_ptr, offset, i]
                 Instruction::U32CheckedAdd,
                 // [ptr = data_ptr + offset, i]
@@ -175,7 +178,7 @@ pub(crate) fn hash(compiler: &mut Compiler, _scope: &mut Scope, args: &[Symbol])
         Instruction::MemStore(Some(result.memory_addr + 3)),
     ]);
 
-    result
+    Ok(result)
 }
 
 pub(crate) fn get(compiler: &mut Compiler, arr: &Symbol, index: &Symbol) -> Symbol {

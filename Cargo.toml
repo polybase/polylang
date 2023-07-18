@@ -13,7 +13,7 @@ name = "compile"
 path = "src/bin/compile/main.rs"
 
 [workspace]
-members = ["parser", "prover", "abi", "miden-run", "tests"]
+members = ["parser", "prover", "abi", "miden-run", "error", "tests"]
 
 [features]
 default = ["parser", "bindings"]
@@ -22,6 +22,7 @@ bindings = []
 
 [dependencies]
 abi = { path = "./abi" }
+error = { path = "./error" }
 regex = { version = "1", default-features = false }
 wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1.7"
@@ -36,6 +37,8 @@ lazy_static = "1.4.0"
 base64 = "0.21.0"
 quickcheck_macros = "1.0.0"
 quickcheck = "1.0.3"
+derive_more = { version = "0.99.17", features = ["deref", "from", "deref_mut"], default-features = false }
+parking_lot = "0.12.1"
 
 [dev-dependencies]
 pretty_assertions = "1.3.0"

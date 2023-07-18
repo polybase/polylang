@@ -4,6 +4,7 @@
 use std::{borrow::Cow, collections::HashMap};
 
 use super::encoder;
+use error::prelude::*;
 
 #[derive(Debug, Clone)]
 enum Expression {
@@ -67,16 +68,12 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn add_expression(&mut self, expr: Expression) -> Vec<ExpressionRef> {
+    fn add_expression(&mut self, expr: Expression) -> Result<Vec<ExpressionRef>> {
         let expr_index = self.last_expr_index();
         let outputs = match expr {
             Expression::Number(_) => 1,
             Expression::FunctionCall { ref name, args: _ } => {
-                let func = self
-                    .functions
-                    .iter()
-                    .find(|f| f.name == name.as_str())
-                    .expect("function not found");
+                let func = self.find_function(name)?;
                 func.num_outputs
             }
             Expression::If {
@@ -85,20 +82,24 @@ impl<'a> Builder<'a> {
                 then_dependencies: _,
                 otherwise: _,
                 otherwise_dependencies: _,
-            } => todo!(),
+            } => return Err(Error::unimplemented("builder if's".into())),
         };
         self.expressions.push(expr);
 
-        let mut refs = Vec::new();
+        let mut refs = Vec::with_capacity(outputs);
         for nth_element in 0..outputs {
             let expr_ref = ExpressionRef::new(expr_index, nth_element);
             refs.push(expr_ref);
         }
-        refs
+        Ok(refs)
     }
 
-    fn find_function(&self, name: &str) -> Option<&Function> {
-        self.functions.iter().rev().find(|f| f.name == name)
+    fn find_function(&self, name: &str) -> Result<&Function> {
+        self.functions
+            .iter()
+            .rev()
+            .find(|f| f.name == name)
+            .not_found("function", name)
     }
 
     fn number(&mut self, n: u64) -> ExpressionRef {
@@ -119,13 +120,20 @@ impl<'a> Builder<'a> {
         &mut self,
         func_name: &str,
         args: &[ExpressionRef],
-    ) -> (usize, Vec<ExpressionRef>) {
-        let func = self
-            .functions
-            .iter()
-            .find(|f| f.name == func_name)
-            .expect("function not found");
-        assert_eq!(func.num_args, args.len());
+    ) -> Result<(usize, Vec<ExpressionRef>)> {
+        let func = self.find_function(func_name)?;
+        let num_outputs = func.num_outputs;
+        ensure!(
+            func.num_args == args.len(),
+            TypeMismatchSnafu {
+                context: format!(
+                    "expected {} but found {} arguments in {}",
+                    func.num_args,
+                    args.len(),
+                    func_name
+                )
+            }
+        );
 
         let expr = Expression::FunctionCall {
             name: func_name.to_string(),
@@ -134,20 +142,20 @@ impl<'a> Builder<'a> {
         let expr_index = self.last_expr_index();
         self.expressions.push(expr);
 
-        let mut refs = Vec::new();
-        for nth_element in 0..func.num_outputs {
+        let mut refs = Vec::with_capacity(num_outputs);
+        for nth_element in 0..num_outputs {
             let expr_ref = ExpressionRef::new(expr_index, nth_element);
             refs.push(expr_ref);
         }
-        (expr_index, refs)
+        Ok((expr_index, refs))
     }
 
-    fn call(&mut self, func_name: &str, args: &[ExpressionRef]) -> Vec<ExpressionRef> {
-        self.call_func(func_name, args).1
+    fn call(&mut self, func_name: &str, args: &[ExpressionRef]) -> Result<Vec<ExpressionRef>> {
+        self.call_func(func_name, args).map(|(_, e)| e)
     }
 
-    fn call_for_expr_index(&mut self, func_name: &str, args: &[ExpressionRef]) -> usize {
-        self.call_func(func_name, args).0
+    fn call_for_expr_index(&mut self, func_name: &str, args: &[ExpressionRef]) -> Result<usize> {
+        self.call_func(func_name, args).map(|(i, _)| i)
     }
 
     fn if_<const OUTPUTS: usize>(
@@ -212,22 +220,25 @@ struct Compiler<'a> {
 }
 
 impl<'a> Compiler<'a> {
-    fn find_function(&self, name: &str) -> Option<&Function> {
-        self.functions.iter().rev().find(|f| f.name == name)
+    fn find_function(&self, name: &str) -> Result<&Function<'a>> {
+        self.functions
+            .iter()
+            .rev()
+            .find(|f| f.name == name)
+            .not_found("function", name)
     }
 
-    fn find_expr_on_stack(&self, expr_ref: &ExpressionRef) -> Option<usize> {
+    fn find_expr_on_stack(&self, expr_ref: &ExpressionRef) -> Result<usize> {
         self.stack
             .iter()
             .rev()
             .enumerate()
             .find_map(|(i, e)| if e == expr_ref { Some(i) } else { None })
+            .not_found("expr", &format!("expr {expr_ref:?}"))
     }
 
-    fn movup(&mut self, expr_ref: &ExpressionRef) {
-        let position = self
-            .find_expr_on_stack(expr_ref)
-            .unwrap_or_else(|| panic!("Expression {:?} not found on the stack", expr_ref));
+    fn movup(&mut self, expr_ref: &ExpressionRef) -> Result<()> {
+        let position = self.find_expr_on_stack(expr_ref)?;
         match position {
             0 => {
                 // The element is already on the top of the stack.
@@ -235,22 +246,47 @@ impl<'a> Compiler<'a> {
             1 => {
                 self.miden_code.push(encoder::Instruction::Swap);
                 let stack_len = self.stack.len();
+                ensure!(
+                    stack_len >= 2,
+                    StackSnafu {
+                        stack_len,
+                        expected: Some(2),
+                    }
+                );
                 self.stack.swap(stack_len - 1, stack_len - 2);
             }
             n if n < 16 => {
                 self.miden_code.push(encoder::Instruction::MovUp(n as u32));
-                let element = self.stack.remove(self.stack.len() - 1 - position);
+                let stack_len = self.stack.len();
+                ensure!(
+                    stack_len > position,
+                    StackSnafu {
+                        stack_len,
+                        expected: Some(1 + position),
+                    }
+                );
+                let element = self.stack.remove(stack_len - 1 - position);
                 self.stack.push(element);
             }
-            n => panic!("Element {:?} is too deep on the stack: {}", expr_ref, n),
+            n => {
+                return Err(Error::simple(format!(
+                    "Cannot move up further than to the 16th position: {n}"
+                )))
+            }
         }
+        Ok(())
     }
 
     /// Exprs is highest to lowest.
-    fn movup_many(&mut self, exprs: &[ExpressionRef]) {
-        if self.stack.len() < exprs.len() {
-            panic!("Stack is too small. Did you use a binding more than once?");
-        }
+    fn movup_many(&mut self, exprs: &[ExpressionRef]) -> Result<()> {
+        let stack_len = self.stack.len();
+        ensure!(
+            stack_len >= exprs.len(),
+            StackSnafu {
+                stack_len,
+                expected: Some(exprs.len()),
+            }
+        );
 
         // Check if the elements are already in the right order
         // exprs[0] is the top element
@@ -260,67 +296,88 @@ impl<'a> Compiler<'a> {
             .all(|(i, expr_ref)| self.stack[self.stack.len() - 1 - i] == *expr_ref);
 
         if in_order {
-            return;
+            return Ok(());
         }
 
         if let Some(expr) = exprs.last() {
-            self.movup(expr);
-            self.movup_many(&exprs[..exprs.len() - 1]);
+            self.movup(expr)?;
+            self.movup_many(&exprs[..exprs.len() - 1])?;
         }
+
+        Ok(())
     }
 
     /// Moves the top stack element to the nth position.
-    fn movdn(&mut self, n: usize) {
+    fn movdn(&mut self, n: usize) -> Result<()> {
         match n {
             0 => {}
             1 => {
                 self.miden_code.push(encoder::Instruction::Swap);
                 let stack_len = self.stack.len();
+                ensure!(
+                    stack_len >= 2,
+                    StackSnafu {
+                        stack_len,
+                        expected: Some(2),
+                    }
+                );
                 self.stack.swap(stack_len - 1, stack_len - 2);
             }
             n if n < 16 => {
                 self.miden_code
                     .push(encoder::Instruction::MovDown(n as u32));
                 let stack_len = self.stack.len();
+                ensure!(
+                    stack_len > n,
+                    StackSnafu {
+                        stack_len,
+                        expected: Some(1 + n),
+                    }
+                );
                 let el = self.stack.remove(stack_len - 1);
                 self.stack.insert(stack_len - 1 - n, el);
             }
-            n => panic!("cannot move down further than to the 16th position: {}", n),
+            n => {
+                return Err(Error::simple(format!(
+                    "Cannot move down further than to the 16th position: {n}"
+                )))
+            }
         }
+        Ok(())
     }
 
     /// Removes all stack elements after the top `n` elements.
-    fn cleanup_stack(&mut self, n: usize) {
+    fn cleanup_stack(&mut self, n: usize) -> Result<()> {
         // We need to first movdn the top `n` elements to the bottom of the stack.
         // Then we can start dropping elements from the top of the stack, until self.stack.len() is n.
-        for _ in 0..n {
-            self.movdn(self.stack.len() - 1);
+        for _ in 0..n.min(self.stack.len()) {
+            self.movdn(self.stack.len() - 1)?;
         }
         while self.stack.len() > n {
             self.miden_code.push(encoder::Instruction::Drop);
             // draw an edge from top element to drop
             self.stack.pop().unwrap();
         }
+        Ok(())
     }
 
-    fn align_stack(&mut self, expr_refs: &[ExpressionRef]) {
-        self.movup_many(expr_refs);
+    fn align_stack(&mut self, expr_refs: &[ExpressionRef]) -> Result<()> {
+        self.movup_many(expr_refs)?;
         debug_assert!(
             self.stack.iter().rev().take(expr_refs.len()).eq(expr_refs),
             "invalid stack alignment"
         );
+        Ok(())
     }
 
-    fn compile_expr(&mut self, expr_ref: &ExpressionRef) {
-        let expr = &self.expressions[expr_ref.expr_index];
-
+    fn compile_expr(&mut self, expr_ref: &ExpressionRef) -> Result<()> {
         if self.used_exprs.contains(&expr_ref.expr_index) {
-            return;
+            return Ok(());
         }
 
         self.used_exprs.push(expr_ref.expr_index);
 
-        match expr {
+        match &self.expressions[expr_ref.expr_index] {
             Expression::Number(n) => {
                 self.miden_code.push(encoder::Instruction::Push(*n as u32));
 
@@ -330,21 +387,28 @@ impl<'a> Compiler<'a> {
                 });
             }
             Expression::FunctionCall { name, args } => {
-                let func = self
-                    .functions
-                    .iter()
-                    .rev()
-                    .find(|f| f.name == name.as_str())
-                    .expect("function not found")
-                    .clone();
+                let func = self.find_function(name)?.clone();
                 let args = args.clone();
 
-                assert_eq!(func.num_args, args.len());
+                ensure!(
+                    func.num_args == args.len(),
+                    TypeMismatchSnafu {
+                        context: format!(
+                            "tried to call function {} with {} arguments but requied {}",
+                            name,
+                            args.len(),
+                            func.num_args
+                        ),
+                    }
+                );
 
-                for arg in args.iter().rev() {
-                    self.compile_expr(arg);
+                let name = name.clone();
+                for (i, arg) in args.iter().enumerate().rev() {
+                    self.compile_expr(arg)
+                        .nest_err(|| format!("{i}-th arg of {name}"))?;
                 }
-                self.align_stack(&args);
+                self.align_stack(&args)
+                    .nest_err(|| format!("at align of fn {name}"))?;
 
                 self.miden_code.push(func.instruction);
 
@@ -368,15 +432,15 @@ impl<'a> Compiler<'a> {
                 let then = then.clone();
                 let otherwise = otherwise.clone();
 
-                self.compile_expr(&condition);
+                self.compile_expr(&condition)?;
                 self.movup(&condition);
                 self.miden_code.push(encoder::Instruction::IfTrue);
                 self.stack.pop();
 
                 for expr in &then {
-                    self.compile_expr(expr);
+                    self.compile_expr(expr)?;
                 }
-                self.align_stack(&then);
+                self.align_stack(&then)?;
 
                 for _ in &then {
                     self.stack.pop();
@@ -385,7 +449,7 @@ impl<'a> Compiler<'a> {
                 self.miden_code.push(encoder::Instruction::IfElse);
 
                 for expr in &otherwise {
-                    self.compile_expr(expr);
+                    self.compile_expr(expr)?;
                 }
                 self.align_stack(&otherwise);
 
@@ -395,7 +459,16 @@ impl<'a> Compiler<'a> {
 
                 self.miden_code.push(encoder::Instruction::IfEnd);
 
-                assert_eq!(then.len(), otherwise.len());
+                ensure!(
+                    then.len() == otherwise.len(),
+                    TypeMismatchSnafu {
+                        context: format!(
+                            "num exprs of then branch ({}) mismatches the else one ({})",
+                            then.len(),
+                            otherwise.len()
+                        )
+                    }
+                );
                 for (i, _) in then.iter().enumerate().rev() {
                     self.stack.push(ExpressionRef {
                         expr_index: expr_ref.expr_index,
@@ -404,16 +477,18 @@ impl<'a> Compiler<'a> {
                 }
             }
         }
+
+        Ok(())
     }
 
-    fn compile(mut self, outputs: &[ExpressionRef]) -> Vec<encoder::Instruction<'a>> {
+    fn compile(mut self, outputs: &[ExpressionRef]) -> Result<Vec<encoder::Instruction<'a>>> {
         for output in outputs {
-            self.compile_expr(output);
+            self.compile_expr(output)?;
         }
-        self.align_stack(outputs);
-        self.cleanup_stack(outputs.len());
+        self.align_stack(outputs)?;
+        self.cleanup_stack(outputs.len())?;
 
-        self.miden_code
+        Ok(self.miden_code)
     }
 }
 
@@ -435,7 +510,7 @@ mod tests {
 
         let a = builder.number(1);
         let b = builder.number(2);
-        let [result] = builder.call("u32wrapping_add", &[a, b])[..] else { unreachable!() };
+        let [result] = builder.call("u32wrapping_add", &[a, b]).unwrap()[..] else { unreachable!() };
 
         let compiler = Compiler {
             expressions: builder.build(),
@@ -443,7 +518,9 @@ mod tests {
             ..Default::default()
         };
 
-        let code = compiler.compile(&[result]);
+        let code = compiler
+            .compile(&[result])
+            .unwrap_or_else(|e| panic!("{e}"));
 
         assert_eq!(
             code,
@@ -476,8 +553,8 @@ mod tests {
         let mut builder = Builder::new(&functions);
 
         let a = builder.number(1);
-        let [a2, a] = builder.call("dup", &[a])[..] else { unreachable!() };
-        let [result] = builder.call("u32wrapping_add", &[a2, a])[..] else { unreachable!() };
+        let [a2, a] = builder.call("dup", &[a]).unwrap()[..] else { unreachable!() };
+        let [result] = builder.call("u32wrapping_add", &[a2, a]).unwrap()[..] else { unreachable!() };
 
         let compiler = Compiler {
             expressions: builder.build(),
@@ -485,7 +562,9 @@ mod tests {
             ..Default::default()
         };
 
-        let code = compiler.compile(&[result]);
+        let code = compiler
+            .compile(&[result])
+            .unwrap_or_else(|e| panic!("{e}"));
 
         assert_eq!(
             code,
@@ -518,8 +597,8 @@ mod tests {
         let mut builder = Builder::new(&functions);
 
         let a = builder.number(1);
-        let [a2, a] = builder.call("dup", &[a])[..] else { unreachable!() };
-        let [result] = builder.call("u32wrapping_add", &[a, a2])[..] else { unreachable!() };
+        let [a2, a] = builder.call("dup", &[a]).unwrap()[..] else { unreachable!() };
+        let [result] = builder.call("u32wrapping_add", &[a, a2]).unwrap()[..] else { unreachable!() };
 
         let compiler = Compiler {
             expressions: builder.build(),
@@ -527,7 +606,9 @@ mod tests {
             ..Default::default()
         };
 
-        let code = compiler.compile(&[result]);
+        let code = compiler
+            .compile(&[result])
+            .unwrap_or_else(|e| panic!("{e}"));
 
         assert_eq!(
             code,
@@ -562,7 +643,9 @@ mod tests {
             ..Default::default()
         };
 
-        let code = compiler.compile(&[a_from_if]);
+        let code = compiler
+            .compile(&[a_from_if])
+            .unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(
             code,
             vec![
@@ -589,7 +672,7 @@ mod tests {
 
         let true_ = builder.boolean(true);
         let n123 = builder.number(123);
-        let [n123] = builder.call("assert_guard", &[true_, n123])[..] else { unreachable!() };
+        let [n123] = builder.call("assert_guard", &[true_, n123]).unwrap()[..] else { unreachable!() };
 
         let compiler = Compiler {
             expressions: builder.build(),
@@ -597,7 +680,7 @@ mod tests {
             ..Default::default()
         };
 
-        let code = compiler.compile(&[n123]);
+        let code = compiler.compile(&[n123]).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(
             code,
             vec![

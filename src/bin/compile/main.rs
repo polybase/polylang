@@ -21,7 +21,9 @@ fn main() {
     let program = polylang_parser::parse(&code).unwrap();
 
     let (miden_code, abi) =
-        polylang::compiler::compile(program, collection_name.as_deref(), &function_name);
+        polylang::compiler::compile(program, collection_name.as_deref(), &function_name)
+            .map_err(|e| e.add_source(code))
+            .unwrap_or_else(|e| panic!("{e}"));
     println!("{}", miden_code);
     eprintln!("ABI: {}", serde_json::to_string(&abi).unwrap());
 }

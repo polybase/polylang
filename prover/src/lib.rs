@@ -1,4 +1,5 @@
 use abi::{publickey, Abi, Parser, Type, TypeReader, Value};
+use error::prelude::*;
 use miden::{ExecutionProof, ProofOptions};
 use miden_processor::{
     math::Felt,
@@ -29,12 +30,9 @@ pub struct Output {
     pub proof: Vec<u8>,
 }
 
-fn json_to_this_value(
-    this_json: &serde_json::Value,
-    this_type: &Type,
-) -> Result<Value, Box<dyn std::error::Error>> {
+fn json_to_this_value(this_json: &serde_json::Value, this_type: &Type) -> Result<Value> {
     let Type::Struct(struct_) = this_type else {
-        return Err("This type is not a struct".into());
+        return Err(Error::simple("This type is not a struct"));
     };
 
     let use_defaults = this_json.as_object().map(|o| o.is_empty()).unwrap_or(false);
@@ -45,7 +43,12 @@ fn json_to_this_value(
             Some(value) => Parser::parse(field_type, value)?,
             None if use_defaults => field_type.default_value(),
             None if matches!(field_type, Type::Nullable(_)) => field_type.default_value(),
-            None => return Err(format!("missing value for field `{}`", field_name).into()),
+            None => {
+                return Err(Error::simple(format!(
+                    "missing value for field `{}`",
+                    field_name
+                )))
+            }
         };
 
         struct_values.push((field_name.clone(), field_value));
@@ -55,25 +58,35 @@ fn json_to_this_value(
 }
 
 pub fn hash_this(type_: Type, this: &Value) -> Result<[u64; 4], Box<dyn std::error::Error>> {
-    let hasher_program = compiler::compile_hasher(type_);
+    let Type::Struct(struct_type) = struct_type else {
+        return Err(Error::simple("This type is not a struct"));
+    };
 
-    let assembler =
-        miden::Assembler::default().with_library(&miden_stdlib::StdLibrary::default())?;
+    let hasher_program = compiler::compile_struct_hasher(struct_type)?;
 
-    let program = assembler.compile(hasher_program)?;
+    let assembler = miden::Assembler::default()
+        .with_library(&miden_stdlib::StdLibrary::default())
+        .wrap_err()?;
+
+    let program = assembler.compile(hasher_program).wrap_err()?;
 
     let execution_result = miden::execute(
         &program,
         miden::StackInputs::default(),
         miden::MemAdviceProvider::from(
-            miden::AdviceInputs::default().with_stack_values(this.serialize().into_iter())?,
+            miden::AdviceInputs::default()
+                .with_stack_values(this.serialize().into_iter())
+                .wrap_err()?,
         ),
-    )?;
+    )
+    .wrap_err()?;
 
-    Ok(execution_result.stack_outputs().stack()[0..4].try_into()?)
+    execution_result.stack_outputs().stack()[0..4]
+        .try_into()
+        .wrap_err()
 }
 
-pub fn compile_program(abi: &Abi, miden_code: &str) -> Result<Program, Box<dyn std::error::Error>> {
+pub fn compile_program(abi: &Abi, miden_code: &str) -> Result<Program> {
     let std_library = match &abi.std_version {
         None => miden_stdlib::StdLibrary::default(),
         Some(version) => match version {
@@ -81,9 +94,11 @@ pub fn compile_program(abi: &Abi, miden_code: &str) -> Result<Program, Box<dyn s
             abi::StdVersion::V0_6_1 => miden_stdlib::StdLibrary::default(),
         },
     };
-    let assembler = miden::Assembler::default().with_library(&std_library)?;
+    let assembler = miden::Assembler::default()
+        .with_library(&std_library)
+        .wrap_err()?;
 
-    Ok(assembler.compile(miden_code)?)
+    assembler.compile(miden_code).wrap_err()
 }
 
 pub struct Inputs {
@@ -140,15 +155,13 @@ impl Inputs {
     fn stack(
         &self,
         other_records: &HashMap<String, Vec<(Type, Value, Value)>>,
-    ) -> Result<StackInputs, Box<dyn std::error::Error>> {
-        Ok(StackInputs::try_from_values(
-            self.stack_values(other_records),
-        )?)
+    ) -> Result<StackInputs> {
+        StackInputs::try_from_values(self.stack_values(other_records)).wrap_err()
     }
 
-    fn this_value(&self) -> Result<Value, Box<dyn std::error::Error>> {
+    fn this_value(&self) -> Result<Value> {
         let Some(this_type) = &self.abi.this_type else {
-            return Err("Missing this type".into());
+            return Err(Error::simple("Missing this type"));
         };
 
         json_to_this_value(&self.this, this_type)
@@ -230,7 +243,7 @@ impl Inputs {
     fn advice_tape(
         &self,
         other_records: &HashMap<String, Vec<(Type, Value, Value)>>,
-    ) -> Result<miden::MemAdviceProvider, Box<dyn std::error::Error>> {
+    ) -> Result<miden::MemAdviceProvider> {
         let mut advice_tape = vec![];
         advice_tape.extend(
             // This should probably be on the stack
@@ -306,19 +319,20 @@ impl Inputs {
         Ok(miden::MemAdviceProvider::from(
             miden::AdviceInputs::default()
                 .with_stack_values(advice_tape)?
-                .with_map(advice_map),
+                .with_map(advice_map)
+                .wrap_err()?,
         ))
     }
 }
 
-pub fn prove(program: &Program, inputs: &Inputs) -> Result<Output, Box<dyn std::error::Error>> {
-    let (output, prove) = run(&program, inputs)?;
+pub fn prove(program: &Program, inputs: &Inputs) -> Result<Output> {
+    let (output, prove) = run(program, inputs)?;
     let proof = prove()?;
 
     Ok(Output {
         self_destructed: output.self_destructed()?,
         new_this: output.this(&inputs.abi)?,
-        new_hash: output.stack[0..4].try_into()?,
+        new_hash: output.stack[0..4].try_into().wrap_err()?,
         proof: proof.to_bytes(),
         stack: output.stack.clone(),
         run_output: output,
@@ -372,13 +386,13 @@ impl RunOutput {
         log_messages
     }
 
-    pub fn this(&self, abi: &Abi) -> Result<Value, Box<dyn std::error::Error>> {
+    pub fn this(&self, abi: &Abi) -> Result<Value> {
         let Some(this_type) = &abi.this_type else {
-            return Err("Missing this type".into());
+            return Err(Error::simple("Missing this type"));
         };
 
         let Some(this_addr) = abi.this_addr else {
-            return Err("Missing this addr".into());
+            return Err(Error::simple("Missing this addr"));
         };
 
         this_type.read(
@@ -391,14 +405,17 @@ impl RunOutput {
         )
     }
 
-    pub fn self_destructed(&self) -> Result<bool, Box<dyn std::error::Error>> {
+    pub fn self_destructed(&self) -> Result<bool> {
         let self_destructed = self.stack[4];
         if self_destructed == 0 {
             Ok(false)
         } else if self_destructed == 1 {
             Ok(true)
         } else {
-            Err(format!("Invalid self destructed value: {}", self_destructed).into())
+            Err(Error::simple(format!(
+                "Invalid self destructed value: {}",
+                self_destructed
+            )))
         }
     }
 
@@ -410,13 +427,10 @@ impl RunOutput {
 pub fn run<'a>(
     program: &'a Program,
     inputs: &Inputs,
-) -> Result<
-    (
-        RunOutput,
-        impl FnOnce() -> Result<ExecutionProof, Box<dyn std::error::Error>> + 'a,
-    ),
-    Box<dyn std::error::Error + 'static>,
-> {
+) -> Result<(
+    RunOutput,
+    impl FnOnce() -> Result<ExecutionProof, Box<dyn std::error::Error>> + 'a,
+)> {
     let other_records = inputs.other_records()?;
     let input_stack = inputs.stack(&other_records)?;
     let advice_tape = inputs.advice_tape(&other_records)?;
@@ -430,14 +444,17 @@ pub fn run<'a>(
                 last_ok_state = Some(state);
             }
             Err(e) => {
-                err = Some(e);
+                // TODO: store vector of errors instead.
+                if err.is_none() {
+                    err = Some(Error::wrapped(Box::new(e)));
+                }
             }
         }
     }
 
     let last_ok_state = match (last_ok_state, err) {
         (None, Some(e)) => {
-            return Err(Box::new(e));
+            return Err(e);
         }
         (Some(state), Some(e)) => {
             if state.memory.iter().find(|(a, _)| *a == 1).is_none() {
@@ -454,14 +471,14 @@ pub fn run<'a>(
                 },
                 1,
             )? else {
-                return Err(Box::new(e));
+                return Err(e);
             };
 
-            if s.is_empty() {
-                return Err(Box::new(e));
+            return if s.is_empty() {
+                Err(e)
             } else {
-                return Err(format!("{}: {}", s, e).into());
-            }
+                Err(Error::simple(format!("{}: {}", s, e)))
+            };
         }
         (Some(state), _) => state,
         (None, None) => unreachable!(),
@@ -496,7 +513,8 @@ pub fn run<'a>(
         },
         move || {
             let (_stack_outputs, proof) =
-                miden::prove(&program, input_stack, advice_tape, ProofOptions::default())?;
+                miden::prove(program, input_stack, advice_tape, ProofOptions::default())
+                    .wrap_err()?;
 
             Ok(proof)
         },
