@@ -3835,11 +3835,7 @@ fn compile_check_eq_or_ownership(
                 )?;
                 let actual_record_hash = hash(compiler, record.clone())?;
 
-                let is_hash_eq = compile_eq(
-                    compiler,
-                    dbg!(&record_public_hash), // addr 63
-                    dbg!(&actual_record_hash), // addr 77
-                );
+                let is_hash_eq = compile_eq(compiler, &record_public_hash, &actual_record_hash);
                 let assert = compiler.root_scope.find_function("assert").unwrap();
                 let (error_str, _) =
                     string::new(compiler, "Record hash does not match the expected hash");
