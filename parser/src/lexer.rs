@@ -3,8 +3,11 @@ pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tok<'input> {
     NumberLiteral(f64),
+    HexLiteral(&'input str),
     StringLiteral(&'input str),
     Identifier(&'input str),
+    EthLiteralStart,
+    FalconLiteralStart,
     Desc,
     Asc,
     True,
@@ -73,8 +76,11 @@ impl std::fmt::Display for Tok<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Tok::NumberLiteral(n) => write!(f, "{}", n),
+            Tok::HexLiteral(s) => write!(f, "{}", s),
             Tok::StringLiteral(s) => write!(f, "{}", s),
             Tok::Identifier(s) => write!(f, "{}", s),
+            Tok::EthLiteralStart => write!(f, "eth#"),
+            Tok::FalconLiteralStart => write!(f, "falcon#"),
             Tok::Desc => write!(f, "desc"),
             Tok::Asc => write!(f, "asc"),
             Tok::True => write!(f, "true"),
@@ -369,6 +375,38 @@ impl<'input> Lexer<'input> {
             .map(|(tok, _)| Ok::<_, LexicalError>((start, tok.clone(), end + c.len_utf8())))
     }
 
+    /// parses 'eth#', 'falcon#', etc.
+    fn lex_literal_start(&mut self) -> Option<LexerItem<'input>> {
+        let (start, c) = self.peek_char()?;
+        if !c.is_ascii_alphabetic() {
+            return None;
+        }
+
+        let mut end = start;
+        let mut literal_start = String::new();
+        while let Some((i, c)) = self.peek_char() {
+            if !c.is_ascii_alphanumeric() && c != '_' {
+                break;
+            }
+            end = i;
+            literal_start.push(c);
+            self.next_char();
+        }
+
+        if self.peek_char() != Some((end + c.len_utf8(), '#')) {
+            return None;
+        }
+        self.next_char();
+
+        [
+            (Tok::EthLiteralStart, "eth#"),
+            (Tok::FalconLiteralStart, "falcon#"),
+        ]
+        .iter()
+        .find(|(_, k)| k == &&literal_start)
+        .map(|(tok, _)| Ok::<_, LexicalError>((start, tok.clone(), end + c.len_utf8())))
+    }
+
     fn lex_at_index(&mut self) -> Option<LexerItem<'input>> {
         match (
             self.peek_char(),
@@ -471,6 +509,37 @@ impl<'input> Lexer<'input> {
         )))
     }
 
+    fn lex_hex_literal(&mut self) -> Option<LexerItem<'input>> {
+        let (start, c) = self.peek_char()?;
+        if c != '0' {
+            return None;
+        }
+        self.next_char();
+
+        let (x_pos, c) = self.peek_char()?;
+        if c != 'x' {
+            return None;
+        }
+        self.next_char();
+
+        let mut end = x_pos;
+        let mut hex = String::new();
+        while let Some((i, c)) = self.peek_char() {
+            if !c.is_ascii_hexdigit() {
+                break;
+            }
+            end = i;
+            hex.push(c);
+            self.next_char();
+        }
+
+        Some(Ok((
+            start,
+            Tok::HexLiteral(&self.input[start..end + c.len_utf8()]),
+            end + c.len_utf8(),
+        )))
+    }
+
     fn lex_identifier(&mut self) -> Option<LexerItem<'input>> {
         let (start, c) = self.peek_char()?;
         if !(c.is_ascii_alphabetic() || c == '_' || c == '$') {
@@ -522,8 +591,10 @@ impl<'input> Iterator for Lexer<'input> {
 
         let result = self
             .reset_if_none(Self::lex_keyword)
+            .or_else(|| self.reset_if_none(Self::lex_literal_start))
             .or_else(|| self.reset_if_none(Self::lex_at_index))
             .or_else(|| self.reset_if_none(Self::lex_number))
+            .or_else(|| self.reset_if_none(Self::lex_hex_literal))
             .or_else(|| self.reset_if_none(Self::lex_string))
             .or_else(|| self.reset_if_none(Self::lex_identifier))
             .or_else(|| match self.peek_char()? {

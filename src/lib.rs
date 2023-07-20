@@ -941,7 +941,10 @@ function x() {
         assert_eq!(function.decorators.len(), 1);
         assert_eq!(function.decorators[0].name, "call");
         assert_eq!(function.decorators[0].arguments.len(), 1);
-        assert_eq!(function.decorators[0].arguments[0], "owner");
+        assert_eq!(
+            function.decorators[0].arguments[0],
+            ast::DecoratorArgument::Identifier("owner".to_owned()),
+        );
     }
 
     #[test]

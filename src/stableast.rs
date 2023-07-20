@@ -489,12 +489,21 @@ impl<'a> Directive<'a> {
             arguments: ast
                 .arguments
                 .iter()
-                .map(|a| {
-                    DirectiveArgument::FieldReference(FieldReference {
-                        path: a.split('.').map(Cow::Borrowed).collect(),
-                    })
-                })
+                .map(DirectiveArgument::from_decorator_argument_ast)
                 .collect(),
+        }
+    }
+}
+
+impl<'a> DirectiveArgument<'a> {
+    fn from_decorator_argument_ast(ast: &'a ast::DecoratorArgument) -> Self {
+        match ast {
+            ast::DecoratorArgument::Identifier(f) => {
+                DirectiveArgument::FieldReference(FieldReference {
+                    path: f.split('.').map(Cow::Borrowed).collect(),
+                })
+            }
+            ast::DecoratorArgument::Literal(_) => todo!(),
         }
     }
 }
