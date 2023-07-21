@@ -96,13 +96,16 @@ where
     }
 }
 
+pub fn parse_program(input: &str) -> Result<ast::Program, Error> {
+    polylang_parser::parse(input).map_err(|e| parse_error_to_error(input, e))
+}
+
 pub fn parse<'a>(
     input: &'a str,
     namespace: &'a str,
     program_holder: &'a mut Option<ast::Program>,
 ) -> Result<(&'a ast::Program, stableast::Root<'a>), Error> {
-    program_holder
-        .replace(polylang_parser::parse(input).map_err(|e| parse_error_to_error(input, e))?);
+    program_holder.replace(parse_program(input)?);
 
     Ok((
         program_holder.as_ref().unwrap(),

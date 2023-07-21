@@ -397,6 +397,7 @@ impl<'input> Lexer<'input> {
             return None;
         }
         self.next_char();
+        literal_start += "#";
 
         [
             (Tok::EthLiteralStart, "eth#"),
@@ -593,8 +594,8 @@ impl<'input> Iterator for Lexer<'input> {
             .reset_if_none(Self::lex_keyword)
             .or_else(|| self.reset_if_none(Self::lex_literal_start))
             .or_else(|| self.reset_if_none(Self::lex_at_index))
-            .or_else(|| self.reset_if_none(Self::lex_number))
             .or_else(|| self.reset_if_none(Self::lex_hex_literal))
+            .or_else(|| self.reset_if_none(Self::lex_number))
             .or_else(|| self.reset_if_none(Self::lex_string))
             .or_else(|| self.reset_if_none(Self::lex_identifier))
             .or_else(|| match self.peek_char()? {

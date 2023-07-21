@@ -3746,12 +3746,9 @@ fn compile_call_authorization_proof(
         (false, false) => return Ok(result),
     }
 
-    let mut call_fields = call_decorators
-        .flat_map(|d| &d.arguments)
-        .map(|a| a.split('.').collect::<Vec<_>>())
-        .peekable();
+    let mut call_args = call_decorators.flat_map(|d| &d.arguments).peekable();
 
-    if function_has_call_directive && call_fields.peek().is_none() {
+    if function_has_call_directive && call_args.peek().is_none() {
         // The call is just `@call` with no fields, so no authorization required.
         compiler.instructions.push(encoder::Instruction::Push(1));
         compiler
@@ -3760,13 +3757,25 @@ fn compile_call_authorization_proof(
         return Ok(result);
     }
 
-    for call_field_path in call_fields {
-        let mut current_field = collection_symbol.clone();
-        for field in call_field_path {
-            current_field = struct_field(compiler, &current_field, field)?;
-        }
+    for call_arg in call_args {
+        let arg_value = match call_arg {
+            ast::DecoratorArgument::Identifier(id) => {
+                let mut current_field = collection_symbol.clone();
+                for field in &[id] {
+                    current_field = struct_field(compiler, &current_field, field)?;
+                }
 
-        let passed = compile_check_eq_or_ownership(compiler, current_field, auth_pk)?;
+                current_field
+            }
+            ast::DecoratorArgument::Literal(l) => match l {
+                ast::Literal::Eth(pk) => {
+                    let key = abi::publickey::Key::from_secp256k1_bytes(&pk).unwrap();
+                    publickey::new(compiler, key)
+                }
+            },
+        };
+
+        let passed = compile_check_eq_or_ownership(compiler, arg_value, auth_pk)?;
         compiler.instructions.push(encoder::Instruction::If {
             condition: vec![encoder::Instruction::MemLoad(Some(passed.memory_addr))],
             then: vec![

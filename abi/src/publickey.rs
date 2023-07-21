@@ -4,6 +4,7 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 use error::prelude::{whatever, Whatever};
+use snafu::ResultExt;
 
 /// Layout: [key, crv, alg, use, extra_ptr]
 /// `extra_ptr` in secp256k1 is pointer to 64 bytes of data,
@@ -185,4 +186,51 @@ where
         .map_err(serde::de::Error::custom)?
         .try_into()
         .map_err(|_| serde::de::Error::custom("invalid base64"))
+}
+
+impl Key {
+    pub fn from_secp256k1_bytes(bytes: &[u8]) -> Result<Self, Whatever> {
+        let mut x = [0; 32];
+        let mut y = [0; 32];
+
+        match bytes.len() {
+            65 => {
+                x.copy_from_slice(&bytes[1..33]);
+                y.copy_from_slice(&bytes[33..]);
+            }
+            64 => {
+                x.copy_from_slice(&bytes[..32]);
+                y.copy_from_slice(&bytes[32..]);
+            }
+            33 => {
+                let pk = secp256k1::PublicKey::from_slice(bytes)
+                    .with_whatever_context(|_| "invalid secp256k1 public key bytes".to_string())?;
+
+                let uncompressed = pk.serialize_uncompressed();
+                x.copy_from_slice(&uncompressed[1..33]);
+                y.copy_from_slice(&uncompressed[33..]);
+            }
+            _ => whatever!("invalid secp256k1 xy bytes length: {}", bytes.len()),
+        }
+
+        Ok(Key {
+            kty: Kty::EC,
+            crv: Crv::Secp256k1,
+            alg: Alg::ES256K,
+            use_: Use::Sig,
+            x,
+            y,
+        })
+    }
+
+    pub fn to_64_byte_hex(&self) -> String {
+        format!("0x{}{}", hex::encode(&self.x), hex::encode(&self.y))
+    }
+
+    pub fn to_compressed_33_byte_hex(&self) -> String {
+        let mut bytes = [0; 33];
+        bytes[0] = 0x02 | (self.y[31] & 0x01);
+        bytes[1..].copy_from_slice(&self.x);
+        format!("0x{}", hex::encode(bytes))
+    }
 }

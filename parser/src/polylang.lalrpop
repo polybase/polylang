@@ -150,10 +150,10 @@ Number: f64 = {
 };
 
 HexLiteral: Vec<u8> = {
-    <l:@L> <h:hex_literal> =>? hex::decode(h).map_err(|e| ParseError::User {
+    <l:@L> <h:hex_literal> <r:@R> =>? hex::decode(&h[2..]).map_err(|e| ParseError::User {
         error: lexer::LexicalError::UserError {
             start: l,
-            end: l,
+            end: r,
             message: format!("Invalid hex literal: {}", e),
         }
     }),
