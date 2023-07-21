@@ -479,14 +479,14 @@ DecoratorName: String = {
 }
 
 Decorator: Decorator = {
-    "@" <name:DecoratorName> "(" <arguments:DecoratorArgument*> ")" => Decorator{
+    <l:@L> "@" <name:DecoratorName> "(" <arguments:DecoratorArgument*> ")" <r:@R> => DecoratorNode{
         name,
         arguments,
-    },
-    "@" <name:DecoratorName> => Decorator{
+    }.with_span(l, r),
+    <l:@L> "@" <name:DecoratorName> <r:@R> => DecoratorNode{
         name,
         arguments: vec![],
-    },
+    }.with_span(l, r),
 };
 
 DecoratorArgument: DecoratorArgument = {

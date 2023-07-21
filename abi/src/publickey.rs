@@ -203,14 +203,19 @@ impl Key {
                 y.copy_from_slice(&bytes[32..]);
             }
             33 => {
-                let pk = secp256k1::PublicKey::from_slice(bytes)
-                    .with_whatever_context(|_| "invalid secp256k1 public key bytes".to_string())?;
+                let pk = secp256k1::PublicKey::from_slice(bytes).with_whatever_context(|e| {
+                    format!("invalid secp256k1 public key bytes: {e}")
+                })?;
 
                 let uncompressed = pk.serialize_uncompressed();
                 x.copy_from_slice(&uncompressed[1..33]);
                 y.copy_from_slice(&uncompressed[33..]);
             }
-            _ => whatever!("invalid secp256k1 xy bytes length: {}", bytes.len()),
+            20 => whatever!("you provided an address, where a public key is expected. See https://ethereum.stackexchange.com/questions/13778/get-public-key-of-any-ethereum-account"),
+            _ => whatever!(
+                "invalid secp256k1 xy bytes length: {}. A key should be 65, 64 or 33 bytes long.",
+                bytes.len()
+            ),
         }
 
         Ok(Key {

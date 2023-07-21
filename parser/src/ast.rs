@@ -34,10 +34,12 @@ pub struct Field {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Decorator {
+pub struct DecoratorNode {
     pub name: String,
     pub arguments: Vec<DecoratorArgument>,
 }
+
+pub type Decorator = MaybeSpanned<DecoratorNode>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DecoratorArgument {

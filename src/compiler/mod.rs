@@ -3746,7 +3746,9 @@ fn compile_call_authorization_proof(
         (false, false) => return Ok(result),
     }
 
-    let mut call_args = call_decorators.flat_map(|d| &d.arguments).peekable();
+    let mut call_args = call_decorators
+        .flat_map(|d| d.arguments.iter().map(|a| (d.span(), a)))
+        .peekable();
 
     if function_has_call_directive && call_args.peek().is_none() {
         // The call is just `@call` with no fields, so no authorization required.
@@ -3757,7 +3759,9 @@ fn compile_call_authorization_proof(
         return Ok(result);
     }
 
-    for call_arg in call_args {
+    for (decorator_span, call_arg) in call_args {
+        maybe_start!(decorator_span);
+
         let arg_value = match call_arg {
             ast::DecoratorArgument::Identifier(id) => {
                 let mut current_field = collection_symbol.clone();
@@ -3769,7 +3773,7 @@ fn compile_call_authorization_proof(
             }
             ast::DecoratorArgument::Literal(l) => match l {
                 ast::Literal::Eth(pk) => {
-                    let key = abi::publickey::Key::from_secp256k1_bytes(&pk).unwrap();
+                    let key = abi::publickey::Key::from_secp256k1_bytes(&pk).wrap_err()?;
                     publickey::new(compiler, key)
                 }
             },
