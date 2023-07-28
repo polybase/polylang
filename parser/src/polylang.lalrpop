@@ -13,6 +13,7 @@ extern {
         identifier => lexer::Tok::Identifier(<&'input str>),
         number => lexer::Tok::NumberLiteral(<f64>),
         string => lexer::Tok::StringLiteral(<&'input str>),
+        hex_literal => lexer::Tok::HexLiteral(<&'input str>),
         "desc" => lexer::Tok::Desc,
         "asc" => lexer::Tok::Asc,
         "true" => lexer::Tok::True,
@@ -41,6 +42,8 @@ extern {
         "function" => lexer::Tok::Function,
         "@index" => lexer::Tok::Index,
         "collection" => lexer::Tok::Collection,
+        "eth#" => lexer::Tok::EthLiteralStart,
+        "falcon#" => lexer::Tok::FalconLiteralStart,
         "{" => lexer::Tok::LBrace,
         "}" => lexer::Tok::RBrace,
         "[" => lexer::Tok::LBracket,
@@ -144,6 +147,20 @@ ParameterType: ParameterType = {
 
 Number: f64 = {
     <n:number> => n,
+};
+
+HexLiteral: Vec<u8> = {
+    <l:@L> <h:hex_literal> <r:@R> =>? hex::decode(&h[2..]).map_err(|e| ParseError::User {
+        error: lexer::LexicalError::UserError {
+            start: l,
+            end: r,
+            message: format!("Invalid hex literal: {}", e),
+        }
+    }),
+};
+
+Literal: Literal = {
+    "eth#" <h:HexLiteral> => Literal::Eth(h),
 };
 
 String: String = {
@@ -462,14 +479,19 @@ DecoratorName: String = {
 }
 
 Decorator: Decorator = {
-    "@" <name:DecoratorName> "(" <arguments:Ident*> ")" => Decorator{
+    <l:@L> "@" <name:DecoratorName> "(" <arguments:DecoratorArgument*> ")" <r:@R> => DecoratorNode{
         name,
         arguments,
-    },
-    "@" <name:DecoratorName> => Decorator{
+    }.with_span(l, r),
+    <l:@L> "@" <name:DecoratorName> <r:@R> => DecoratorNode{
         name,
         arguments: vec![],
-    },
+    }.with_span(l, r),
+};
+
+DecoratorArgument: DecoratorArgument = {
+    <id:Ident> => DecoratorArgument::Identifier(id),
+    <literal:Literal> => DecoratorArgument::Literal(literal),
 };
 
 IndexFields: Vec<IndexField> = {

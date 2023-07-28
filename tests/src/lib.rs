@@ -47,11 +47,9 @@ fn run(
     ctx_public_key: Option<abi::publickey::Key>,
     other_records: HashMap<String, Vec<serde_json::Value>>,
 ) -> Result<(abi::Abi, polylang_prover::RunOutput), error::Error> {
-    let mut program = None;
-    polylang::parse(polylang_code, "test", &mut program).unwrap();
+    let program = polylang::parse_program(polylang_code).unwrap();
 
-    let (miden_code, abi) =
-        polylang::compiler::compile(program.unwrap(), Some(collection), function)?;
+    let (miden_code, abi) = polylang::compiler::compile(program, Some(collection), function)?;
 
     let program = polylang_prover::compile_program(&abi, &miden_code).unwrap();
     let this_abi_value = abi.this_type.clone().unwrap().parse(&this).unwrap();
@@ -513,6 +511,103 @@ fn call_auth_delegate_wrong_pk() {
     assert!(err
         .to_string()
         .contains("You are not authorized to call this function"));
+}
+
+fn call_auth_literal_pk(use_correct_pk: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let key = fixtures::pk1_key().to_64_byte_hex();
+    let code = format!(
+        r#"
+        collection Account {{
+            id: string;
+            name: string;
+
+            @call(eth#{key})
+            changeName(name: string) {{
+                this.name = name;
+            }}
+        }}
+    "#
+    );
+
+    let (abi, output) = run(
+        &code,
+        "Account",
+        "changeName",
+        serde_json::json!({
+            "id": "test",
+            "name": "test",
+        }),
+        vec![serde_json::json!("test2")],
+        Some(if use_correct_pk {
+            fixtures::pk1_key()
+        } else {
+            fixtures::pk2_key()
+        }),
+        HashMap::new(),
+    )?;
+
+    assert_eq!(
+        output.this(&abi).unwrap(),
+        abi::Value::StructValue(vec![
+            ("id".to_owned(), abi::Value::String("test".to_owned())),
+            ("name".to_owned(), abi::Value::String("test2".to_owned())),
+        ]),
+    );
+
+    Ok(())
+}
+
+#[test]
+fn call_auth_literal_pk_correct_pk() {
+    call_auth_literal_pk(true).unwrap();
+}
+
+#[test]
+fn call_auth_literal_pk_wrong_pk() {
+    let err = call_auth_literal_pk(false).unwrap_err();
+    assert!(err
+        .to_string()
+        .contains("You are not authorized to call this function"));
+}
+
+#[test]
+fn call_auth_literal_compressed() {
+    let key = fixtures::pk1_key().to_compressed_33_byte_hex();
+    let code = format!(
+        r#"
+        collection Account {{
+            id: string;
+            name: string;
+
+            @call(eth#{key})
+            changeName(name: string) {{
+                this.name = name;
+            }}
+        }}
+    "#
+    );
+
+    let (abi, output) = run(
+        &code,
+        "Account",
+        "changeName",
+        serde_json::json!({
+            "id": "test",
+            "name": "test",
+        }),
+        vec![serde_json::json!("test2")],
+        Some(fixtures::pk1_key()),
+        HashMap::new(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        output.this(&abi).unwrap(),
+        abi::Value::StructValue(vec![
+            ("id".to_owned(), abi::Value::String("test".to_owned())),
+            ("name".to_owned(), abi::Value::String("test2".to_owned())),
+        ]),
+    );
 }
 
 #[test]
