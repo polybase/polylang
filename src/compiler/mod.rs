@@ -886,19 +886,43 @@ pub(crate) struct Symbol {
 }
 
 #[derive(Debug, Clone)]
-struct Collection<'ast> {
+pub(crate) struct CollectionField {
     name: String,
-    fields: Vec<(String, Type)>,
-    functions: Vec<(String, &'ast ast::Function)>,
+    type_: Type,
+    delegate: bool,
+    read: bool,
 }
 
-type BuiltinFn =
-    Box<&'static (dyn Fn(&mut Compiler, &mut Scope, &[Symbol]) -> Result<Symbol> + Sync)>;
+#[derive(Debug, Clone)]
+struct Collection<'ast> {
+    name: String,
+    fields: Vec<CollectionField>,
+    functions: Vec<(String, &'ast ast::Function)>,
+    call_directive: bool,
+    read_directive: bool,
+}
+
+impl From<Collection<'_>> for Struct {
+    fn from(collection: Collection<'_>) -> Self {
+        let mut fields = Vec::new();
+        for field in collection.fields {
+            fields.push((field.name, field.type_));
+        }
+
+        Struct {
+            name: collection.name,
+            fields,
+        }
+    }
+}
+
+type BuiltinFn<'a> =
+    Box<&'a (dyn Fn(&mut Compiler, &mut Scope, &[Symbol]) -> Result<Symbol> + Sync)>;
 
 #[derive(Clone)]
 enum Function<'ast> {
     Ast(&'ast ast::Function),
-    Builtin(BuiltinFn),
+    Builtin(BuiltinFn<'ast>),
 }
 
 impl std::fmt::Debug for Function<'_> {
@@ -1113,6 +1137,7 @@ pub(crate) struct Compiler<'ast, 'c, 's> {
     instructions: &'c mut Vec<encoder::Instruction<'ast>>,
     memory: &'c mut Memory,
     root_scope: &'c Scope<'ast, 's>,
+    record_depenencies: Vec<(abi::RecordHashes, Symbol)>,
 }
 
 impl<'ast, 'c, 's> Compiler<'ast, 'c, 's> {
@@ -1125,12 +1150,20 @@ impl<'ast, 'c, 's> Compiler<'ast, 'c, 's> {
             instructions,
             memory,
             root_scope,
+            record_depenencies: Vec::new(),
         }
     }
 
     fn comment(&mut self, comment: String) {
         self.instructions
             .push(encoder::Instruction::Comment(comment));
+    }
+
+    fn get_record_dependency(&mut self, col: &Collection) -> Option<Symbol> {
+        self.record_depenencies
+            .iter()
+            .find(|(hashes, _)| hashes.collection == col.name)
+            .map(|(_, symbol)| symbol.clone())
     }
 }
 
@@ -2123,6 +2156,32 @@ fn compile_eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
         (Type::PublicKey, Type::PublicKey) => publickey::eq(compiler, a, b),
         (Type::String, Type::String) => string::eq(compiler, a, b),
         (Type::Nullable(lt), Type::Nullable(rt)) if lt == rt => nullable::eq(compiler, a, b),
+        (Type::Nullable(type_from_nullable), not_null_type)
+        | (not_null_type, Type::Nullable(type_from_nullable))
+            if &**type_from_nullable == not_null_type =>
+        {
+            // a is the nullable type, b is the not null type
+            let (a, b) = if a.type_ == Type::Nullable(type_from_nullable.clone()) {
+                (a, b)
+            } else {
+                (b, a)
+            };
+
+            let mut eq_instructions = vec![];
+            std::mem::swap(compiler.instructions, &mut eq_instructions);
+            let eq_result = compile_eq(compiler, &nullable::value(a.clone()), &b);
+            std::mem::swap(compiler.instructions, &mut eq_instructions);
+
+            compiler.instructions.push(encoder::Instruction::If {
+                condition: vec![encoder::Instruction::MemLoad(Some(
+                    nullable::is_not_null(&a).memory_addr,
+                ))],
+                then: eq_instructions,
+                else_: vec![],
+            });
+
+            eq_result
+        }
         e => unimplemented!("{:?}", e),
     }
 }
@@ -3244,14 +3303,39 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                     name: c.name.clone(),
                     functions: vec![],
                     fields: vec![],
+                    call_directive: match c
+                        .decorators
+                        .iter()
+                        .find(|d| d.name == "call" || d.name == "public")
+                    {
+                        Some(d) if d.arguments.len() == 0 => true,
+                        Some(d) => {
+                            panic!("Invalid {} directive, call() takes no arguments", &d.name)
+                        }
+                        None => false,
+                    },
+                    read_directive: match c
+                        .decorators
+                        .iter()
+                        .find(|d| d.name == "read" || d.name == "public")
+                    {
+                        Some(d) if d.arguments.len() == 0 => true,
+                        Some(d) => {
+                            panic!("Invalid {} directive, read() takes no arguments", &d.name)
+                        }
+                        None => false,
+                    },
                 };
 
                 for item in &c.items {
                     match item {
                         ast::CollectionItem::Field(f) => {
-                            collection
-                                .fields
-                                .push((f.name.clone(), ast_type_to_type(f.required, &f.type_)));
+                            collection.fields.push(CollectionField {
+                                name: f.name.clone(),
+                                type_: ast_type_to_type(f.required, &f.type_),
+                                delegate: f.decorators.iter().any(|d| d.name == "delegate"),
+                                read: f.decorators.iter().any(|d| d.name == "read"),
+                            });
                         }
                         ast::CollectionItem::Function(f) => {
                             collection.functions.push((f.name.clone(), f));
@@ -3277,36 +3361,36 @@ pub fn compile(
     function_name: &str,
 ) -> Result<(String, Abi)> {
     let mut scope = prepare_scope(&program);
-    let collection = collection_name
-        .map(|name| scope.find_collection(name).not_found("collection", name))
-        .transpose()?;
-    let collection_struct = collection.map(|collection| Struct {
-        name: collection.name.clone(),
-        fields: collection
-            .fields
-            .iter()
-            .map(|(name, field)| (name.clone(), field.clone()))
-            .collect(),
-    });
-    let function = collection
-        .and_then(|c| {
-            c.functions
-                .iter()
-                .find(|(name, _)| name == function_name)
-                .map(|(_, f)| *f)
-        })
-        .or_else(|| match scope.find_function(function_name) {
-            Some(Function::Ast(f)) => Some(f),
-            Some(Function::Builtin(_)) => None,
-            None => None,
-        })
-        .not_found("function", function_name)?;
+    let collection = collection_name.map(|name| scope.find_collection(name).cloned().unwrap());
+    let collection = collection.as_ref();
+    let collection_struct = collection.map(|c| Struct::from(c.clone()));
 
-    let param_types = function
-        .parameters
-        .iter()
-        .map(|p| ast_param_type_to_type(p.required, &p.type_, collection_struct.as_ref()))
-        .collect::<Result<Vec<_>>>()?;
+    let (function, param_types) = match function_name {
+        ".readAuth" => (None, vec![]),
+        _ => {
+            let function = collection
+                .and_then(|c| {
+                    c.functions
+                        .iter()
+                        .find(|(name, _)| name == function_name)
+                        .map(|(_, f)| *f)
+                })
+                .or_else(|| match scope.find_function(function_name) {
+                    Some(Function::Ast(f)) => Some(f),
+                    Some(Function::Builtin(_)) => todo!(),
+                    None => None,
+                })
+                .not_found("function", function_name)?;
+
+            let param_types = function
+                .parameters
+                .iter()
+                .map(|p| ast_param_type_to_type(p.required, &p.type_, collection_struct.as_ref()))
+                .collect::<Result<Vec<_>>>()?;
+
+            (Some(function), param_types)
+        }
+    };
 
     let mut instructions = vec![];
     let mut memory = Memory::new();
@@ -3323,8 +3407,22 @@ pub fn compile(
 
     scope.add_symbol("ctx".to_string(), ctx.clone());
 
+    let all_possible_record_dependencies = scope
+        .collections
+        .iter()
+        .map(|c| {
+            (
+                abi::RecordHashes {
+                    collection: c.0.clone(),
+                },
+                memory.allocate_symbol(Type::Array(Box::new(Type::Hash))),
+            )
+        })
+        .collect::<Vec<_>>();
+
     {
         let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
+        compiler.record_depenencies = all_possible_record_dependencies.clone();
 
         let expected_hash = collection_struct.as_ref().map(|_| {
             let hash = compiler.memory.allocate_symbol(Type::Hash);
@@ -3336,10 +3434,114 @@ pub fn compile(
             hash
         });
 
+        for (_, symbol) in &all_possible_record_dependencies {
+            let array_length = compiler
+                .memory
+                .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+            let full_width = compiler
+                .memory
+                .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+            compiler.instructions.extend([
+                // array_len is provided by the host on the stack
+                // [array_len]
+                encoder::Instruction::Dup(None),
+                // [array_len, array_len]
+                encoder::Instruction::MemStore(Some(array_length.memory_addr)),
+                // [array_len]
+                encoder::Instruction::Push(4), // miden width of hash
+                // [4, array_len]
+                encoder::Instruction::U32CheckedMul,
+                // [full_width = array_len * 4]
+                encoder::Instruction::Dup(None),
+                // [full_width, full_width]
+                encoder::Instruction::MemStore(Some(full_width.memory_addr)),
+                // [full_width]
+            ]);
+
+            let ptr = dynamic_alloc(&mut compiler, &[full_width.clone()])?;
+
+            compiler.instructions.extend([
+                encoder::Instruction::While {
+                    condition: vec![
+                        // [full_width]
+                        encoder::Instruction::Dup(None),
+                        // [full_width, full_width]
+                        encoder::Instruction::Push(0),
+                        // [0, full_width, full_width]
+                        encoder::Instruction::U32CheckedGT,
+                        // [full_width > 0, full_width]
+                    ],
+                    body: vec![
+                        // [full_width]
+                        encoder::Instruction::Dup(None),
+                        // [full_width, full_width]
+                        encoder::Instruction::MemLoad(Some(full_width.memory_addr)),
+                        // [original_full_width, full_width, full_width]
+                        encoder::Instruction::Swap,
+                        encoder::Instruction::U32CheckedSub,
+                        // [offset = original_full_width - full_width, full_width]
+                        encoder::Instruction::MemLoad(Some(ptr.memory_addr)),
+                        // [ptr, offset, full_width]
+                        encoder::Instruction::U32CheckedAdd,
+                        // [target = ptr + offset, full_width]
+                        encoder::Instruction::MovUp(2),
+                        // [value, target, full_width]
+                        encoder::Instruction::Swap,
+                        // [target, value, full_width]
+                        encoder::Instruction::MemStore(None),
+                        // [full_width]
+                        encoder::Instruction::Push(1),
+                        // [1, full_width]
+                        encoder::Instruction::U32CheckedSub,
+                        // [full_width - 1]
+                    ],
+                },
+                encoder::Instruction::Drop,
+                // []
+            ]);
+
+            compiler.memory.write(
+                compiler.instructions,
+                array::length(symbol).memory_addr,
+                &[ValueSource::Memory(array_length.memory_addr)],
+            );
+
+            compiler.memory.write(
+                compiler.instructions,
+                array::capacity(symbol).memory_addr,
+                &[ValueSource::Memory(array_length.memory_addr)],
+            );
+
+            compiler.memory.write(
+                compiler.instructions,
+                array::data_ptr(symbol).memory_addr,
+                &[ValueSource::Memory(ptr.memory_addr)],
+            );
+        }
+
         read_struct_from_advice_tape(&mut compiler, &ctx, &ctx_struct)?;
 
         let (this_symbol, arg_symbols) =
             read_collection_inputs(&mut compiler, collection_struct.clone(), &param_types)?;
+
+        let ctx_pk = struct_field(&mut compiler, &ctx, "publicKey")?;
+        if function.is_some() {
+            let auth_result = compile_call_authorization_proof(
+                &mut compiler,
+                &ctx_pk,
+                this_symbol.as_ref().unwrap(),
+                collection_name.unwrap(),
+                function_name,
+            )?;
+
+            let assert_fn = compiler.root_scope.find_function("assert").unwrap();
+            let (error_str, _) = string::new(
+                &mut compiler,
+                "You are not authorized to call this function",
+            );
+            compile_function_call(&mut compiler, assert_fn, &[auth_result, error_str], None)?;
+        }
 
         this_addr = this_symbol.as_ref().map(|ts| ts.memory_addr);
 
@@ -3359,8 +3561,21 @@ pub fn compile(
             compile_function_call(&mut compiler, assert_fn, &[is_eq, error_str], None)?;
         }
 
-        let result =
-            compile_ast_function_call(function, &mut compiler, &arg_symbols, this_symbol.clone())?;
+        let result = match function {
+            // read auth
+            None => compile_read_authorization_proof(
+                &mut compiler,
+                this_symbol.as_ref().unwrap(),
+                collection.as_ref().unwrap(),
+                &ctx_pk,
+            )?,
+            Some(function) => compile_ast_function_call(
+                function,
+                &mut compiler,
+                &arg_symbols,
+                this_symbol.clone(),
+            )?,
+        };
 
         comment!(compiler, "Reading result from memory");
         compiler.memory.read(
@@ -3381,6 +3596,11 @@ pub fn compile(
                 this_hash.type_.miden_width(),
             );
         }
+
+        assert_eq!(
+            compiler.record_depenencies.len(),
+            all_possible_record_dependencies.len()
+        );
     }
 
     let instructions = encoder::unabstract(
@@ -3412,9 +3632,342 @@ pub fn compile(
             this_addr,
             this_type: collection_struct.map(Type::Struct),
             param_types,
-            std_version: Some(StdVersion::V0_5_0),
+            other_collection_types: scope
+                .collections
+                .iter()
+                .map(|c| Type::Struct(Struct::from(c.1.clone())))
+                .collect(),
+            other_records: all_possible_record_dependencies
+                .into_iter()
+                .map(|x| x.0)
+                .collect(),
+            std_version: Some(StdVersion::V0_6_1),
         },
     ))
+}
+
+fn compile_read_authorization_proof(
+    compiler: &mut Compiler,
+    struct_symbol: &Symbol,
+    collection: &Collection,
+    auth_pk: &Symbol,
+) -> Result<Symbol> {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+
+    if collection.read_directive {
+        compiler.instructions.push(encoder::Instruction::Push(1));
+        compiler
+            .instructions
+            .push(encoder::Instruction::MemStore(Some(result.memory_addr)));
+        return Ok(result);
+    }
+
+    for field in collection.fields.iter().filter(|f| f.read) {
+        let field_symbol = struct_field(compiler, &struct_symbol, &field.name)?;
+        compiler.memory.read(
+            &mut compiler.instructions,
+            field_symbol.memory_addr,
+            field_symbol.type_.miden_width(),
+        );
+
+        let passed = compile_check_eq_or_ownership(compiler, field_symbol, auth_pk)?;
+        compiler.instructions.push(encoder::Instruction::If {
+            condition: vec![encoder::Instruction::MemLoad(Some(passed.memory_addr))],
+            then: vec![
+                encoder::Instruction::Push(1),
+                encoder::Instruction::MemStore(Some(result.memory_addr)),
+            ],
+            else_: vec![],
+        });
+    }
+
+    Ok(result)
+}
+
+fn compile_call_authorization_proof(
+    compiler: &mut Compiler,
+    // Symbol of type Type::Nullable(Type::PublicKey)
+    auth_pk: &Symbol,
+    collection_symbol: &Symbol,
+    collection_name: &str,
+    function_name: &str,
+) -> Result<Symbol> {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+
+    if function_name == "constructor" {
+        compiler.instructions.push(encoder::Instruction::Push(1));
+        compiler
+            .instructions
+            .push(encoder::Instruction::MemStore(Some(result.memory_addr)));
+        return Ok(result);
+    }
+
+    let scope = compiler.root_scope;
+    let Some(collection) = scope.find_collection(collection_name) else {
+        return Err(Error::simple(format!(
+            "Collection not found: {}",
+            collection_name
+        )));
+    };
+    // let collection_struct = Struct::from(collection.clone());
+    let Some((_, function)) = collection
+        .functions
+        .iter()
+        .find(|(name, _)| name == function_name)
+    else {
+        panic!("Function not found");
+    };
+
+    let mut call_decorators = function
+        .decorators
+        .iter()
+        .filter(|d| d.name == "call")
+        .peekable();
+
+    let function_has_call_directive = call_decorators.peek().is_some();
+    match (collection.call_directive, function_has_call_directive) {
+        // Function call directive overrides the collection call directive.
+        (_, true) => {}
+        // The collection has a @call directive, but the function does not,
+        // anyone can call it.
+        (true, false) => {
+            compiler.instructions.push(encoder::Instruction::Push(1));
+            compiler
+                .instructions
+                .push(encoder::Instruction::MemStore(Some(result.memory_addr)));
+            return Ok(result);
+        }
+        // Neither the collection nor the function have a @call directive,
+        // no calls are allowed.
+        (false, false) => return Ok(result),
+    }
+
+    let mut call_fields = call_decorators
+        .flat_map(|d| &d.arguments)
+        .map(|a| a.split('.').collect::<Vec<_>>())
+        .peekable();
+
+    if function_has_call_directive && call_fields.peek().is_none() {
+        // The call is just `@call` with no fields, so no authorization required.
+        compiler.instructions.push(encoder::Instruction::Push(1));
+        compiler
+            .instructions
+            .push(encoder::Instruction::MemStore(Some(result.memory_addr)));
+        return Ok(result);
+    }
+
+    for call_field_path in call_fields {
+        let mut current_field = collection_symbol.clone();
+        for field in call_field_path {
+            current_field = struct_field(compiler, &current_field, field)?;
+        }
+
+        let passed = compile_check_eq_or_ownership(compiler, current_field, auth_pk)?;
+        compiler.instructions.push(encoder::Instruction::If {
+            condition: vec![encoder::Instruction::MemLoad(Some(passed.memory_addr))],
+            then: vec![
+                encoder::Instruction::Push(1),
+                encoder::Instruction::MemStore(Some(result.memory_addr)),
+            ],
+            else_: vec![],
+        });
+    }
+
+    Ok(result)
+}
+
+fn compile_check_eq_or_ownership(
+    compiler: &mut Compiler,
+    field: Symbol,
+    auth_pk: &Symbol,
+) -> Result<Symbol> {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+
+    let is_eq = match &field.type_ {
+        Type::PublicKey => compile_eq(compiler, &field, auth_pk),
+        Type::Nullable(t) if **t == Type::PublicKey => compile_eq(compiler, &field, auth_pk),
+        Type::CollectionReference { collection } => {
+            let collection_type = compiler.root_scope.find_collection(&collection).unwrap();
+            let collection_record_hashes = compiler.get_record_dependency(collection_type).unwrap();
+            let id = struct_field(compiler, &field, "id").unwrap();
+
+            let hash_id = hash(compiler, id.clone())?;
+            compiler.memory.read(
+                compiler.instructions,
+                hash_id.memory_addr,
+                hash_id.type_.miden_width(),
+            );
+            // [...id_hash]
+            compiler
+                .instructions
+                .push(encoder::Instruction::AdvPushMapval);
+            // advice = [Nullable(public_record_hash_position), ...record_data]
+            compiler.instructions.push(encoder::Instruction::Dropw);
+            // []
+
+            let public_hash_position = read_advice_generic(
+                compiler,
+                &Type::Nullable(Box::new(Type::PrimitiveType(PrimitiveType::UInt32))),
+            )?;
+
+            let (not_null_instructions, result) = {
+                let mut insts = vec![];
+                std::mem::swap(compiler.instructions, &mut insts);
+
+                let public_hash_position = nullable::value(public_hash_position.clone());
+
+                let record_public_hash =
+                    array::get(compiler, &collection_record_hashes, &public_hash_position);
+
+                let record = compiler
+                    .memory
+                    .allocate_symbol(Type::Struct(Struct::from(collection_type.clone())));
+                read_struct_from_advice_tape(
+                    compiler,
+                    &record,
+                    &Struct::from(collection_type.clone()),
+                )?;
+                let actual_record_hash = hash(compiler, record.clone())?;
+
+                let is_hash_eq = compile_eq(compiler, &record_public_hash, &actual_record_hash);
+                let assert = compiler.root_scope.find_function("assert").unwrap();
+                let (error_str, _) =
+                    string::new(compiler, "Record hash does not match the expected hash");
+                compile_function_call(compiler, assert, &[is_hash_eq, error_str], None)?;
+
+                let record_id = struct_field(compiler, &record, "id")?;
+                let is_id_eq = compile_eq(compiler, &record_id, &id);
+                let (error_str, _) = string::new(compiler, "Record id does not match");
+                compile_function_call(compiler, assert, &[is_id_eq, error_str], None)?;
+
+                let result = compile_check_ownership(compiler, &record, collection_type, auth_pk)?;
+
+                std::mem::swap(compiler.instructions, &mut insts);
+                (insts, result)
+            };
+
+            compiler.instructions.push(encoder::Instruction::If {
+                condition: vec![encoder::Instruction::MemLoad(Some(
+                    nullable::is_not_null(&public_hash_position).memory_addr,
+                ))],
+                then: not_null_instructions,
+                else_: vec![],
+            });
+
+            result
+        }
+        Type::Array(_) => {
+            // We need to iterate over the array and check if any of the elements match
+            let index = compiler
+                .memory
+                .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+            let (current_array_element, current_array_element_insts) = {
+                let mut insts = vec![];
+                std::mem::swap(compiler.instructions, &mut insts);
+
+                let result = array::get(compiler, &field, &index);
+
+                std::mem::swap(compiler.instructions, &mut insts);
+                (result, insts)
+            };
+
+            let (passed, ownership_check_insts) = {
+                let mut insts = vec![];
+                std::mem::swap(compiler.instructions, &mut insts);
+
+                let result = compile_check_eq_or_ownership(
+                    compiler,
+                    current_array_element.clone(),
+                    auth_pk,
+                )?;
+
+                std::mem::swap(compiler.instructions, &mut insts);
+                (result, insts)
+            };
+
+            compiler.instructions.extend([
+                encoder::Instruction::MemLoad(Some(array::length(&field).memory_addr)),
+                // [array_len]
+                encoder::Instruction::While {
+                    condition: vec![
+                        encoder::Instruction::Dup(None),
+                        // [array_len, array_len]
+                        encoder::Instruction::Push(0),
+                        encoder::Instruction::U32CheckedGT,
+                        // [array_len > 0, array_len]
+                        encoder::Instruction::MemLoad(Some(passed.memory_addr)),
+                        // [passed, array_len > 0, array_len]
+                        encoder::Instruction::Not,
+                        // [!passed, array_len > 0, array_len]
+                        encoder::Instruction::And,
+                        // [array_len > 0 && !passed, array_len]
+                    ],
+                    body: [
+                        // [array_len]
+                        encoder::Instruction::Push(1),
+                        // [1, array_len]
+                        encoder::Instruction::U32CheckedSub,
+                        // [array_len - 1]
+                        encoder::Instruction::Dup(None),
+                        encoder::Instruction::MemStore(Some(index.memory_addr)),
+                        // [array_len - 1]
+                    ]
+                    .into_iter()
+                    .chain(current_array_element_insts)
+                    .chain(ownership_check_insts)
+                    .collect(),
+                },
+            ]);
+
+            passed
+        }
+        _ => todo!(),
+    };
+
+    compiler.instructions.push(encoder::Instruction::If {
+        condition: vec![encoder::Instruction::MemLoad(Some(is_eq.memory_addr))],
+        then: vec![
+            encoder::Instruction::Push(1),
+            encoder::Instruction::MemStore(Some(result.memory_addr)),
+        ],
+        else_: vec![],
+    });
+
+    Ok(result)
+}
+
+fn compile_check_ownership(
+    compiler: &mut Compiler,
+    struct_symbol: &Symbol,
+    collection: &Collection,
+    auth_pk: &Symbol,
+) -> Result<Symbol> {
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+
+    for delegate_field in collection.fields.iter().filter(|f| f.delegate) {
+        let delegate_symbol = struct_field(compiler, struct_symbol, &delegate_field.name)?;
+        let is_eq = compile_check_eq_or_ownership(compiler, delegate_symbol, auth_pk)?;
+
+        compiler.instructions.push(encoder::Instruction::If {
+            condition: vec![encoder::Instruction::MemLoad(Some(is_eq.memory_addr))],
+            then: vec![
+                encoder::Instruction::Push(1),
+                encoder::Instruction::MemStore(Some(result.memory_addr)),
+            ],
+            else_: vec![],
+        });
+    }
+
+    Ok(result)
 }
 
 /// collection_struct is the type used for `record` types
@@ -3506,7 +4059,7 @@ fn ast_type_to_type(required: bool, type_: &ast::Type) -> Type {
 }
 
 /// A function that takes in a struct type and generates a program that hashes a value of that type and returns the hash on the stack.
-pub fn compile_struct_hasher(struct_: Struct) -> Result<String> {
+pub fn compile_hasher(t: Type) -> Result<String> {
     let mut instructions = vec![];
     let mut memory = Memory::new();
     let empty_program = ast::Program { nodes: vec![] };
@@ -3515,7 +4068,10 @@ pub fn compile_struct_hasher(struct_: Struct) -> Result<String> {
     {
         let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
 
-        let (this_symbol, _) = read_collection_inputs(&mut compiler, Some(struct_), &[])?;
+        let this_symbol = match t {
+            Type::Struct(struct_) => read_collection_inputs(&mut compiler, Some(struct_), &[])?.0,
+            t => Some(read_advice_generic(&mut compiler, &t)?),
+        };
 
         let hash = hash(&mut compiler, this_symbol.unwrap())?;
 
