@@ -3873,6 +3873,11 @@ pub fn compile(
             insts.extend(compiler.instructions.drain(..));
             std::mem::swap(compiler.instructions, &mut insts);
         }
+
+        assert_eq!(
+            compiler.record_depenencies.len(),
+            all_possible_record_dependencies.len()
+        );
     }
 
     let instructions = encoder::unabstract(
