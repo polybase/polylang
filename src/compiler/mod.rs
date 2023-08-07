@@ -3521,6 +3521,8 @@ pub fn compile(
     let mut memory = Memory::new();
     let this_addr;
     let mut used_fields_count;
+    // hashing will generate read instructions
+    const USED_FIELD_COUNT_THRESHOLD: f64 = 2.;
 
     let ctx_struct = Struct {
         name: "Context".to_string(),
@@ -3858,7 +3860,7 @@ pub fn compile(
             let mut insts = vec![];
             std::mem::swap(compiler.instructions, &mut insts);
 
-            if *used > 2. {
+            if *used > USED_FIELD_COUNT_THRESHOLD {
                 let field_in_use = &fields_in_use[i];
                 compiler.memory.write(
                     compiler.instructions,
@@ -3888,7 +3890,7 @@ pub fn compile(
             .iter()
             .flat_map(|s| &s.fields)
             .enumerate()
-            .filter(|(i, _)| used_fields_count[*i] > 2.)
+            .filter(|(i, _)| used_fields_count[*i] > USED_FIELD_COUNT_THRESHOLD)
             .map(|(_, f)| f)
             .cloned()
             .collect(),
