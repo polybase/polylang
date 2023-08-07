@@ -1065,6 +1065,7 @@ version = "0.1.0"
 dependencies = [
  "abi",
  "error",
+ "expect-test",
  "polylang",
  "polylang-prover",
  "serde",
