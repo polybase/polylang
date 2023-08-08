@@ -19,7 +19,7 @@ jobs:
 
       - name: Run Tests
         uses: actions-rs/cargo@v1
-        timeout-minutes: 30
+        timeout-minutes: 10
         with:
           command: test
           args: --workspace --all-features
