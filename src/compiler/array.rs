@@ -298,6 +298,12 @@ fn iterate_array_elements<'a>(
                 // [len, i, i]
                 Instruction::U32CheckedLT,
                 // [i < len, i]
+                Instruction::MemLoad(Some(finished.memory_addr)),
+                // [finished, i < len, i]
+                Instruction::Not,
+                // [!finished, i < len, i]
+                Instruction::And,
+                // [i < len && !finished]
             ],
             body: vec![
                 Instruction::Dup(None),
