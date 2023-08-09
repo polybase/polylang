@@ -828,6 +828,21 @@ lazy_static::lazy_static! {
         ));
 
         builtins.push((
+            "includes".to_string(),
+            Some(TypeConstraint::Array),
+            Function::Builtin(Box::new(&|compiler, _, args| {
+                ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
+
+                let old_root_scope = compiler.root_scope;
+                compiler.root_scope = &BUILTINS_SCOPE;
+                let result = array::includes(compiler, &args[0], &args[1])?;
+                compiler.root_scope = old_root_scope;
+
+                Ok(result)
+            })),
+        ));
+
+        builtins.push((
             "arrayPush".to_string(),
             None,
             Function::Builtin(Box::new(&|compiler, scope, args| {
