@@ -275,6 +275,98 @@ pub(crate) fn find_index(compiler: &mut Compiler, arr: &Symbol, el: &Symbol) -> 
     Ok(result)
 }
 
+pub(crate) fn push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Result<Symbol> {
+    ensure!(
+        args.len() == 2,
+        ArgumentsCountSnafu {
+            found: args.len(),
+            expected: 2usize
+        }
+    );
+    let arr = args.get(0).unwrap();
+    let element = args.get(1).unwrap();
+    ensure_eq_type!(
+        @arr.type_.clone(),
+        @Type::Array(Box::new(element.type_.clone()))
+    );
+
+    compiler
+        .memory
+        .read(compiler.instructions, array::length(arr).memory_addr, 1);
+    // [len]
+    compiler.instructions.push(encoder::Instruction::Push(1));
+    // [1, len]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedAdd);
+    // [len + 1]
+    compiler.memory.write(
+        compiler.instructions,
+        array::length(arr).memory_addr,
+        &[ValueSource::Stack],
+    );
+    // []
+
+    grow(compiler, arr, &array::length(arr))?;
+
+    compiler
+        .memory
+        .read(compiler.instructions, array::capacity(arr).memory_addr, 1);
+    // [capacity]
+    compiler
+        .memory
+        .read(compiler.instructions, array::length(arr).memory_addr, 1);
+    // [len + 1, capacity]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedGTE);
+    // [len + 1 >= capacity]
+
+    // TODO: if false, reallocate and copy
+    compiler.instructions.push(encoder::Instruction::Assert);
+    // []
+
+    compiler
+        .memory
+        .read(compiler.instructions, array::data_ptr(arr).memory_addr, 1);
+    // [data_ptr]
+    compiler
+        .memory
+        .read(compiler.instructions, array::length(arr).memory_addr, 1);
+    compiler.instructions.push(encoder::Instruction::Push(1));
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedSub);
+    // [len, data_ptr]
+    compiler
+        .instructions
+        .push(encoder::Instruction::Push(element.type_.miden_width()));
+    // [element_width, len, data_ptr]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedMul);
+    // [len * element_width, data_ptr]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedAdd);
+    // [data_ptr + len * element_width]
+    compiler.memory.read(
+        compiler.instructions,
+        element.memory_addr,
+        element.type_.miden_width(),
+    );
+    // [element, data_ptr + len * element_width]
+    compiler.instructions.push(encoder::Instruction::Swap);
+    // [data_ptr + len * element_width, element]
+    compiler
+        .instructions
+        .push(encoder::Instruction::MemStore(None));
+    // []
+
+    // Return the element, same as push does in JS
+    Ok(element.clone())
+}
+
 fn iterate_array_elements<'a>(
     compiler: &mut Compiler<'a, '_, '_>,
     arr: &Symbol,
@@ -342,6 +434,152 @@ fn iterate_array_elements<'a>(
         },
         // [i]
         Instruction::Drop,
+    ]);
+
+    Ok(())
+}
+
+fn grow(compiler: &mut Compiler, arr: &Symbol, needed_len: &Symbol) -> Result<Symbol> {
+    ensure_eq_type!(arr, Type::Array(_));
+    ensure_eq_type!(needed_len, Type::PrimitiveType(PrimitiveType::UInt32));
+
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+
+    let then_instructions = {
+        let mut insts = Vec::new();
+        std::mem::swap(compiler.instructions, &mut insts);
+
+        let new_capacity = compiler
+            .memory
+            .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+        compiler
+            .memory
+            .read(compiler.instructions, array::length(arr).memory_addr, 1);
+        // [len]
+        compiler.instructions.push(Instruction::Push(2));
+        compiler
+            .instructions
+            .push(encoder::Instruction::U32CheckedMul);
+        // [len * 2]
+        compiler.instructions.push(Instruction::Push(16));
+        compiler
+            .instructions
+            .push(encoder::Instruction::U32CheckedAdd);
+        // [len * 2 + 15]
+        compiler.memory.write(
+            compiler.instructions,
+            new_capacity.memory_addr,
+            &[ValueSource::Stack],
+        );
+        // []
+
+        let new_data_ptr = super::dynamic_alloc(compiler, &[new_capacity.clone()])?;
+        copy(
+            compiler,
+            &data_ptr(arr),
+            &length(arr),
+            &new_data_ptr,
+            &new_capacity,
+            1,
+        )?;
+
+        compiler.memory.write(
+            compiler.instructions,
+            array::data_ptr(arr).memory_addr,
+            &[ValueSource::Memory(new_data_ptr.memory_addr)],
+        );
+        compiler.memory.write(
+            compiler.instructions,
+            array::capacity(arr).memory_addr,
+            &[ValueSource::Memory(new_capacity.memory_addr)],
+        );
+
+        std::mem::swap(compiler.instructions, &mut insts);
+        insts
+    };
+
+    compiler.instructions.extend([Instruction::If {
+        condition: vec![
+            Instruction::MemLoad(Some(array::capacity(arr).memory_addr)),
+            // [capacity]
+            Instruction::MemLoad(Some(needed_len.memory_addr)),
+            // [needed_len, capacity]
+            Instruction::U32CheckedGTE,
+            // [capacity >= needed_len]
+        ],
+        then: then_instructions,
+        else_: vec![],
+    }]);
+
+    Ok(result)
+}
+
+fn copy(
+    compiler: &mut Compiler,
+    source_data_ptr: &Symbol,
+    source_len: &Symbol,
+    target_data_ptr: &Symbol,
+    target_capacity: &Symbol,
+    element_width: u32,
+) -> Result<()> {
+    // Ensure that the target array has enough capacity to hold the source array's contents
+    compiler.instructions.extend([
+        Instruction::MemLoad(Some(source_len.memory_addr)),
+        Instruction::Push(element_width),
+        Instruction::U32CheckedMul,
+        Instruction::MemLoad(Some(target_capacity.memory_addr)),
+        Instruction::U32CheckedLTE,
+        Instruction::Assert,
+    ]);
+
+    // Calculate total length (source_len * element_width) and push it to the stack
+    compiler.instructions.extend([
+        Instruction::MemLoad(Some(source_len.memory_addr)),
+        Instruction::Push(element_width),
+        Instruction::U32CheckedMul,
+    ]);
+    // [total_length]
+
+    compiler.instructions.extend([
+        Instruction::Push(0),
+        // [offset = 0, total_length]
+        Instruction::While {
+            condition: vec![
+                Instruction::Dup(None),
+                // [offset, offset, total_length]
+                Instruction::Dup(Some(2)),
+                // [total_length, offset, offset, total_length]
+                Instruction::U32CheckedLT,
+                // [offset < total_length, offset, total_length]
+            ],
+            body: vec![
+                // [offset, total_length]
+                Instruction::Dup(None),
+                // [offset, offset, total_length]
+                Instruction::MemLoad(Some(source_data_ptr.memory_addr)),
+                // [source_data_ptr, offset, offset, total_length]
+                Instruction::U32CheckedAdd,
+                // [source_data_ptr + offset, offset, total_length]
+                Instruction::MemLoad(None),
+                // [value, offset, total_length]
+                Instruction::MemLoad(Some(target_data_ptr.memory_addr)),
+                // [target_data_ptr, value, offset, total_length]
+                Instruction::Dup(Some(2)),
+                // [offset, target_data_ptr, value, offset, total_length]
+                Instruction::U32CheckedAdd,
+                // [target_data_ptr + offset, value, offset, total_length]
+                Instruction::MemStore(None),
+                // [offset, total_length]
+                Instruction::Push(1),
+                // [1, offset, total_length]
+                Instruction::U32CheckedAdd,
+                // [offset = offset + 1, total_length]
+            ],
+        },
+        Instruction::Drop, // Drop the loop counter
+        Instruction::Drop, // Drop the total length
     ]);
 
     Ok(())

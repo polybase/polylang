@@ -828,10 +828,10 @@ lazy_static::lazy_static! {
         ));
 
         builtins.push((
-            "arrayPush".to_string(),
-            None,
+            "push".to_string(),
+            Some(TypeConstraint::Array),
             Function::Builtin(Box::new(&|compiler, scope, args| {
-                array_push(compiler, scope, args)
+                array::push(compiler, scope, args)
             })),
         ));
 
@@ -1407,8 +1407,8 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
                     std::mem::swap(compiler.instructions, &mut if_not_found);
 
                     let (keys, values) = map::key_values_arr(&a)?;
-                    array_push(compiler, scope, &[keys, index])?;
-                    array_push(compiler, scope, &[values, b.clone()])?;
+                    array::push(compiler, scope, &[keys, index])?;
+                    array::push(compiler, scope, &[values, b.clone()])?;
 
                     std::mem::swap(compiler.instructions, &mut if_not_found);
                 }
@@ -2940,96 +2940,6 @@ fn read_advice_nullable(compiler: &mut Compiler, type_: Type) -> Result<Symbol> 
     );
 
     Ok(s)
-}
-
-fn array_push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Result<Symbol> {
-    ensure!(
-        args.len() == 2,
-        ArgumentsCountSnafu {
-            found: args.len(),
-            expected: 2usize
-        }
-    );
-    let arr = args.get(0).unwrap();
-    let element = args.get(1).unwrap();
-    ensure_eq_type!(
-        @arr.type_.clone(),
-        @Type::Array(Box::new(element.type_.clone()))
-    );
-
-    compiler
-        .memory
-        .read(compiler.instructions, array::length(arr).memory_addr, 1);
-    // [len]
-    compiler.instructions.push(encoder::Instruction::Push(1));
-    // [1, len]
-    compiler
-        .instructions
-        .push(encoder::Instruction::U32CheckedAdd);
-    // [len + 1]
-    compiler.memory.write(
-        compiler.instructions,
-        array::length(arr).memory_addr,
-        &[ValueSource::Stack],
-    );
-    // []
-
-    compiler
-        .memory
-        .read(compiler.instructions, array::capacity(arr).memory_addr, 1);
-    // [capacity]
-    compiler
-        .memory
-        .read(compiler.instructions, array::length(arr).memory_addr, 1);
-    // [len + 1, capacity]
-    compiler
-        .instructions
-        .push(encoder::Instruction::U32CheckedGTE);
-    // [len + 1 >= capacity]
-
-    // TODO: if false, reallocate and copy
-    compiler.instructions.push(encoder::Instruction::Assert);
-    // []
-
-    compiler
-        .memory
-        .read(compiler.instructions, array::data_ptr(arr).memory_addr, 1);
-    // [data_ptr]
-    compiler
-        .memory
-        .read(compiler.instructions, array::length(arr).memory_addr, 1);
-    compiler.instructions.push(encoder::Instruction::Push(1));
-    compiler
-        .instructions
-        .push(encoder::Instruction::U32CheckedSub);
-    // [len, data_ptr]
-    compiler
-        .instructions
-        .push(encoder::Instruction::Push(element.type_.miden_width()));
-    // [element_width, len, data_ptr]
-    compiler
-        .instructions
-        .push(encoder::Instruction::U32CheckedMul);
-    // [len * element_width, data_ptr]
-    compiler
-        .instructions
-        .push(encoder::Instruction::U32CheckedAdd);
-    // [data_ptr + len * element_width]
-    compiler.memory.read(
-        compiler.instructions,
-        element.memory_addr,
-        element.type_.miden_width(),
-    );
-    // [element, data_ptr + len * element_width]
-    compiler.instructions.push(encoder::Instruction::Swap);
-    // [data_ptr + len * element_width, element]
-    compiler
-        .instructions
-        .push(encoder::Instruction::MemStore(None));
-    // []
-
-    // Return the element, same as push does in JS
-    Ok(element.clone())
 }
 
 /// A generic hash function that can hash any symbol by hashing each of it's field elements.
