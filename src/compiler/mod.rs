@@ -3526,7 +3526,7 @@ pub fn compile(
             read_collection_inputs(&mut compiler, collection_struct.clone(), &param_types)?;
 
         let ctx_pk = struct_field(&mut compiler, &ctx, "publicKey")?;
-        if function.is_some() {
+        if this_symbol.is_some() && function.is_some() {
             let auth_result = compile_call_authorization_proof(
                 &mut compiler,
                 &ctx_pk,
