@@ -252,6 +252,7 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
     dbg!(&output);
     dbg!(output.hash());
     dbg!(output.logs());
+    dbg!(output.cycle_count);
 
     if has_this_type {
         dbg!(output.self_destructed()?);
