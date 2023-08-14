@@ -2,6 +2,7 @@
 pub(crate) enum Instruction<'a> {
     Comment(String),            // # ...
     Drop,                       // drop
+    Dropw,                      // dropw
     Push(u32),                  // push.1234
     MovUp(u32),                 // movup.1234
     MovDown(u32),               // movdn.1234
@@ -42,6 +43,7 @@ pub(crate) enum Instruction<'a> {
     MemStore(Option<u32>),      // mem_store.1234
     MemLoad(Option<u32>),       // mem_load.1234
     AdvPush(u32),               // adv_push.1234
+    AdvPushMapval,              // adv.push_mapval
     HMerge,                     // hmerge
     While {
         condition: Vec<Instruction<'a>>,
@@ -88,6 +90,7 @@ impl Instruction<'_> {
         match self {
             Instruction::Comment(s) => write_indent!(f, "# {}", s),
             Instruction::Drop => write_indent!(f, "drop"),
+            Instruction::Dropw => write_indent!(f, "dropw"),
             Instruction::Push(value) => write_indent!(f, "push.{}", value),
             Instruction::MovUp(value) => write_indent!(f, "movup.{}", value),
             Instruction::MovDown(value) => write_indent!(f, "movdn.{}", value),
@@ -173,6 +176,7 @@ impl Instruction<'_> {
             Instruction::MemLoad(Some(addr)) => write_indent!(f, "mem_load.{}", addr),
             Instruction::MemLoad(None) => write_indent!(f, "mem_load"),
             Instruction::AdvPush(addr) => write_indent!(f, "adv_push.{}", addr),
+            Instruction::AdvPushMapval => write_indent!(f, "adv.push_mapval"),
             Instruction::If {
                 condition,
                 then,

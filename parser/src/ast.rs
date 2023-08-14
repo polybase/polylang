@@ -34,9 +34,17 @@ pub struct Field {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Decorator {
+pub struct DecoratorNode {
     pub name: String,
-    pub arguments: Vec<String>,
+    pub arguments: Vec<DecoratorArgument>,
+}
+
+pub type Decorator = MaybeSpanned<DecoratorNode>;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum DecoratorArgument {
+    Identifier(String),
+    Literal(Literal),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -307,4 +315,9 @@ pub enum Primitive {
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Object {
     pub fields: Vec<(String, Expression)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Literal {
+    Eth(Vec<u8>),
 }

@@ -23,14 +23,24 @@ const MAP_MIDEN_WIDTH: u32 = ARRAY_MIDEN_WIDTH * 2;
 pub enum StdVersion {
     #[serde(rename = "0.5.0")]
     V0_5_0,
+    #[serde(rename = "0.6.1")]
+    V0_6_1,
+}
+
+/// An array of record hashes.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RecordHashes {
+    pub collection: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Abi {
+    pub std_version: Option<StdVersion>,
     pub this_addr: Option<u32>,
     pub this_type: Option<Type>,
     pub param_types: Vec<Type>,
-    pub std_version: Option<StdVersion>,
+    pub other_records: Vec<RecordHashes>,
+    pub other_collection_types: Vec<Type>,
 }
 
 impl Abi {
@@ -141,7 +151,7 @@ pub trait TypeReader {
     fn read(&self, reader: &MemoryReader, addr: u64) -> Result<Value>;
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Nullable(Option<Box<Value>>),
     Boolean(bool),
@@ -159,6 +169,38 @@ pub enum Value {
     Map(Vec<(Value, Value)>),
     PublicKey(publickey::Key),
     StructValue(Vec<(String, Value)>),
+}
+
+impl Value {
+    pub fn visit<E>(&self, visitor: &mut impl FnMut(&Value) -> Result<(), E>) -> Result<(), E> {
+        visitor(self)?;
+        match self {
+            Value::Nullable(opt) => {
+                if let Some(v) = opt {
+                    v.visit(visitor)?;
+                }
+            }
+            Value::Array(a) => {
+                for value in a {
+                    value.visit(visitor)?;
+                }
+            }
+            Value::Map(m) => {
+                for (key, value) in m {
+                    key.visit(visitor)?;
+                    value.visit(visitor)?;
+                }
+            }
+            Value::StructValue(sv) => {
+                for (_, value) in sv {
+                    value.visit(visitor)?;
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
 }
 
 impl TryInto<serde_json::Value> for Value {

@@ -1,9 +1,9 @@
 use abi::{publickey, Abi, Parser, Type, TypeReader, Value};
 use error::prelude::*;
 use miden::{ExecutionProof, ProofOptions};
-use miden_processor::{utils::Serializable, AdviceProvider, Program, ProgramInfo, StackInputs};
+use miden_processor::{math::Felt, utils::Serializable, Program, ProgramInfo, StackInputs};
 use polylang::compiler;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 const fn mont_red_cst(x: u128) -> u64 {
     // See reference above for a description of the following implementation.
@@ -20,6 +20,7 @@ const fn mont_red_cst(x: u128) -> u64 {
 pub struct Output {
     pub run_output: RunOutput,
     pub stack: Vec<u64>,
+    pub input_stack: Vec<u64>,
     pub self_destructed: bool,
     pub new_this: Value,
     pub new_hash: [u64; 4],
@@ -53,12 +54,8 @@ fn json_to_this_value(this_json: &serde_json::Value, this_type: &Type) -> Result
     Ok(Value::StructValue(struct_values))
 }
 
-pub fn hash_this(struct_type: Type, this: &Value) -> Result<[u64; 4]> {
-    let Type::Struct(struct_type) = struct_type else {
-        return Err(Error::simple("This type is not a struct"));
-    };
-
-    let hasher_program = compiler::compile_struct_hasher(struct_type)?;
+pub fn hash_this(type_: Type, this: &Value) -> Result<[u64; 4]> {
+    let hasher_program = compiler::compile_hasher(type_)?;
 
     let assembler = miden::Assembler::default()
         .with_library(&miden_stdlib::StdLibrary::default())
@@ -86,7 +83,8 @@ pub fn compile_program(abi: &Abi, miden_code: &str) -> Result<Program> {
     let std_library = match &abi.std_version {
         None => miden_stdlib::StdLibrary::default(),
         Some(version) => match version {
-            abi::StdVersion::V0_5_0 => miden_stdlib::StdLibrary::default(),
+            abi::StdVersion::V0_5_0 => unimplemented!("Unsupported std version: 0.5.0"),
+            abi::StdVersion::V0_6_1 => miden_stdlib::StdLibrary::default(),
         },
     };
     let assembler = miden::Assembler::default()
@@ -102,15 +100,56 @@ pub struct Inputs {
     pub this: serde_json::Value,
     pub this_hash: [u64; 4],
     pub args: Vec<serde_json::Value>,
+    pub other_records: HashMap<String, Vec<serde_json::Value>>,
 }
 
 impl Inputs {
-    pub fn stack_values(&self) -> Vec<u64> {
-        self.this_hash.iter().cloned().rev().collect::<Vec<_>>()
+    pub fn stack_values(
+        &self,
+        other_records: &HashMap<String, Vec<(Type, Value, Value)>>,
+    ) -> Vec<u64> {
+        let mut other_record_hashes = vec![];
+        for x in &self.abi.other_records {
+            let records = other_records.get(&x.collection).unwrap();
+            let struct_ = self
+                .abi
+                .other_collection_types
+                .iter()
+                .find_map(|t| match t {
+                    Type::Struct(s) if s.name == x.collection => Some(s),
+                    _ => None,
+                })
+                .unwrap();
+
+            let mut record_hashes = vec![];
+            for (_, _, record) in records {
+                record_hashes.push(Value::Hash(
+                    hash_this(Type::Struct(struct_.clone()), record).unwrap(),
+                ));
+            }
+
+            other_record_hashes.push(Value::Array(record_hashes));
+        }
+
+        [
+            self.this_hash.iter().cloned().collect::<Vec<_>>(),
+            other_record_hashes
+                .into_iter()
+                .map(|x| x.serialize())
+                .flatten()
+                .collect::<Vec<_>>(),
+        ]
+        .into_iter()
+        .flatten()
+        .rev()
+        .collect::<Vec<_>>()
     }
 
-    fn stack(&self) -> Result<StackInputs> {
-        StackInputs::try_from_values(self.stack_values()).wrap_err()
+    fn stack(
+        &self,
+        other_records: &HashMap<String, Vec<(Type, Value, Value)>>,
+    ) -> Result<StackInputs> {
+        StackInputs::try_from_values(self.stack_values(other_records)).wrap_err()
     }
 
     fn this_value(&self) -> Result<Value> {
@@ -121,7 +160,83 @@ impl Inputs {
         json_to_this_value(&self.this, this_type)
     }
 
-    fn advice_tape(&self) -> Result<impl AdviceProvider + Clone> {
+    /// Returns a map from collection name to a vector of record id type, record id and record value.
+    fn other_records(&self) -> Result<HashMap<String, Vec<(Type, Value, Value)>>> {
+        let mut result = HashMap::new();
+
+        for x in &self.abi.other_records {
+            let records = self.other_records.get(&x.collection);
+            let struct_ = self
+                .abi
+                .other_collection_types
+                .iter()
+                .find_map(|t| match t {
+                    Type::Struct(s) if s.name == x.collection => Some(s),
+                    _ => None,
+                })
+                .unwrap();
+
+            let mut collection_records = Vec::new();
+            for record in records.iter().map(|r| r.iter()).flatten() {
+                let record = json_to_this_value(record, &Type::Struct(struct_.clone()))?;
+
+                collection_records.push((
+                    struct_
+                        .fields
+                        .iter()
+                        .find_map(|(k, t)| if k == "id" { Some(t.clone()) } else { None })
+                        .unwrap(),
+                    match &record {
+                        Value::StructValue(fields) => fields
+                            .iter()
+                            .find_map(|(k, v)| if k == "id" { Some(v) } else { None })
+                            .unwrap()
+                            .clone(),
+                        _ => unreachable!(),
+                    },
+                    record,
+                ));
+            }
+
+            result.insert(x.collection.clone(), collection_records);
+        }
+
+        Ok(result)
+    }
+
+    fn all_known_records(
+        &self,
+        other_records: &HashMap<String, Vec<(Type, Value, Value)>>,
+    ) -> Result<Vec<(Type, Value)>> {
+        let mut result = vec![];
+
+        let this_value = self.this_value()?;
+        let known_records = other_records
+            .iter()
+            .map(|(_, r)| r.iter())
+            .flatten()
+            .map(|(_, _, r)| r)
+            .chain([&this_value]);
+
+        for known_record in known_records {
+            known_record
+                .visit(&mut |value| {
+                    if let Value::CollectionReference(id) = value {
+                        result.push((Type::String, Value::String(String::from_utf8(id.clone())?)));
+                    }
+
+                    Ok::<_, std::string::FromUtf8Error>(())
+                })
+                .wrap_err()?;
+        }
+
+        Ok(result)
+    }
+
+    fn advice_tape(
+        &self,
+        other_records: &HashMap<String, Vec<(Type, Value, Value)>>,
+    ) -> Result<miden::MemAdviceProvider> {
         let mut advice_tape = vec![];
         advice_tape.extend(
             // This should probably be on the stack
@@ -137,10 +252,68 @@ impl Inputs {
             advice_tape.extend_from_slice(&t.parse(&self.args[i])?.serialize());
         }
 
+        let mut advice_map = Vec::<([u8; 32], _)>::new();
+        for (_collection, records) in other_records {
+            for (position, (id_type, id, record)) in records.iter().enumerate() {
+                let id_hash = hash_this(id_type.clone(), id)?;
+
+                advice_map.push((
+                    {
+                        let mut arr = [0u8; 32];
+                        arr.copy_from_slice(
+                            &id_hash
+                                .into_iter()
+                                .rev()
+                                .map(Felt::new)
+                                .map(|f| f.to_bytes())
+                                .flatten()
+                                .collect::<Vec<u8>>(),
+                        );
+                        arr
+                    },
+                    Value::Nullable(Some(Box::new(Value::UInt32(position as u32))))
+                        .serialize()
+                        .into_iter()
+                        .chain(record.serialize().into_iter())
+                        .map(Felt::from)
+                        .collect(),
+                ));
+            }
+        }
+
+        for (id_type, id_value) in self.all_known_records(other_records)? {
+            let id_hash = hash_this(id_type, &id_value)?;
+            let id_hash = {
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(
+                    &id_hash
+                        .into_iter()
+                        .rev()
+                        .map(Felt::new)
+                        .map(|f| f.to_bytes())
+                        .flatten()
+                        .collect::<Vec<u8>>(),
+                );
+                arr
+            };
+
+            if advice_map.iter().find(|(k, _)| *k == id_hash).is_none() {
+                advice_map.push((
+                    id_hash,
+                    Value::Nullable(None)
+                        .serialize()
+                        .into_iter()
+                        .map(Felt::from)
+                        .collect(),
+                ));
+            }
+        }
+
         Ok(miden::MemAdviceProvider::from(
             miden::AdviceInputs::default()
                 .with_stack_values(advice_tape)
-                .wrap_err()?,
+                .wrap_err()?
+                .with_map(advice_map),
         ))
     }
 }
@@ -155,14 +328,16 @@ pub fn prove(program: &Program, inputs: &Inputs) -> Result<Output> {
         new_hash: output.stack[0..4].try_into().wrap_err()?,
         proof: proof.to_bytes(),
         stack: output.stack.clone(),
+        input_stack: output.input_stack.clone(),
         run_output: output,
     })
 }
 
 #[derive(Debug)]
 pub struct RunOutput {
-    stack: Vec<u64>,
     memory: HashMap<u64, [u64; 4]>,
+    stack: Vec<u64>,
+    input_stack: Vec<u64>,
 }
 
 impl RunOutput {
@@ -238,14 +413,19 @@ impl RunOutput {
             )))
         }
     }
+
+    pub fn read_auth(&self) -> bool {
+        self.stack[5] == 1
+    }
 }
 
 pub fn run<'a>(
     program: &'a Program,
     inputs: &Inputs,
 ) -> Result<(RunOutput, impl FnOnce() -> Result<ExecutionProof> + 'a)> {
-    let input_stack = inputs.stack()?;
-    let advice_tape = inputs.advice_tape()?;
+    let other_records = inputs.other_records()?;
+    let input_stack = inputs.stack(&other_records)?;
+    let advice_tape = inputs.advice_tape(&other_records)?;
 
     let mut last_ok_state = None;
     let mut err = None;
@@ -269,6 +449,10 @@ pub fn run<'a>(
             return Err(e);
         }
         (Some(state), Some(e)) => {
+            if state.memory.iter().find(|(a, _)| *a == 1).is_none() {
+                return Err(e);
+            }
+
             let Value::String(s) = Type::String.read(
                 &|addr| {
                     state
@@ -298,6 +482,12 @@ pub fn run<'a>(
         .map(|x| mont_red_cst(x.inner() as _))
         .collect::<Vec<_>>();
 
+    let input_stack_values = input_stack
+        .values()
+        .iter()
+        .map(|x| mont_red_cst(x.inner() as _))
+        .collect::<Vec<_>>();
+
     let memory = last_ok_state
         .memory
         .iter()
@@ -317,6 +507,7 @@ pub fn run<'a>(
     Ok((
         RunOutput {
             stack: output_stack,
+            input_stack: input_stack_values,
             memory,
         },
         move || {
