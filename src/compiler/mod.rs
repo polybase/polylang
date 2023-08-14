@@ -1453,6 +1453,17 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             a
         }
+        ExpressionKind::AssignAdd(a, b) => compile_expression(
+            &Expression::T(ExpressionKind::Assign(
+                a.clone(),
+                Box::new(Expression::T(ExpressionKind::Add(
+                    Box::new(*a.clone()),
+                    b.clone(),
+                ))),
+            )),
+            compiler,
+            scope,
+        )?,
         ExpressionKind::Dot(a, b) => {
             let a = compile_expression(a, compiler, scope)?;
 
@@ -1852,19 +1863,7 @@ fn compile_statement(
                         Compiler::new(&mut pre_instructions, compiler.memory, compiler.root_scope);
                     match (for_each_type, &iterable_symbol.type_) {
                         (ast::ForEachType::In, Type::Array(_)) => {
-                            compile_let_statement(
-                                &ast::Let {
-                                    expression: ast::MaybeSpanned::T(ast::ExpressionKind::Index(
-                                        Box::new(iterable.clone()),
-                                        Box::new(ast::MaybeSpanned::T(ast::ExpressionKind::Ident(
-                                            foreach_index_identifier.to_string(),
-                                        ))),
-                                    )),
-                                    identifier: identifier.clone(),
-                                },
-                                &mut pre_compiler,
-                                &mut scope,
-                            )?;
+                            scope.add_symbol(identifier.clone(), foreach_index_symbol.clone());
                         }
                         (ast::ForEachType::In, Type::Map(_, _)) => {
                             // XXX: Optimize?
@@ -1894,45 +1893,15 @@ fn compile_statement(
                             )));
                         }
                     }
-                    compile_let_statement(
-                        &ast::Let {
-                            expression: ast::MaybeSpanned::T(ast::ExpressionKind::Index(
-                                Box::new(iterable.clone()),
-                                Box::new(ast::MaybeSpanned::T(ast::ExpressionKind::Ident(
-                                    foreach_index_identifier.to_string(),
-                                ))),
-                            )),
-                            identifier: identifier.clone(),
-                        },
-                        &mut pre_compiler,
-                        &mut scope,
-                    )?;
 
-                    let mut post_compiler =
+                    let post_compiler =
                         Compiler::new(&mut post_instructions, compiler.memory, compiler.root_scope);
-                    compile_statement(
-                        &ast::StatementKind::Expression(
-                            ast::ExpressionKind::AssignAdd(
-                                Box::new(
-                                    ast::ExpressionKind::Ident(
-                                        foreach_index_identifier.to_string(),
-                                    )
-                                    .into(),
-                                ),
-                                Box::new(
-                                    ast::ExpressionKind::Primitive(ast::Primitive::Number(
-                                        1., false,
-                                    ))
-                                    .into(),
-                                ),
-                            )
-                            .into(),
-                        )
-                        .into(),
-                        &mut post_compiler,
-                        &mut scope,
-                        return_result,
-                    )?;
+                    post_compiler.instructions.extend([
+                        encoder::Instruction::MemLoad(Some(foreach_index_symbol.memory_addr)),
+                        encoder::Instruction::Push(1),
+                        encoder::Instruction::U32CheckedAdd,
+                        encoder::Instruction::MemStore(Some(foreach_index_symbol.memory_addr)),
+                    ]);
                 }
             }
 
