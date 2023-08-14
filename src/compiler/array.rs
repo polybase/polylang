@@ -79,7 +79,9 @@ pub(crate) fn hash(compiler: &mut Compiler, _scope: &mut Scope, args: &[Symbol])
     let arr = &args[0];
     ensure_eq_type!(arr, Type::Array(_));
 
-    let Type::Array(inner_type) = &arr.type_ else { unreachable!() };
+    let Type::Array(inner_type) = &arr.type_ else {
+        unreachable!()
+    };
 
     let (inner_hashing_input, inner_hashing_insts, inner_hashing_output) = {
         let mut insts = Vec::new();
