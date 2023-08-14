@@ -120,7 +120,7 @@ macro_rules! ensure_eq_type {
     ($field:expr, $type_expected:pat) => {
         $crate::prelude::ensure!(
             matches!($field.type_, $type_expected),
-            TypeMismatchSnafu {
+            $crate::kind::TypeMismatchSnafu {
                 context: format!(
                     "{} expected to be {:?} but found {:?}",
                     stringify!($field),
@@ -133,7 +133,7 @@ macro_rules! ensure_eq_type {
     ($field:expr, @$type_expected:expr) => {
         $crate::prelude::ensure!(
             &$field.type_ == $type_expected,
-            TypeMismatchSnafu {
+            $crate::kind::TypeMismatchSnafu {
                 context: format!(
                     "{} expected to be {:?} but found {:?}",
                     stringify!($field),
@@ -146,7 +146,7 @@ macro_rules! ensure_eq_type {
     (@$type_got:expr, @$type_expected:expr) => {
         $crate::prelude::ensure!(
             $type_got == $type_expected,
-            TypeMismatchSnafu {
+            $crate::kind::TypeMismatchSnafu {
                 context: format!(
                     "assertion of type {:?} equals to {:?}",
                     $type_got, $type_expected
