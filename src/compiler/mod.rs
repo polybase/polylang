@@ -19,6 +19,21 @@ use error::prelude::*;
 
 use crate::ast::{self, Expression, Statement};
 
+#[derive(Debug, Clone)]
+enum TypeConstraint {
+    Exact(Type),
+    Array,
+}
+
+impl TypeConstraint {
+    fn matches(&self, type_: &Type) -> bool {
+        match self {
+            TypeConstraint::Exact(expected) => expected == type_,
+            TypeConstraint::Array => matches!(type_, Type::Array(_)),
+        }
+    }
+}
+
 macro_rules! comment {
     ($compiler:expr, $($arg:tt)*) => {
         #[cfg(debug_assertions)]
@@ -79,7 +94,7 @@ lazy_static::lazy_static! {
         for (name, type_, func) in HIDDEN_BUILTINS.iter() {
             match type_ {
                 None => scope.add_function(name.clone(), func.clone()),
-                Some(type_) => scope.add_method(type_.clone(), name.clone(), func.clone()),
+                Some(type_) => scope.add_method(TypeConstraint::Exact(type_.clone()), name.clone(), func.clone()),
             }
         }
 
@@ -424,7 +439,7 @@ lazy_static::lazy_static! {
 
        Box::leak(Box::new(builtins))
     };
-    static ref USABLE_BUILTINS: &'static [(String, Option<Type>, Function<'static>)] = {
+    static ref USABLE_BUILTINS: &'static [(String, Option<TypeConstraint>, Function<'static>)] = {
         let mut builtins = Vec::new();
 
         builtins.push((
@@ -787,12 +802,27 @@ lazy_static::lazy_static! {
 
         builtins.push((
             "toHex".to_string(),
-            Some(Type::PublicKey),
+            Some(TypeConstraint::Exact(Type::PublicKey)),
             Function::Builtin(Box::new(&|compiler, _, args| {
                 let old_root_scope = compiler.root_scope;
                 compiler.root_scope = &BUILTINS_SCOPE;
                 let result = publickey::to_hex(compiler, args);
                 compiler.root_scope = old_root_scope;
+                Ok(result)
+            })),
+        ));
+
+        builtins.push((
+            "indexOf".to_string(),
+            Some(TypeConstraint::Array),
+            Function::Builtin(Box::new(&|compiler, _, args| {
+                ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
+
+                let old_root_scope = compiler.root_scope;
+                compiler.root_scope = &BUILTINS_SCOPE;
+                let result = array::find_index(compiler, &args[0], &args[1])?;
+                compiler.root_scope = old_root_scope;
+
                 Ok(result)
             })),
         ));
@@ -940,7 +970,7 @@ pub(crate) struct Scope<'ast, 'b> {
     symbols: Vec<(String, Symbol)>,
     non_null_symbol_addrs: Vec<u32>,
     functions: Vec<(String, Function<'ast>)>,
-    methods: Vec<(Type, String, Function<'ast>)>,
+    methods: Vec<(TypeConstraint, String, Function<'ast>)>,
     collections: Vec<(String, Collection<'ast>)>,
 }
 
@@ -1011,7 +1041,7 @@ impl<'ast> Scope<'ast, '_> {
         None
     }
 
-    fn add_method(&mut self, type_: Type, name: String, function: Function<'ast>) {
+    fn add_method(&mut self, type_: TypeConstraint, name: String, function: Function<'ast>) {
         self.methods.push((type_, name, function));
     }
 
@@ -1020,7 +1050,7 @@ impl<'ast> Scope<'ast, '_> {
             .methods
             .iter()
             .rev()
-            .find(|(t, n, _)| t == type_ && n == name)
+            .find(|(t, n, _)| n == name && t.matches(type_))
             .map(|(_, _, f)| f)
         {
             return Some(func);
@@ -2251,6 +2281,9 @@ fn compile_eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
             cast(compiler, b, &b_u64);
 
             uint64::eq(compiler, a, &b_u64)
+        }
+        (Type::PrimitiveType(PrimitiveType::Int32), Type::PrimitiveType(PrimitiveType::Int32)) => {
+            uint32::eq(compiler, a, b)
         }
         (
             Type::PrimitiveType(PrimitiveType::Float32),

@@ -68,48 +68,6 @@ pub(crate) fn data_ptr(symbol: &Symbol) -> Symbol {
     }
 }
 
-pub(crate) fn get(compiler: &mut Compiler, array: &Symbol, index: &Symbol) -> Symbol {
-    assert!(matches!(array.type_, Type::Array(_)));
-    assert!(matches!(
-        index.type_,
-        Type::PrimitiveType(PrimitiveType::UInt32)
-    ));
-
-    let result = compiler.memory.allocate_symbol(array.type_.clone());
-
-    compiler.instructions.extend([
-        Instruction::MemLoad(Some(data_ptr(array).memory_addr)),
-        // [data_ptr]
-        Instruction::MemLoad(Some(index.memory_addr)),
-        // [index, data_ptr]
-        Instruction::Push(array.type_.miden_width()),
-        // [element_width, index, data_ptr]
-        Instruction::U32CheckedMul,
-        // [offset = index * element_width, data_ptr]
-        Instruction::U32CheckedAdd,
-        // [ptr = data_ptr + offset]
-    ]);
-
-    for i in 0..array.type_.miden_width() {
-        compiler.instructions.extend([
-            Instruction::Dup(None),
-            // [ptr, ptr]
-            Instruction::Push(i),
-            // [i, ptr, ptr]
-            Instruction::U32CheckedAdd,
-            // [ptr + i, ptr]
-            Instruction::MemLoad(None),
-            // [value, ptr]
-            Instruction::MemStore(Some(result.memory_addr + i)),
-            // [ptr]
-        ]);
-    }
-
-    compiler.instructions.push(Instruction::Drop);
-
-    result
-}
-
 pub(crate) fn hash(compiler: &mut Compiler, _scope: &mut Scope, args: &[Symbol]) -> Result<Symbol> {
     ensure!(
         args.len() == 1,
@@ -267,4 +225,131 @@ pub(crate) fn get(compiler: &mut Compiler, arr: &Symbol, index: &Symbol) -> Symb
     compiler.instructions.push(Instruction::Drop);
 
     result
+}
+
+pub(crate) fn find_index(compiler: &mut Compiler, arr: &Symbol, el: &Symbol) -> Result<Symbol> {
+    ensure_eq_type!(arr, Type::Array(_));
+    let element_type = element_type(&arr.type_);
+    ensure_eq_type!(el, @element_type);
+
+    let result = int32::new(compiler, -1);
+
+    let current_arr_element = compiler.memory.allocate_symbol(element_type.clone());
+    let (eq_insts, eq_result) = {
+        let mut insts = Vec::new();
+
+        std::mem::swap(compiler.instructions, &mut insts);
+        let result = super::compile_eq(compiler, el, &current_arr_element);
+        std::mem::swap(compiler.instructions, &mut insts);
+
+        (insts, result)
+    };
+
+    let current_index = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+    let finished = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+
+    iterate_array_elements(
+        compiler,
+        arr,
+        &current_index,
+        &current_arr_element,
+        &finished,
+        eq_insts
+            .into_iter()
+            .chain([Instruction::If {
+                condition: vec![Instruction::MemLoad(Some(eq_result.memory_addr))],
+                then: vec![
+                    Instruction::MemLoad(Some(current_index.memory_addr)),
+                    Instruction::MemStore(Some(result.memory_addr)),
+                    Instruction::Push(1),
+                    Instruction::MemStore(Some(finished.memory_addr)),
+                ],
+                else_: vec![],
+            }])
+            .collect(),
+    )?;
+
+    Ok(result)
+}
+
+fn iterate_array_elements<'a>(
+    compiler: &mut Compiler<'a, '_, '_>,
+    arr: &Symbol,
+    current_element_index: &Symbol,
+    current_element: &Symbol,
+    finished: &Symbol,
+    body: Vec<Instruction<'a>>,
+) -> Result<()> {
+    ensure_eq_type!(arr, Type::Array(_));
+    let element_type = element_type(&arr.type_);
+    ensure_eq_type!(current_element, @element_type);
+
+    compiler.instructions.extend([
+        Instruction::Push(0),
+        // [i = 0]
+        Instruction::While {
+            condition: vec![
+                Instruction::Dup(None),
+                // [i, i]
+                Instruction::MemLoad(Some(length(arr).memory_addr)),
+                // [len, i, i]
+                Instruction::U32CheckedLT,
+                // [i < len, i]
+                Instruction::MemLoad(Some(finished.memory_addr)),
+                // [finished, i < len, i]
+                Instruction::Not,
+                // [!finished, i < len, i]
+                Instruction::And,
+                // [i < len && !finished]
+            ],
+            body: vec![
+                Instruction::Dup(None),
+                // [i, i]
+                Instruction::MemStore(Some(current_element_index.memory_addr)),
+                // [i]
+                Instruction::Dup(None),
+                // [i, i]
+                Instruction::Push(current_element.type_.miden_width()),
+                // [inner_width, i, i]
+                Instruction::U32CheckedMul,
+                // [offset = i * inner_width, i]
+                Instruction::MemLoad(Some(data_ptr(arr).memory_addr)),
+                // [data_ptr, offset, i]
+                Instruction::U32CheckedAdd,
+                // [ptr = data_ptr + offset, i]
+            ]
+            .into_iter()
+            .chain((0..current_element.type_.miden_width()).flat_map(|y| {
+                vec![
+                    Instruction::Dup(None),
+                    // [ptr, ptr, i]
+                    Instruction::Push(y),
+                    // [y, ptr, ptr, i]
+                    Instruction::U32CheckedAdd,
+                    // [ptr + y, ptr, i]
+                    Instruction::MemLoad(None),
+                    // [value, ptr, i]
+                    Instruction::MemStore(Some(current_element.memory_addr + y)),
+                    // [ptr, i]
+                ]
+            }))
+            .chain([Instruction::Drop])
+            .chain(body)
+            .chain([
+                Instruction::Push(1),
+                // [1, i]
+                Instruction::U32CheckedAdd,
+                // [i = i + 1]
+            ])
+            .collect(),
+        },
+        // [i]
+        Instruction::Drop,
+    ]);
+
+    Ok(())
 }
