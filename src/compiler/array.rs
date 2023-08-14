@@ -68,48 +68,6 @@ pub(crate) fn data_ptr(symbol: &Symbol) -> Symbol {
     }
 }
 
-pub(crate) fn get(compiler: &mut Compiler, array: &Symbol, index: &Symbol) -> Symbol {
-    assert!(matches!(array.type_, Type::Array(_)));
-    assert!(matches!(
-        index.type_,
-        Type::PrimitiveType(PrimitiveType::UInt32)
-    ));
-
-    let result = compiler.memory.allocate_symbol(array.type_.clone());
-
-    compiler.instructions.extend([
-        Instruction::MemLoad(Some(data_ptr(array).memory_addr)),
-        // [data_ptr]
-        Instruction::MemLoad(Some(index.memory_addr)),
-        // [index, data_ptr]
-        Instruction::Push(array.type_.miden_width()),
-        // [element_width, index, data_ptr]
-        Instruction::U32CheckedMul,
-        // [offset = index * element_width, data_ptr]
-        Instruction::U32CheckedAdd,
-        // [ptr = data_ptr + offset]
-    ]);
-
-    for i in 0..array.type_.miden_width() {
-        compiler.instructions.extend([
-            Instruction::Dup(None),
-            // [ptr, ptr]
-            Instruction::Push(i),
-            // [i, ptr, ptr]
-            Instruction::U32CheckedAdd,
-            // [ptr + i, ptr]
-            Instruction::MemLoad(None),
-            // [value, ptr]
-            Instruction::MemStore(Some(result.memory_addr + i)),
-            // [ptr]
-        ]);
-    }
-
-    compiler.instructions.push(Instruction::Drop);
-
-    result
-}
-
 pub(crate) fn hash(compiler: &mut Compiler, _scope: &mut Scope, args: &[Symbol]) -> Result<Symbol> {
     ensure!(
         args.len() == 1,
