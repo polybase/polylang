@@ -239,7 +239,6 @@ pub(crate) fn find_index(compiler: &mut Compiler, arr: &Symbol, el: &Symbol) -> 
         let mut insts = Vec::new();
 
         std::mem::swap(compiler.instructions, &mut insts);
-        // 65, 448
         let result = super::compile_eq(compiler, el, &current_arr_element);
         std::mem::swap(compiler.instructions, &mut insts);
 
