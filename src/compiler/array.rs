@@ -122,7 +122,9 @@ pub(crate) fn hash(compiler: &mut Compiler, _scope: &mut Scope, args: &[Symbol])
     let arr = &args[0];
     ensure_eq_type!(arr, Type::Array(_));
 
-    let Type::Array(inner_type) = &arr.type_ else { unreachable!() };
+    let Type::Array(inner_type) = &arr.type_ else {
+        unreachable!()
+    };
 
     let (inner_hashing_input, inner_hashing_insts, inner_hashing_output) = {
         let mut insts = Vec::new();
@@ -280,7 +282,6 @@ pub(crate) fn find_index(compiler: &mut Compiler, arr: &Symbol, el: &Symbol) -> 
         let mut insts = Vec::new();
 
         std::mem::swap(compiler.instructions, &mut insts);
-        // 65, 448
         let result = super::compile_eq(compiler, el, &current_arr_element);
         std::mem::swap(compiler.instructions, &mut insts);
 
@@ -316,6 +317,84 @@ pub(crate) fn find_index(compiler: &mut Compiler, arr: &Symbol, el: &Symbol) -> 
     )?;
 
     Ok(result)
+}
+
+fn iterate_array_elements<'a>(
+    compiler: &mut Compiler<'a, '_, '_>,
+    arr: &Symbol,
+    current_element_index: &Symbol,
+    current_element: &Symbol,
+    finished: &Symbol,
+    body: Vec<Instruction<'a>>,
+) -> Result<()> {
+    ensure_eq_type!(arr, Type::Array(_));
+    let element_type = element_type(&arr.type_);
+    ensure_eq_type!(current_element, @element_type);
+
+    compiler.instructions.extend([
+        Instruction::Push(0),
+        // [i = 0]
+        Instruction::While {
+            condition: vec![
+                Instruction::Dup(None),
+                // [i, i]
+                Instruction::MemLoad(Some(length(arr).memory_addr)),
+                // [len, i, i]
+                Instruction::U32CheckedLT,
+                // [i < len, i]
+                Instruction::MemLoad(Some(finished.memory_addr)),
+                // [finished, i < len, i]
+                Instruction::Not,
+                // [!finished, i < len, i]
+                Instruction::And,
+                // [i < len && !finished]
+            ],
+            body: vec![
+                Instruction::Dup(None),
+                // [i, i]
+                Instruction::MemStore(Some(current_element_index.memory_addr)),
+                // [i]
+                Instruction::Dup(None),
+                // [i, i]
+                Instruction::Push(current_element.type_.miden_width()),
+                // [inner_width, i, i]
+                Instruction::U32CheckedMul,
+                // [offset = i * inner_width, i]
+                Instruction::MemLoad(Some(data_ptr(arr).memory_addr)),
+                // [data_ptr, offset, i]
+                Instruction::U32CheckedAdd,
+                // [ptr = data_ptr + offset, i]
+            ]
+            .into_iter()
+            .chain((0..current_element.type_.miden_width()).flat_map(|y| {
+                vec![
+                    Instruction::Dup(None),
+                    // [ptr, ptr, i]
+                    Instruction::Push(y),
+                    // [y, ptr, ptr, i]
+                    Instruction::U32CheckedAdd,
+                    // [ptr + y, ptr, i]
+                    Instruction::MemLoad(None),
+                    // [value, ptr, i]
+                    Instruction::MemStore(Some(current_element.memory_addr + y)),
+                    // [ptr, i]
+                ]
+            }))
+            .chain([Instruction::Drop])
+            .chain(body)
+            .chain([
+                Instruction::Push(1),
+                // [1, i]
+                Instruction::U32CheckedAdd,
+                // [i = i + 1]
+            ])
+            .collect(),
+        },
+        // [i]
+        Instruction::Drop,
+    ]);
+
+    Ok(())
 }
 
 pub(crate) fn push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> Result<Symbol> {
@@ -408,78 +487,6 @@ pub(crate) fn push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> 
 
     // Return the element, same as push does in JS
     Ok(element.clone())
-}
-
-fn iterate_array_elements<'a>(
-    compiler: &mut Compiler<'a, '_, '_>,
-    arr: &Symbol,
-    current_element_index: &Symbol,
-    current_element: &Symbol,
-    finished: &Symbol,
-    body: Vec<Instruction<'a>>,
-) -> Result<()> {
-    ensure_eq_type!(arr, Type::Array(_));
-    let element_type = element_type(&arr.type_);
-    ensure_eq_type!(current_element, @element_type);
-
-    compiler.instructions.extend([
-        Instruction::Push(0),
-        // [i = 0]
-        Instruction::While {
-            condition: vec![
-                Instruction::Dup(None),
-                // [i, i]
-                Instruction::MemLoad(Some(length(arr).memory_addr)),
-                // [len, i, i]
-                Instruction::U32CheckedLT,
-                // [i < len, i]
-            ],
-            body: vec![
-                Instruction::Dup(None),
-                // [i, i]
-                Instruction::MemStore(Some(current_element_index.memory_addr)),
-                // [i]
-                Instruction::Dup(None),
-                // [i, i]
-                Instruction::Push(current_element.type_.miden_width()),
-                // [inner_width, i, i]
-                Instruction::U32CheckedMul,
-                // [offset = i * inner_width, i]
-                Instruction::MemLoad(Some(data_ptr(arr).memory_addr)),
-                // [data_ptr, offset, i]
-                Instruction::U32CheckedAdd,
-                // [ptr = data_ptr + offset, i]
-            ]
-            .into_iter()
-            .chain((0..current_element.type_.miden_width()).flat_map(|y| {
-                vec![
-                    Instruction::Dup(None),
-                    // [ptr, ptr, i]
-                    Instruction::Push(y),
-                    // [y, ptr, ptr, i]
-                    Instruction::U32CheckedAdd,
-                    // [ptr + y, ptr, i]
-                    Instruction::MemLoad(None),
-                    // [value, ptr, i]
-                    Instruction::MemStore(Some(current_element.memory_addr + y)),
-                    // [ptr, i]
-                ]
-            }))
-            .chain([Instruction::Drop])
-            .chain(body)
-            .chain([
-                Instruction::Push(1),
-                // [1, i]
-                Instruction::U32CheckedAdd,
-                // [i = i + 1]
-            ])
-            .collect(),
-        },
-        // [i]
-        Instruction::Drop,
-    ]);
-
-    Ok(())
 }
 
 fn grow(compiler: &mut Compiler, arr: &Symbol, needed_len: &Symbol) -> Result<Symbol> {

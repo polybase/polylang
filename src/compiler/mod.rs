@@ -1496,6 +1496,17 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             a
         }
+        ExpressionKind::AssignAdd(a, b) => compile_expression(
+            &Expression::T(ExpressionKind::Assign(
+                a.clone(),
+                Box::new(Expression::T(ExpressionKind::Add(
+                    Box::new(*a.clone()),
+                    b.clone(),
+                ))),
+            )),
+            compiler,
+            scope,
+        )?,
         ExpressionKind::Dot(a, b) => {
             let a = compile_expression(a, compiler, scope)?;
 
@@ -1782,71 +1793,182 @@ fn compile_statement(
             })
         }
         ast::StatementKind::For(ast::For {
-            initial_statement,
-            condition,
-            post_statement,
+            for_kind,
             statements,
         }) => {
             // There is no `for` instruction, we have to use `while` instead
             let mut scope = scope.deeper();
 
             let mut initial_instructions = vec![];
-            let mut initial_compiler = Compiler::new(
-                &mut initial_instructions,
-                compiler.memory,
-                compiler.root_scope,
-            );
-            match initial_statement {
-                ast::ForInitialStatement::Let(l) => {
-                    compile_let_statement(l, &mut initial_compiler, &mut scope)
-                }
-                ast::ForInitialStatement::Expression(e) => {
-                    compile_expression(e, &mut initial_compiler, &scope).map(|_| ())
-                }
-            }?;
-
             let mut condition_instructions = vec![];
-            let mut condition_compiler = Compiler::new(
-                &mut condition_instructions,
-                compiler.memory,
-                compiler.root_scope,
-            );
-            let condition_symbol = compile_expression(condition, &mut condition_compiler, &scope)?;
-            ensure_eq_type!(
-                condition_symbol,
-                Type::PrimitiveType(PrimitiveType::Boolean)
-            );
-            condition_compiler.memory.read(
-                condition_compiler.instructions,
-                condition_symbol.memory_addr,
-                condition_symbol.type_.miden_width(),
-            );
-
+            let mut pre_instructions = vec![];
             let mut post_instructions = vec![];
-            let mut post_compiler =
-                Compiler::new(&mut post_instructions, compiler.memory, compiler.root_scope);
-            compile_expression(post_statement, &mut post_compiler, &scope)?;
+            match for_kind {
+                ast::ForKind::Basic {
+                    initial_statement,
+                    condition,
+                    post_statement,
+                } => {
+                    let mut initial_compiler = Compiler::new(
+                        &mut initial_instructions,
+                        compiler.memory,
+                        compiler.root_scope,
+                    );
+                    match initial_statement {
+                        ast::ForInitialStatement::Let(l) => {
+                            compile_let_statement(l, &mut initial_compiler, &mut scope)
+                        }
+                        ast::ForInitialStatement::Expression(e) => {
+                            compile_expression(e, &mut initial_compiler, &scope).map(|_| ())
+                        }
+                    }?;
 
-            let mut body_instructions = vec![];
-            let mut body_compiler =
-                Compiler::new(&mut body_instructions, compiler.memory, compiler.root_scope);
-            let mut body_scope = scope.deeper();
-            for statement in statements {
-                compile_statement(
-                    statement,
-                    &mut body_compiler,
-                    &mut body_scope,
-                    return_result,
-                )?;
+                    let mut condition_compiler = Compiler::new(
+                        &mut condition_instructions,
+                        compiler.memory,
+                        compiler.root_scope,
+                    );
+                    let condition_symbol =
+                        compile_expression(condition, &mut condition_compiler, &scope)?;
+                    ensure_eq_type!(
+                        condition_symbol,
+                        Type::PrimitiveType(PrimitiveType::Boolean)
+                    );
+                    condition_compiler.memory.read(
+                        condition_compiler.instructions,
+                        condition_symbol.memory_addr,
+                        condition_symbol.type_.miden_width(),
+                    );
+
+                    let mut post_compiler =
+                        Compiler::new(&mut post_instructions, compiler.memory, compiler.root_scope);
+                    compile_expression(post_statement, &mut post_compiler, &scope)?;
+                }
+                ast::ForKind::ForEach {
+                    for_each_type,
+                    identifier,
+                    iterable,
+                } => {
+                    let mut initial_compiler = Compiler::new(
+                        &mut initial_instructions,
+                        compiler.memory,
+                        compiler.root_scope,
+                    );
+                    let foreach_index_identifier = "#internal_foreach_index";
+                    let foreach_index_symbol = uint32::new(&mut initial_compiler, 0);
+                    scope.add_symbol(
+                        foreach_index_identifier.to_string(),
+                        foreach_index_symbol.clone(),
+                    );
+
+                    let mut condition_compiler = Compiler::new(
+                        &mut condition_instructions,
+                        compiler.memory,
+                        compiler.root_scope,
+                    );
+                    let iterable_symbol =
+                        compile_expression(iterable, &mut condition_compiler, &scope)?;
+                    let foreach_len_symbol = match &iterable_symbol.type_ {
+                        Type::Array(_) => array::length(&iterable_symbol),
+                        Type::Map(_, _) => array::length(&map::keys_arr(&iterable_symbol)?),
+                        ty => {
+                            return Err(Error::unimplemented(format!(
+                                "cannot iterate for-{for_each_type} with type {:?}",
+                                ty
+                            )));
+                        }
+                    };
+
+                    let foreach_len_identifier = "#internal_foreach_len";
+                    scope.add_symbol(foreach_len_identifier.to_string(), foreach_len_symbol);
+                    let condition_symbol = compile_expression(
+                        &ast::ExpressionKind::LessThan(
+                            Box::new(
+                                ast::ExpressionKind::Ident(foreach_index_identifier.to_string())
+                                    .into(),
+                            ),
+                            Box::new(
+                                ast::ExpressionKind::Ident(foreach_len_identifier.to_string())
+                                    .into(),
+                            ),
+                        )
+                        .into(),
+                        &mut condition_compiler,
+                        &scope,
+                    )?;
+                    condition_compiler.memory.read(
+                        condition_compiler.instructions,
+                        condition_symbol.memory_addr,
+                        condition_symbol.type_.miden_width(),
+                    );
+
+                    let mut pre_compiler =
+                        Compiler::new(&mut pre_instructions, compiler.memory, compiler.root_scope);
+                    match (for_each_type, &iterable_symbol.type_) {
+                        (ast::ForEachType::In, Type::Array(_)) => {
+                            scope.add_symbol(identifier.clone(), foreach_index_symbol.clone());
+                        }
+                        (ast::ForEachType::In, Type::Map(_, _)) => {
+                            // XXX: Optimize?
+                            let keys = map::keys_arr(&iterable_symbol)?;
+                            let key = array::get(&mut pre_compiler, &keys, &foreach_index_symbol);
+                            scope.add_symbol(identifier.clone(), key);
+                        }
+                        (ast::ForEachType::Of, Type::Array(_)) => {
+                            let symbol = array::get(
+                                &mut pre_compiler,
+                                &iterable_symbol,
+                                &foreach_index_symbol,
+                            );
+                            scope.add_symbol(identifier.clone(), symbol);
+                        }
+                        (ast::ForEachType::Of, Type::Map(_, _)) => {
+                            // XXX: Optimize?
+                            let values = map::values_arr(&iterable_symbol)?;
+                            let value =
+                                array::get(&mut pre_compiler, &values, &foreach_index_symbol);
+                            scope.add_symbol(identifier.clone(), value);
+                        }
+                        ty => {
+                            return Err(Error::unimplemented(format!(
+                                "cannot iterate for-{for_each_type} with type {:?}",
+                                ty
+                            )));
+                        }
+                    }
+
+                    let post_compiler =
+                        Compiler::new(&mut post_instructions, compiler.memory, compiler.root_scope);
+                    post_compiler.instructions.extend([
+                        encoder::Instruction::MemLoad(Some(foreach_index_symbol.memory_addr)),
+                        encoder::Instruction::Push(1),
+                        encoder::Instruction::U32CheckedAdd,
+                        encoder::Instruction::MemStore(Some(foreach_index_symbol.memory_addr)),
+                    ]);
+                }
             }
+
+            let body = {
+                let mut body_instructions = pre_instructions;
+                let mut body_compiler =
+                    Compiler::new(&mut body_instructions, compiler.memory, compiler.root_scope);
+                let mut body_scope = scope.deeper();
+                for statement in statements {
+                    compile_statement(
+                        statement,
+                        &mut body_compiler,
+                        &mut body_scope,
+                        return_result,
+                    )?;
+                }
+                body_instructions.extend(post_instructions);
+                body_instructions
+            };
 
             compiler.instructions.extend(initial_instructions);
             compiler.instructions.push(encoder::Instruction::While {
                 condition: condition_instructions,
-                body: {
-                    body_instructions.extend(post_instructions);
-                    body_instructions
-                },
+                body,
             });
         }
         ast::StatementKind::Let(let_statement) => {
@@ -1863,12 +1985,8 @@ fn compile_statement(
     Ok(())
 }
 
-fn compile_let_statement(
-    let_statement: &ast::Let,
-    compiler: &mut Compiler,
-    scope: &mut Scope,
-) -> Result<()> {
-    let symbol = compile_expression(&let_statement.expression, compiler, scope)?;
+fn add_new_symbol(expr: &Expression, compiler: &mut Compiler, scope: &Scope) -> Result<Symbol> {
+    let symbol = compile_expression(expr, compiler, scope)?;
     // we need to copy symbol to a new symbol,
     // because Ident expressions return symbols of variables
     let new_symbol = compiler.memory.allocate_symbol(symbol.type_);
@@ -1882,6 +2000,16 @@ fn compile_let_statement(
         new_symbol.memory_addr,
         &vec![ValueSource::Stack; new_symbol.type_.miden_width() as usize],
     );
+
+    Ok(new_symbol)
+}
+
+fn compile_let_statement(
+    let_statement: &ast::Let,
+    compiler: &mut Compiler,
+    scope: &mut Scope,
+) -> Result<()> {
+    let new_symbol = add_new_symbol(&let_statement.expression, compiler, scope)?;
 
     scope.add_symbol(let_statement.identifier.to_string(), new_symbol);
     Ok(())
@@ -2450,10 +2578,15 @@ fn compile_index(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Result<Symb
             Ok(value)
         }
         Type::Array(_) => {
-            ensure_eq_type!(@b.type_, @Type::PrimitiveType(PrimitiveType::UInt32));
+            ensure_eq_type!(
+                b,
+                Type::PrimitiveType(PrimitiveType::UInt32)
+                    // TODO: ideally we should parse it as generic `Number` and instantiate into a real time lately.
+                    // so e.g here no need to do a reinterpret back as integer.
+                    | Type::PrimitiveType(PrimitiveType::Float32)
+            );
 
-            let value = array::get(compiler, a, b);
-            Ok(value)
+            Ok(array::get(compiler, a, b))
         }
         x => TypeMismatchSnafu {
             context: format!("expected map but found {x:?}"),
@@ -3488,7 +3621,7 @@ pub fn compile(
             read_collection_inputs(&mut compiler, collection_struct.clone(), &param_types)?;
 
         let ctx_pk = struct_field(&mut compiler, &ctx, "publicKey")?;
-        if function.is_some() {
+        if this_symbol.is_some() && function.is_some() {
             let auth_result = compile_call_authorization_proof(
                 &mut compiler,
                 &ctx_pk,
