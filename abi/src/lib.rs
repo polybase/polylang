@@ -41,6 +41,7 @@ pub struct Abi {
     pub param_types: Vec<Type>,
     pub other_records: Vec<RecordHashes>,
     pub other_collection_types: Vec<Type>,
+    pub dependent_fields: Vec<(String, Type)>,
 }
 
 impl Abi {

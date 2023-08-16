@@ -122,7 +122,9 @@ pub(crate) fn hash(compiler: &mut Compiler, _scope: &mut Scope, args: &[Symbol])
     let arr = &args[0];
     ensure_eq_type!(arr, Type::Array(_));
 
-    let Type::Array(inner_type) = &arr.type_ else { unreachable!() };
+    let Type::Array(inner_type) = &arr.type_ else {
+        unreachable!()
+    };
 
     let (inner_hashing_input, inner_hashing_insts, inner_hashing_output) = {
         let mut insts = Vec::new();
@@ -280,7 +282,6 @@ pub(crate) fn find_index(compiler: &mut Compiler, arr: &Symbol, el: &Symbol) -> 
         let mut insts = Vec::new();
 
         std::mem::swap(compiler.instructions, &mut insts);
-        // 65, 448
         let result = super::compile_eq(compiler, el, &current_arr_element);
         std::mem::swap(compiler.instructions, &mut insts);
 
@@ -354,23 +355,6 @@ pub(crate) fn push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> 
 
     compiler
         .memory
-        .read(compiler.instructions, array::capacity(arr).memory_addr, 1);
-    // [capacity]
-    compiler
-        .memory
-        .read(compiler.instructions, array::length(arr).memory_addr, 1);
-    // [len + 1, capacity]
-    compiler
-        .instructions
-        .push(encoder::Instruction::U32CheckedGTE);
-    // [len + 1 >= capacity]
-
-    // TODO: if false, reallocate and copy
-    compiler.instructions.push(encoder::Instruction::Assert);
-    // []
-
-    compiler
-        .memory
         .read(compiler.instructions, array::data_ptr(arr).memory_addr, 1);
     // [data_ptr]
     compiler
@@ -433,6 +417,12 @@ fn iterate_array_elements<'a>(
                 // [len, i, i]
                 Instruction::U32CheckedLT,
                 // [i < len, i]
+                Instruction::MemLoad(Some(finished.memory_addr)),
+                // [finished, i < len, i]
+                Instruction::Not,
+                // [!finished, i < len, i]
+                Instruction::And,
+                // [i < len && !finished]
             ],
             body: vec![
                 Instruction::Dup(None),
@@ -570,32 +560,32 @@ fn copy(
     // Ensure that the target array has enough capacity to hold the source array's contents
     compiler.instructions.extend([
         Instruction::MemLoad(Some(source_len.memory_addr)),
+        // [source_len]
         Instruction::Push(element_width),
+        // [element_width, source_len]
         Instruction::U32CheckedMul,
+        // [total_length]
+        Instruction::Dup(None),
+        // [total_length, total_length]
         Instruction::MemLoad(Some(target_capacity.memory_addr)),
+        // [capacity, total_length, total_length]
         Instruction::U32CheckedLTE,
+        // [total_length <= capacity, total_length]
         Instruction::Assert,
+        // [total_length]
     ]);
-
-    // Calculate total length (source_len * element_width) and push it to the stack
-    compiler.instructions.extend([
-        Instruction::MemLoad(Some(source_len.memory_addr)),
-        Instruction::Push(element_width),
-        Instruction::U32CheckedMul,
-    ]);
-    // [total_length]
 
     compiler.instructions.extend([
         Instruction::Push(0),
         // [offset = 0, total_length]
         Instruction::While {
             condition: vec![
-                Instruction::Dup(None),
-                // [offset, offset, total_length]
-                Instruction::Dup(Some(2)),
-                // [total_length, offset, offset, total_length]
-                Instruction::U32CheckedLT,
-                // [offset < total_length, offset, total_length]
+                Instruction::Dup(Some(1)),
+                // [total_length, offset, total_length]
+                Instruction::Dup(Some(1)),
+                // [offset, total_length, offset, total_length]
+                Instruction::U32CheckedGTE,
+                // [total_length >= offset, offset, total_length]
             ],
             body: vec![
                 // [offset, total_length]
