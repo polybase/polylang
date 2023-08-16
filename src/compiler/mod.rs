@@ -14,6 +14,8 @@ mod string;
 mod uint32;
 mod uint64;
 
+use std::collections::HashMap;
+
 use abi::{Abi, PrimitiveType, StdVersion, Struct, Type};
 use error::prelude::*;
 
@@ -3692,9 +3694,11 @@ pub fn compile(
     let mut instructions = vec![];
     let mut memory = Memory::new();
     let this_addr;
-    let mut used_fields_count;
+    // A vector of hashmaps for each field, mapping the address of one of the field elements to the count of times it was used
+    let mut used_fields_count: Vec<HashMap<u32, usize>>;
+    let mut dependent_fields = Vec::<(String, Type)>::new();
     // hashing will generate read instructions
-    const USED_FIELD_COUNT_THRESHOLD: f64 = 2.;
+    const USED_FIELD_COUNT_THRESHOLD: usize = 2;
 
     let ctx_struct = Struct {
         name: "Context".to_string(),
@@ -3856,7 +3860,7 @@ pub fn compile(
         )?;
 
         let ctx_pk = struct_field(&mut compiler, &ctx, "publicKey")?;
-        if this_symbol.is_some() && function.is_some() {
+        if salts_this_symbol.is_some() && function.is_some() {
             let auth_result = compile_call_authorization_proof(
                 &mut compiler,
                 &ctx_pk,
@@ -3981,7 +3985,7 @@ pub fn compile(
             all_possible_record_dependencies.len()
         );
 
-        used_fields_count = vec![0.; fields_in_use.len()];
+        used_fields_count = vec![HashMap::new(); fields_in_use.len()];
         let field_addr_ranges = collection_struct
             .as_ref()
             .map(|s| {
@@ -4018,7 +4022,7 @@ pub fn compile(
 
                         for (i, field_addr_range) in field_addr_ranges.iter().enumerate() {
                             if field_addr_range.contains(addr) {
-                                used_fields_count[i] += 1. / field_addr_range.len() as f64;
+                                *used_fields_count[i].entry(*addr).or_default() += 1;
                                 return;
                             }
                         }
@@ -4032,12 +4036,28 @@ pub fn compile(
             let mut insts = vec![];
             std::mem::swap(compiler.instructions, &mut insts);
 
-            if *used > USED_FIELD_COUNT_THRESHOLD {
+            let max_used = used
+                .iter()
+                .max_by_key(|(_, count)| *count)
+                .map(|(_, count)| *count)
+                .unwrap_or(0);
+
+            if max_used > USED_FIELD_COUNT_THRESHOLD {
                 let field_in_use = &fields_in_use[i];
                 compiler.memory.write(
                     compiler.instructions,
                     field_in_use.memory_addr,
                     &[ValueSource::Immediate(1)],
+                );
+
+                dependent_fields.push(
+                    collection_struct
+                        .as_ref()
+                        .unwrap()
+                        .fields
+                        .get(i)
+                        .unwrap()
+                        .clone(),
                 );
             }
 
@@ -4062,15 +4082,7 @@ pub fn compile(
     );
 
     let abi = Abi {
-        dependent_fields: collection_struct
-            .as_ref()
-            .iter()
-            .flat_map(|s| &s.fields)
-            .enumerate()
-            .filter(|(i, _)| used_fields_count[*i] > USED_FIELD_COUNT_THRESHOLD)
-            .map(|(_, f)| f)
-            .cloned()
-            .collect(),
+        dependent_fields,
         this_addr,
         this_type: collection_struct.map(Type::Struct),
         param_types,
