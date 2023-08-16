@@ -883,6 +883,12 @@ fn struct_field(
                 memory_addr: struct_symbol.memory_addr,
             });
         }
+        Type::String if field_name == "length" => {
+            return Ok(string::length(struct_symbol));
+        }
+        Type::Array(_) if field_name == "length" => {
+            return Ok(array::length(struct_symbol));
+        }
         t => {
             return Err(ErrorKind::TypeMismatch {
                 context: format!("expected struct, got: {:?}", t),
