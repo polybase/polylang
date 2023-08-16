@@ -849,6 +849,19 @@ lazy_static::lazy_static! {
         ));
 
         builtins.push((
+            "slice".to_string(),
+            Some(TypeConstraint::Array),
+            Function::Builtin(Box::new(&|compiler, _scope, args| {
+                ensure!(args.len() <= 3, ArgumentsCountSnafu { found: args.len(), expected: 3usize });
+                let arr = &args[0];
+                let start = args.get(1);
+                let end = args.get(2);
+
+                array::slice(compiler, arr, start.cloned(), end)
+            })),
+        ));
+
+        builtins.push((
             "mapLength".to_string(),
             None,
             Function::Builtin(Box::new(&|_compiler, _scope, args| {
