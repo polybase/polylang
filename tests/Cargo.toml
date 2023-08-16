@@ -12,3 +12,4 @@ abi = { path = "../abi" }
 error = { path = "../error" }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
+expect-test = "1.4.1"
