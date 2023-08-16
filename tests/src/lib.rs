@@ -1,5 +1,8 @@
 #![cfg(test)]
-use abi::Parser;
+
+mod push;
+
+use expect_test::expect;
 use serde::de::Deserialize;
 use std::collections::HashMap;
 
@@ -38,6 +41,16 @@ mod fixtures {
     }
 }
 
+macro_rules! consistency_checks {
+    ($output:expr, $abi:expr, hashes: $hashes_expect:expr, dependencies: $dependencies_expect:expr) => {{
+        let expected_hashes = $hashes_expect;
+        expected_hashes.assert_debug_eq(&$output.hashes());
+
+        let expected_dependencies = $dependencies_expect;
+        expected_dependencies.assert_debug_eq(&$abi.dependent_fields);
+    }};
+}
+
 fn run(
     polylang_code: &str,
     collection: &str,
@@ -52,17 +65,43 @@ fn run(
     let (miden_code, abi) = polylang::compiler::compile(program, Some(collection), function)?;
 
     let program = polylang_prover::compile_program(&abi, &miden_code).unwrap();
-    let this_abi_value = abi.this_type.clone().unwrap().parse(&this).unwrap();
-    let this_hash =
-        polylang_prover::hash_this(abi.this_type.clone().unwrap(), &this_abi_value).unwrap();
-    let inputs = polylang_prover::Inputs {
-        abi: abi.clone(),
+    let inputs = polylang_prover::Inputs::new(
+        abi.clone(),
         ctx_public_key,
+        match &abi.this_type {
+            Some(abi::Type::Struct(s)) => s.fields.iter().map(|_| 0).collect(),
+            _ => unreachable!(),
+        },
         this,
-        this_hash,
         args,
-        other_records,
-    };
+        {
+            let mut hm = HashMap::new();
+            for (collection, records) in other_records {
+                let col = abi
+                    .other_collection_types
+                    .iter()
+                    .find_map(|t| match t {
+                        abi::Type::Struct(s) if s.name == collection => Some(s),
+                        _ => None,
+                    })
+                    .unwrap();
+
+                hm.insert(
+                    collection,
+                    records
+                        .into_iter()
+                        .map(|record| {
+                            (
+                                record.clone(),
+                                col.fields.iter().map(|_| 0).collect::<Vec<_>>().into(),
+                            )
+                        })
+                        .collect(),
+                );
+            }
+            hm
+        },
+    )?;
 
     let (output, _) = polylang_prover::run(&program, &inputs)?;
 
@@ -104,6 +143,19 @@ fn call_public_collection() {
             ("name".to_owned(), abi::Value::String("test".to_owned())),
         ])
     );
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                []
+            "#]],
+        dependencies:
+            expect![[r#"
+                []
+            "#]]
+    );
 }
 
 #[test]
@@ -141,6 +193,19 @@ fn call_any_call_collection() {
             ("name".to_owned(), abi::Value::String("test".to_owned())),
         ])
     );
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                []
+            "#]],
+        dependencies:
+            expect![[r#"
+                []
+            "#]]
+    );
 }
 
 #[test]
@@ -174,6 +239,19 @@ fn call_constructor_no_auth() {
             "id".to_owned(),
             abi::Value::String("id1".to_owned())
         )])
+    );
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                []
+            "#]],
+        dependencies:
+            expect![[r#"
+                []
+            "#]]
     );
 }
 
@@ -213,6 +291,31 @@ fn call_constructor_with_auth() {
             ("id".to_owned(), abi::Value::String("id1".to_owned())),
             ("pk".to_owned(), abi::Value::PublicKey(fixtures::pk1_key())),
         ])
+    );
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                [
+                    [
+                        15190310144854117473,
+                        13483436742372640428,
+                        16238764937440726588,
+                        9860411171209566744,
+                    ],
+                ]
+            "#]],
+        dependencies:
+            expect![[r#"
+                [
+                    (
+                        "pk",
+                        PublicKey,
+                    ),
+                ]
+            "#]]
     );
 }
 
@@ -259,9 +362,34 @@ fn call_auth_public_key(use_correct_pk: bool) -> Result<(), Box<dyn std::error::
     assert_eq!(
         output.this(&abi).unwrap(),
         abi::Value::StructValue(vec![
-            ("id".to_owned(), abi::Value::String("test".to_owned())),
+            ("id".to_owned(), abi::Value::String("".to_owned())),
             ("pk".to_owned(), abi::Value::PublicKey(new_pk_key)),
         ]),
+    );
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                [
+                    [
+                        10007246358458628330,
+                        1310941925803483469,
+                        9098756844150300261,
+                        7017043683864941931,
+                    ],
+                ]
+            "#]],
+        dependencies:
+            expect![[r#"
+                [
+                    (
+                        "pk",
+                        PublicKey,
+                    ),
+                ]
+            "#]]
     );
 
     Ok(())
@@ -354,9 +482,34 @@ fn call_auth_public_key_allow_all() {
     assert_eq!(
         output.this(&abi).unwrap(),
         abi::Value::StructValue(vec![
-            ("id".to_owned(), abi::Value::String("test".to_owned())),
+            ("id".to_owned(), abi::Value::String("".to_owned())),
             ("pk".to_owned(), abi::Value::PublicKey(fixtures::pk2_key())),
         ]),
+    );
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                [
+                    [
+                        10007246358458628330,
+                        1310941925803483469,
+                        9098756844150300261,
+                        7017043683864941931,
+                    ],
+                ]
+            "#]],
+        dependencies:
+            expect![[r#"
+                [
+                    (
+                        "pk",
+                        PublicKey,
+                    ),
+                ]
+            "#]]
     );
 }
 
@@ -428,9 +581,34 @@ fn call_collection_auth_any() {
     assert_eq!(
         output.this(&abi).unwrap(),
         abi::Value::StructValue(vec![
-            ("id".to_owned(), abi::Value::String("test".to_owned())),
+            ("id".to_owned(), abi::Value::String("".to_owned())),
             ("pk".to_owned(), abi::Value::PublicKey(fixtures::pk2_key())),
         ]),
+    );
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                [
+                    [
+                        10007246358458628330,
+                        1310941925803483469,
+                        9098756844150300261,
+                        7017043683864941931,
+                    ],
+                ]
+            "#]],
+        dependencies:
+            expect![[r#"
+                [
+                    (
+                        "pk",
+                        PublicKey,
+                    ),
+                ]
+            "#]]
     );
 }
 
@@ -488,13 +666,40 @@ fn call_auth_delegate(use_correct_pk: bool) -> Result<(), Box<dyn std::error::Er
     assert_eq!(
         output.this(&abi).unwrap(),
         abi::Value::StructValue(vec![
-            ("id".to_owned(), abi::Value::String("test".to_owned())),
+            ("id".to_owned(), abi::Value::String("".to_owned())),
             ("name".to_owned(), abi::Value::String("test2".to_owned())),
             (
                 "user".to_owned(),
                 abi::Value::CollectionReference("user1".bytes().collect()),
             ),
         ]),
+    );
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                [
+                    [
+                        11000463426052588238,
+                        6513620181524223329,
+                        8307048643396104721,
+                        12256912913701141453,
+                    ],
+                ]
+            "#]],
+        dependencies:
+            expect![[r#"
+                [
+                    (
+                        "user",
+                        CollectionReference {
+                            collection: "User",
+                        },
+                    ),
+                ]
+            "#]]
     );
 
     Ok(())
@@ -549,9 +754,22 @@ fn call_auth_literal_pk(use_correct_pk: bool) -> Result<(), Box<dyn std::error::
     assert_eq!(
         output.this(&abi).unwrap(),
         abi::Value::StructValue(vec![
-            ("id".to_owned(), abi::Value::String("test".to_owned())),
+            ("id".to_owned(), abi::Value::String("".to_owned())),
             ("name".to_owned(), abi::Value::String("test2".to_owned())),
         ]),
+    );
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                []
+            "#]],
+        dependencies:
+            expect![[r#"
+                []
+            "#]]
     );
 
     Ok(())
@@ -604,9 +822,22 @@ fn call_auth_literal_compressed() {
     assert_eq!(
         output.this(&abi).unwrap(),
         abi::Value::StructValue(vec![
-            ("id".to_owned(), abi::Value::String("test".to_owned())),
+            ("id".to_owned(), abi::Value::String("".to_owned())),
             ("name".to_owned(), abi::Value::String("test2".to_owned())),
         ]),
+    );
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                []
+            "#]],
+        dependencies:
+            expect![[r#"
+                []
+            "#]]
     );
 }
 
@@ -620,7 +851,7 @@ fn read_auth_field_correct_ctx() {
         }
     "#;
 
-    let (_, output) = run(
+    let (abi, output) = run(
         code,
         "Account",
         ".readAuth",
@@ -635,6 +866,31 @@ fn read_auth_field_correct_ctx() {
     .unwrap();
 
     assert_eq!(output.read_auth(), true);
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                [
+                    [
+                        15190310144854117473,
+                        13483436742372640428,
+                        16238764937440726588,
+                        9860411171209566744,
+                    ],
+                ]
+            "#]],
+        dependencies:
+            expect![[r#"
+                [
+                    (
+                        "pk",
+                        PublicKey,
+                    ),
+                ]
+            "#]]
+    );
 }
 
 #[test]
@@ -674,7 +930,7 @@ fn read_auth_field_no_ctx() {
         }
     "#;
 
-    let (_, output) = run(
+    let (abi, output) = run(
         code,
         "Account",
         ".readAuth",
@@ -689,6 +945,31 @@ fn read_auth_field_no_ctx() {
     .unwrap();
 
     assert_eq!(output.read_auth(), false);
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                [
+                    [
+                        15190310144854117473,
+                        13483436742372640428,
+                        16238764937440726588,
+                        9860411171209566744,
+                    ],
+                ]
+            "#]],
+        dependencies:
+            expect![[r#"
+                [
+                    (
+                        "pk",
+                        PublicKey,
+                    ),
+                ]
+            "#]]
+    );
 }
 
 #[test]
@@ -701,7 +982,7 @@ fn read_auth_collection_with_pk() {
         }
     "#;
 
-    let (_, output) = run(
+    let (abi, output) = run(
         code,
         "Account",
         ".readAuth",
@@ -716,6 +997,31 @@ fn read_auth_collection_with_pk() {
     .unwrap();
 
     assert_eq!(output.read_auth(), true);
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                [
+                    [
+                        15190310144854117473,
+                        13483436742372640428,
+                        16238764937440726588,
+                        9860411171209566744,
+                    ],
+                ]
+            "#]],
+        dependencies:
+            expect![[r#"
+                [
+                    (
+                        "pk",
+                        PublicKey,
+                    ),
+                ]
+            "#]]
+    );
 }
 
 #[test]
@@ -728,7 +1034,7 @@ fn read_auth_collection_without_pk() {
         }
     "#;
 
-    let (_, output) = run(
+    let (abi, output) = run(
         code,
         "Account",
         ".readAuth",
@@ -743,4 +1049,244 @@ fn read_auth_collection_without_pk() {
     .unwrap();
 
     assert_eq!(output.read_auth(), true);
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                [
+                    [
+                        15190310144854117473,
+                        13483436742372640428,
+                        16238764937440726588,
+                        9860411171209566744,
+                    ],
+                ]
+            "#]],
+        dependencies:
+            expect![[r#"
+                [
+                    (
+                        "pk",
+                        PublicKey,
+                    ),
+                ]
+            "#]]
+    );
+}
+
+#[test]
+fn field_hashes() {
+    let code = r#"
+        @public
+        collection Account {
+            id: string;
+            balance: u32;
+
+            addBalance(amount: u32) {
+                this.balance = this.balance + amount;
+            }
+        }
+    "#;
+
+    let (abi, output) = run(
+        code,
+        "Account",
+        "addBalance",
+        serde_json::json!({
+            "id": "john",
+            "balance": 0,
+        }),
+        vec![serde_json::json!(10)],
+        None,
+        HashMap::new(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        output.this(&abi).unwrap(),
+        abi::Value::StructValue(vec![
+            ("id".to_owned(), abi::Value::String("".to_owned())),
+            ("balance".to_owned(), abi::Value::UInt32(10)),
+        ])
+    );
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                [
+                    [
+                        10272219061387384304,
+                        13401779264242975131,
+                        10013658661959349609,
+                        9575923678792186484,
+                    ],
+                ]
+            "#]],
+        dependencies:
+            expect![[r#"
+            [
+                (
+                    "balance",
+                    PrimitiveType(
+                        UInt32,
+                    ),
+                ),
+            ]
+        "#]]
+    );
+}
+
+#[test]
+fn field_dependencies() {
+    let code = r#"
+        @public
+        collection Account {
+            id: string;
+            name: string;
+            balance: u32;
+
+            addBalance(amount: u32) {
+                this.balance = this.balance + amount;
+            }
+        }
+    "#;
+
+    let (abi, output) = run(
+        code,
+        "Account",
+        "addBalance",
+        serde_json::json!({
+            "id": "john",
+            "name": "John Doe",
+            "balance": 0,
+        }),
+        vec![serde_json::json!(10)],
+        None,
+        HashMap::new(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        output.this(&abi).unwrap(),
+        abi::Value::StructValue(vec![
+            ("id".to_owned(), abi::Value::String("".to_owned())), // id was not passed to the VM
+            ("name".to_owned(), abi::Value::String("".to_owned())), // name was not passed to the VM
+            ("balance".to_owned(), abi::Value::UInt32(10)),
+        ])
+    );
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                [
+                    [
+                        10272219061387384304,
+                        13401779264242975131,
+                        10013658661959349609,
+                        9575923678792186484,
+                    ],
+                ]
+            "#]],
+        dependencies:
+            expect![[r#"
+            [
+                (
+                    "balance",
+                    PrimitiveType(
+                        UInt32,
+                    ),
+                ),
+            ]
+        "#]]
+    );
+}
+
+#[test]
+fn index_of() {
+    fn run_index_of(
+        element_type: &str,
+        arr: Vec<serde_json::Value>,
+        item: serde_json::Value,
+    ) -> Result<abi::Value, error::Error> {
+        let code = r#"
+            @public
+            collection Account {
+                id: string;
+                result: i32;
+
+                indexOf(arr: $ELEMENT_TYPE[], item: $ELEMENT_TYPE) {
+                    this.result = arr.indexOf(item);
+                }
+            }
+        "#
+        .replace("$ELEMENT_TYPE", element_type);
+
+        let (abi, output) = run(
+            &code,
+            "Account",
+            "indexOf",
+            serde_json::json!({
+                "id": "test",
+                "result": 123456,
+            }),
+            vec![serde_json::json!(arr), serde_json::json!(item)],
+            None,
+            HashMap::new(),
+        )?;
+
+        let this = output.this(&abi).unwrap();
+        Ok(match this {
+            abi::Value::StructValue(fields) => fields
+                .into_iter()
+                .find_map(|(k, v)| if k == "result" { Some(v) } else { None })
+                .unwrap(),
+            _ => unreachable!(),
+        })
+    }
+
+    assert_eq!(
+        run_index_of(
+            "string",
+            vec![serde_json::json!("a"), serde_json::json!("b")],
+            serde_json::json!("a")
+        )
+        .unwrap(),
+        abi::Value::Int32(0),
+    );
+
+    assert_eq!(
+        run_index_of(
+            "string",
+            vec![serde_json::json!("a"), serde_json::json!("b")],
+            serde_json::json!("b")
+        )
+        .unwrap(),
+        abi::Value::Int32(1),
+    );
+
+    assert_eq!(
+        run_index_of(
+            "string",
+            vec![serde_json::json!("a"), serde_json::json!("b")],
+            serde_json::json!("c")
+        )
+        .unwrap(),
+        abi::Value::Int32(-1),
+    );
+
+    assert_eq!(
+        run_index_of(
+            "i32",
+            vec![serde_json::json!(1), serde_json::json!(2)],
+            serde_json::json!(2)
+        )
+        .unwrap(),
+        abi::Value::Int32(1),
+    );
 }

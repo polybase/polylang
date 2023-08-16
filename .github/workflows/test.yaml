@@ -15,10 +15,11 @@ jobs:
       - name: Pull testnet collections
         continue-on-error: true
         run: |
-          ./pull-collections.sh
+          ./pull-collections
 
       - name: Run Tests
         uses: actions-rs/cargo@v1
+        timeout-minutes: 10
         with:
           command: test
           args: --workspace --all-features
