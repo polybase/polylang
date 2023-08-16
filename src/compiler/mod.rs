@@ -2578,7 +2578,7 @@ fn compile_index(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Result<Symb
             Ok(array::get(compiler, a, b))
         }
         x => TypeMismatchSnafu {
-            context: format!("expected map but found {x:?}"),
+            context: format!("cannot index {x:?}"),
         }
         .fail()
         .map_err(Into::into),

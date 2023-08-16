@@ -534,32 +534,32 @@ fn copy(
     // Ensure that the target array has enough capacity to hold the source array's contents
     compiler.instructions.extend([
         Instruction::MemLoad(Some(source_len.memory_addr)),
+        // [source_len]
         Instruction::Push(element_width),
+        // [element_width, source_len]
         Instruction::U32CheckedMul,
+        // [total_length]
+        Instruction::Dup(None),
+        // [total_length, total_length]
         Instruction::MemLoad(Some(target_capacity.memory_addr)),
+        // [capacity, total_length, total_length]
         Instruction::U32CheckedLTE,
+        // [total_length <= capacity, total_length]
         Instruction::Assert,
+        // [total_length]
     ]);
-
-    // Calculate total length (source_len * element_width) and push it to the stack
-    compiler.instructions.extend([
-        Instruction::MemLoad(Some(source_len.memory_addr)),
-        Instruction::Push(element_width),
-        Instruction::U32CheckedMul,
-    ]);
-    // [total_length]
 
     compiler.instructions.extend([
         Instruction::Push(0),
         // [offset = 0, total_length]
         Instruction::While {
             condition: vec![
-                Instruction::Dup(None),
-                // [offset, offset, total_length]
-                Instruction::Dup(Some(2)),
-                // [total_length, offset, offset, total_length]
-                Instruction::U32CheckedLT,
-                // [offset < total_length, offset, total_length]
+                Instruction::Dup(Some(1)),
+                // [total_length, offset, total_length]
+                Instruction::Dup(Some(1)),
+                // [offset, total_length, offset, total_length]
+                Instruction::U32CheckedGTE,
+                // [total_length >= offset, offset, total_length]
             ],
             body: vec![
                 // [offset, total_length]
