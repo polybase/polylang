@@ -391,6 +391,37 @@ pub(crate) fn unabstract<'a>(
     result
 }
 
+pub(crate) fn walk(instructions: &[Instruction], f: &mut impl FnMut(&Instruction)) {
+    for instruction in instructions {
+        f(instruction);
+        match instruction {
+            Instruction::While { condition, body } => {
+                walk(condition, f);
+                walk(body, f);
+            }
+            Instruction::WhileTrueRaw { instructions } => {
+                walk(instructions, f);
+            }
+            Instruction::Repeat { instructions, .. } => {
+                walk(instructions, f);
+            }
+            Instruction::If {
+                condition,
+                then,
+                else_,
+            } => {
+                walk(condition, f);
+                walk(then, f);
+                walk(else_, f);
+            }
+            Instruction::Abstract(AbstractInstruction::InlinedFunction(func)) => {
+                walk(func, f);
+            }
+            _ => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
