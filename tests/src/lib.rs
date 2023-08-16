@@ -1,4 +1,7 @@
 #![cfg(test)]
+
+mod push;
+
 use expect_test::expect;
 use serde::de::Deserialize;
 use std::collections::HashMap;

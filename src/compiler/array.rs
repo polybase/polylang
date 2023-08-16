@@ -312,23 +312,6 @@ pub(crate) fn push(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> 
 
     compiler
         .memory
-        .read(compiler.instructions, array::capacity(arr).memory_addr, 1);
-    // [capacity]
-    compiler
-        .memory
-        .read(compiler.instructions, array::length(arr).memory_addr, 1);
-    // [len + 1, capacity]
-    compiler
-        .instructions
-        .push(encoder::Instruction::U32CheckedGTE);
-    // [len + 1 >= capacity]
-
-    // TODO: if false, reallocate and copy
-    compiler.instructions.push(encoder::Instruction::Assert);
-    // []
-
-    compiler
-        .memory
         .read(compiler.instructions, array::data_ptr(arr).memory_addr, 1);
     // [data_ptr]
     compiler
