@@ -450,6 +450,7 @@ pub fn prove(program: &Program, inputs: &Inputs) -> Result<Output> {
 pub struct RunOutput {
     abi: Abi,
     memory: HashMap<u64, [u64; 4]>,
+    pub cycle_count: u32,
     stack: Vec<u64>,
     input_stack: Vec<u64>,
 }
@@ -636,6 +637,7 @@ pub fn run<'a>(
         RunOutput {
             abi: inputs.abi.clone(),
             stack: output_stack,
+            cycle_count: last_ok_state.clk,
             input_stack: input_stack_values,
             memory,
         },

@@ -1203,3 +1203,87 @@ fn field_dependencies() {
         "#]]
     );
 }
+
+#[test]
+fn index_of() {
+    fn run_index_of(
+        element_type: &str,
+        arr: Vec<serde_json::Value>,
+        item: serde_json::Value,
+    ) -> Result<abi::Value, error::Error> {
+        let code = r#"
+            @public
+            collection Account {
+                id: string;
+                result: i32;
+
+                indexOf(arr: $ELEMENT_TYPE[], item: $ELEMENT_TYPE) {
+                    this.result = arr.indexOf(item);
+                }
+            }
+        "#
+        .replace("$ELEMENT_TYPE", element_type);
+
+        let (abi, output) = run(
+            &code,
+            "Account",
+            "indexOf",
+            serde_json::json!({
+                "id": "test",
+                "result": 123456,
+            }),
+            vec![serde_json::json!(arr), serde_json::json!(item)],
+            None,
+            HashMap::new(),
+        )?;
+
+        let this = output.this(&abi).unwrap();
+        Ok(match this {
+            abi::Value::StructValue(fields) => fields
+                .into_iter()
+                .find_map(|(k, v)| if k == "result" { Some(v) } else { None })
+                .unwrap(),
+            _ => unreachable!(),
+        })
+    }
+
+    assert_eq!(
+        run_index_of(
+            "string",
+            vec![serde_json::json!("a"), serde_json::json!("b")],
+            serde_json::json!("a")
+        )
+        .unwrap(),
+        abi::Value::Int32(0),
+    );
+
+    assert_eq!(
+        run_index_of(
+            "string",
+            vec![serde_json::json!("a"), serde_json::json!("b")],
+            serde_json::json!("b")
+        )
+        .unwrap(),
+        abi::Value::Int32(1),
+    );
+
+    assert_eq!(
+        run_index_of(
+            "string",
+            vec![serde_json::json!("a"), serde_json::json!("b")],
+            serde_json::json!("c")
+        )
+        .unwrap(),
+        abi::Value::Int32(-1),
+    );
+
+    assert_eq!(
+        run_index_of(
+            "i32",
+            vec![serde_json::json!(1), serde_json::json!(2)],
+            serde_json::json!(2)
+        )
+        .unwrap(),
+        abi::Value::Int32(1),
+    );
+}
