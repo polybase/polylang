@@ -79,7 +79,9 @@ pub(crate) fn hash(compiler: &mut Compiler, _scope: &mut Scope, args: &[Symbol])
     let arr = &args[0];
     ensure_eq_type!(arr, Type::Array(_));
 
-    let Type::Array(inner_type) = &arr.type_ else { unreachable!() };
+    let Type::Array(inner_type) = &arr.type_ else {
+        unreachable!()
+    };
 
     let (inner_hashing_input, inner_hashing_insts, inner_hashing_output) = {
         let mut insts = Vec::new();
@@ -237,7 +239,6 @@ pub(crate) fn find_index(compiler: &mut Compiler, arr: &Symbol, el: &Symbol) -> 
         let mut insts = Vec::new();
 
         std::mem::swap(compiler.instructions, &mut insts);
-        // 65, 448
         let result = super::compile_eq(compiler, el, &current_arr_element);
         std::mem::swap(compiler.instructions, &mut insts);
 
@@ -390,6 +391,12 @@ fn iterate_array_elements<'a>(
                 // [len, i, i]
                 Instruction::U32CheckedLT,
                 // [i < len, i]
+                Instruction::MemLoad(Some(finished.memory_addr)),
+                // [finished, i < len, i]
+                Instruction::Not,
+                // [!finished, i < len, i]
+                Instruction::And,
+                // [i < len && !finished]
             ],
             body: vec![
                 Instruction::Dup(None),

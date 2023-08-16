@@ -14,6 +14,8 @@ mod string;
 mod uint32;
 mod uint64;
 
+use std::collections::HashMap;
+
 use abi::{Abi, PrimitiveType, StdVersion, Struct, Type};
 use error::prelude::*;
 
@@ -1483,6 +1485,17 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
 
             a
         }
+        ExpressionKind::AssignAdd(a, b) => compile_expression(
+            &Expression::T(ExpressionKind::Assign(
+                a.clone(),
+                Box::new(Expression::T(ExpressionKind::Add(
+                    Box::new(*a.clone()),
+                    b.clone(),
+                ))),
+            )),
+            compiler,
+            scope,
+        )?,
         ExpressionKind::Dot(a, b) => {
             let a = compile_expression(a, compiler, scope)?;
 
@@ -1769,71 +1782,182 @@ fn compile_statement(
             })
         }
         ast::StatementKind::For(ast::For {
-            initial_statement,
-            condition,
-            post_statement,
+            for_kind,
             statements,
         }) => {
             // There is no `for` instruction, we have to use `while` instead
             let mut scope = scope.deeper();
 
             let mut initial_instructions = vec![];
-            let mut initial_compiler = Compiler::new(
-                &mut initial_instructions,
-                compiler.memory,
-                compiler.root_scope,
-            );
-            match initial_statement {
-                ast::ForInitialStatement::Let(l) => {
-                    compile_let_statement(l, &mut initial_compiler, &mut scope)
-                }
-                ast::ForInitialStatement::Expression(e) => {
-                    compile_expression(e, &mut initial_compiler, &scope).map(|_| ())
-                }
-            }?;
-
             let mut condition_instructions = vec![];
-            let mut condition_compiler = Compiler::new(
-                &mut condition_instructions,
-                compiler.memory,
-                compiler.root_scope,
-            );
-            let condition_symbol = compile_expression(condition, &mut condition_compiler, &scope)?;
-            ensure_eq_type!(
-                condition_symbol,
-                Type::PrimitiveType(PrimitiveType::Boolean)
-            );
-            condition_compiler.memory.read(
-                condition_compiler.instructions,
-                condition_symbol.memory_addr,
-                condition_symbol.type_.miden_width(),
-            );
-
+            let mut pre_instructions = vec![];
             let mut post_instructions = vec![];
-            let mut post_compiler =
-                Compiler::new(&mut post_instructions, compiler.memory, compiler.root_scope);
-            compile_expression(post_statement, &mut post_compiler, &scope)?;
+            match for_kind {
+                ast::ForKind::Basic {
+                    initial_statement,
+                    condition,
+                    post_statement,
+                } => {
+                    let mut initial_compiler = Compiler::new(
+                        &mut initial_instructions,
+                        compiler.memory,
+                        compiler.root_scope,
+                    );
+                    match initial_statement {
+                        ast::ForInitialStatement::Let(l) => {
+                            compile_let_statement(l, &mut initial_compiler, &mut scope)
+                        }
+                        ast::ForInitialStatement::Expression(e) => {
+                            compile_expression(e, &mut initial_compiler, &scope).map(|_| ())
+                        }
+                    }?;
 
-            let mut body_instructions = vec![];
-            let mut body_compiler =
-                Compiler::new(&mut body_instructions, compiler.memory, compiler.root_scope);
-            let mut body_scope = scope.deeper();
-            for statement in statements {
-                compile_statement(
-                    statement,
-                    &mut body_compiler,
-                    &mut body_scope,
-                    return_result,
-                )?;
+                    let mut condition_compiler = Compiler::new(
+                        &mut condition_instructions,
+                        compiler.memory,
+                        compiler.root_scope,
+                    );
+                    let condition_symbol =
+                        compile_expression(condition, &mut condition_compiler, &scope)?;
+                    ensure_eq_type!(
+                        condition_symbol,
+                        Type::PrimitiveType(PrimitiveType::Boolean)
+                    );
+                    condition_compiler.memory.read(
+                        condition_compiler.instructions,
+                        condition_symbol.memory_addr,
+                        condition_symbol.type_.miden_width(),
+                    );
+
+                    let mut post_compiler =
+                        Compiler::new(&mut post_instructions, compiler.memory, compiler.root_scope);
+                    compile_expression(post_statement, &mut post_compiler, &scope)?;
+                }
+                ast::ForKind::ForEach {
+                    for_each_type,
+                    identifier,
+                    iterable,
+                } => {
+                    let mut initial_compiler = Compiler::new(
+                        &mut initial_instructions,
+                        compiler.memory,
+                        compiler.root_scope,
+                    );
+                    let foreach_index_identifier = "#internal_foreach_index";
+                    let foreach_index_symbol = uint32::new(&mut initial_compiler, 0);
+                    scope.add_symbol(
+                        foreach_index_identifier.to_string(),
+                        foreach_index_symbol.clone(),
+                    );
+
+                    let mut condition_compiler = Compiler::new(
+                        &mut condition_instructions,
+                        compiler.memory,
+                        compiler.root_scope,
+                    );
+                    let iterable_symbol =
+                        compile_expression(iterable, &mut condition_compiler, &scope)?;
+                    let foreach_len_symbol = match &iterable_symbol.type_ {
+                        Type::Array(_) => array::length(&iterable_symbol),
+                        Type::Map(_, _) => array::length(&map::keys_arr(&iterable_symbol)?),
+                        ty => {
+                            return Err(Error::unimplemented(format!(
+                                "cannot iterate for-{for_each_type} with type {:?}",
+                                ty
+                            )));
+                        }
+                    };
+
+                    let foreach_len_identifier = "#internal_foreach_len";
+                    scope.add_symbol(foreach_len_identifier.to_string(), foreach_len_symbol);
+                    let condition_symbol = compile_expression(
+                        &ast::ExpressionKind::LessThan(
+                            Box::new(
+                                ast::ExpressionKind::Ident(foreach_index_identifier.to_string())
+                                    .into(),
+                            ),
+                            Box::new(
+                                ast::ExpressionKind::Ident(foreach_len_identifier.to_string())
+                                    .into(),
+                            ),
+                        )
+                        .into(),
+                        &mut condition_compiler,
+                        &scope,
+                    )?;
+                    condition_compiler.memory.read(
+                        condition_compiler.instructions,
+                        condition_symbol.memory_addr,
+                        condition_symbol.type_.miden_width(),
+                    );
+
+                    let mut pre_compiler =
+                        Compiler::new(&mut pre_instructions, compiler.memory, compiler.root_scope);
+                    match (for_each_type, &iterable_symbol.type_) {
+                        (ast::ForEachType::In, Type::Array(_)) => {
+                            scope.add_symbol(identifier.clone(), foreach_index_symbol.clone());
+                        }
+                        (ast::ForEachType::In, Type::Map(_, _)) => {
+                            // XXX: Optimize?
+                            let keys = map::keys_arr(&iterable_symbol)?;
+                            let key = array::get(&mut pre_compiler, &keys, &foreach_index_symbol);
+                            scope.add_symbol(identifier.clone(), key);
+                        }
+                        (ast::ForEachType::Of, Type::Array(_)) => {
+                            let symbol = array::get(
+                                &mut pre_compiler,
+                                &iterable_symbol,
+                                &foreach_index_symbol,
+                            );
+                            scope.add_symbol(identifier.clone(), symbol);
+                        }
+                        (ast::ForEachType::Of, Type::Map(_, _)) => {
+                            // XXX: Optimize?
+                            let values = map::values_arr(&iterable_symbol)?;
+                            let value =
+                                array::get(&mut pre_compiler, &values, &foreach_index_symbol);
+                            scope.add_symbol(identifier.clone(), value);
+                        }
+                        ty => {
+                            return Err(Error::unimplemented(format!(
+                                "cannot iterate for-{for_each_type} with type {:?}",
+                                ty
+                            )));
+                        }
+                    }
+
+                    let post_compiler =
+                        Compiler::new(&mut post_instructions, compiler.memory, compiler.root_scope);
+                    post_compiler.instructions.extend([
+                        encoder::Instruction::MemLoad(Some(foreach_index_symbol.memory_addr)),
+                        encoder::Instruction::Push(1),
+                        encoder::Instruction::U32CheckedAdd,
+                        encoder::Instruction::MemStore(Some(foreach_index_symbol.memory_addr)),
+                    ]);
+                }
             }
+
+            let body = {
+                let mut body_instructions = pre_instructions;
+                let mut body_compiler =
+                    Compiler::new(&mut body_instructions, compiler.memory, compiler.root_scope);
+                let mut body_scope = scope.deeper();
+                for statement in statements {
+                    compile_statement(
+                        statement,
+                        &mut body_compiler,
+                        &mut body_scope,
+                        return_result,
+                    )?;
+                }
+                body_instructions.extend(post_instructions);
+                body_instructions
+            };
 
             compiler.instructions.extend(initial_instructions);
             compiler.instructions.push(encoder::Instruction::While {
                 condition: condition_instructions,
-                body: {
-                    body_instructions.extend(post_instructions);
-                    body_instructions
-                },
+                body,
             });
         }
         ast::StatementKind::Let(let_statement) => {
@@ -1850,12 +1974,8 @@ fn compile_statement(
     Ok(())
 }
 
-fn compile_let_statement(
-    let_statement: &ast::Let,
-    compiler: &mut Compiler,
-    scope: &mut Scope,
-) -> Result<()> {
-    let symbol = compile_expression(&let_statement.expression, compiler, scope)?;
+fn add_new_symbol(expr: &Expression, compiler: &mut Compiler, scope: &Scope) -> Result<Symbol> {
+    let symbol = compile_expression(expr, compiler, scope)?;
     // we need to copy symbol to a new symbol,
     // because Ident expressions return symbols of variables
     let new_symbol = compiler.memory.allocate_symbol(symbol.type_);
@@ -1869,6 +1989,16 @@ fn compile_let_statement(
         new_symbol.memory_addr,
         &vec![ValueSource::Stack; new_symbol.type_.miden_width() as usize],
     );
+
+    Ok(new_symbol)
+}
+
+fn compile_let_statement(
+    let_statement: &ast::Let,
+    compiler: &mut Compiler,
+    scope: &mut Scope,
+) -> Result<()> {
+    let new_symbol = add_new_symbol(&let_statement.expression, compiler, scope)?;
 
     scope.add_symbol(let_statement.identifier.to_string(), new_symbol);
     Ok(())
@@ -2437,10 +2567,15 @@ fn compile_index(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Result<Symb
             Ok(value)
         }
         Type::Array(_) => {
-            ensure_eq_type!(@b.type_, @Type::PrimitiveType(PrimitiveType::UInt32));
+            ensure_eq_type!(
+                b,
+                Type::PrimitiveType(PrimitiveType::UInt32)
+                    // TODO: ideally we should parse it as generic `Number` and instantiate into a real time lately.
+                    // so e.g here no need to do a reinterpret back as integer.
+                    | Type::PrimitiveType(PrimitiveType::Float32)
+            );
 
-            let value = array::get(compiler, a, b);
-            Ok(value)
+            Ok(array::get(compiler, a, b))
         }
         x => TypeMismatchSnafu {
             context: format!("expected map but found {x:?}"),
@@ -3109,6 +3244,91 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Result<Symbol> {
     Ok(result)
 }
 
+fn add_salt_to_hash(compiler: &mut Compiler, hash: &Symbol, salt: &Symbol) -> Result<Symbol> {
+    ensure_eq_type!(hash, Type::Hash);
+    ensure_eq_type!(salt, Type::PrimitiveType(PrimitiveType::UInt32));
+
+    let result = compiler.memory.allocate_symbol(Type::Hash);
+
+    compiler.memory.read(
+        compiler.instructions,
+        hash.memory_addr,
+        hash.type_.miden_width(),
+    );
+    compiler.memory.read(
+        compiler.instructions,
+        salt.memory_addr,
+        salt.type_.miden_width(),
+    );
+    for _ in 0..3 {
+        compiler.instructions.push(encoder::Instruction::Push(0));
+    }
+    compiler.instructions.push(encoder::Instruction::HMerge);
+
+    compiler.memory.write(
+        compiler.instructions,
+        result.memory_addr,
+        &[
+            ValueSource::Stack,
+            ValueSource::Stack,
+            ValueSource::Stack,
+            ValueSource::Stack,
+        ],
+    );
+
+    Ok(result)
+}
+
+fn hash_record_with_salts(
+    compiler: &mut Compiler,
+    struct_symbol: &Symbol,
+    field_salts: &[Symbol],
+) -> Result<Symbol> {
+    ensure_eq_type!(struct_symbol, Type::Struct(_));
+    let Type::Struct(struct_) = &struct_symbol.type_ else {
+        unreachable!()
+    };
+
+    let result = compiler.memory.allocate_symbol(Type::Hash);
+    for (i, (field_name, _)) in struct_.fields.iter().enumerate() {
+        let salt = &field_salts[i];
+        let field_symbol = struct_field(compiler, struct_symbol, field_name)?;
+
+        let field_hash = hash(
+            compiler,
+            Symbol {
+                type_: field_symbol.type_.clone(),
+                memory_addr: field_symbol.memory_addr,
+            },
+        )?;
+        let field_hash = add_salt_to_hash(compiler, &field_hash, salt)?;
+
+        compiler.memory.read(
+            compiler.instructions,
+            result.memory_addr,
+            result.type_.miden_width(),
+        );
+        compiler.memory.read(
+            compiler.instructions,
+            field_hash.memory_addr,
+            field_hash.type_.miden_width(),
+        );
+        compiler.instructions.push(encoder::Instruction::HMerge);
+        compiler.memory.write(
+            compiler.instructions,
+            result.memory_addr,
+            &[
+                ValueSource::Stack,
+                ValueSource::Stack,
+                ValueSource::Stack,
+                ValueSource::Stack,
+            ],
+        );
+    }
+
+    Ok(result)
+}
+
 fn read_advice_generic(compiler: &mut Compiler, type_: &Type) -> Result<Symbol> {
     match type_ {
         Type::Nullable(_) => read_advice_nullable(compiler, type_.clone()),
@@ -3172,7 +3392,7 @@ fn read_advice_generic(compiler: &mut Compiler, type_: &Type) -> Result<Symbol> 
         Type::Array(t) => read_advice_array(compiler, t),
         Type::Struct(s) => {
             let symbol = compiler.memory.allocate_symbol(type_.clone());
-            read_struct_from_advice_tape(compiler, &symbol, s)?;
+            read_struct_from_advice_tape(compiler, &symbol, s, None)?;
             Ok(symbol)
         }
         Type::PublicKey => compile_function_call(
@@ -3188,43 +3408,83 @@ fn read_advice_generic(compiler: &mut Compiler, type_: &Type) -> Result<Symbol> 
     }
 }
 
+/// `lazy` is an array of boolean `Symbol`s, as many as there as struct fields.
+/// If `lazy[i]` is true, then the field will be read, if false, it will be skipped.
 fn read_struct_from_advice_tape(
     compiler: &mut Compiler,
     struct_symbol: &Symbol,
     struct_type: &Struct,
+    lazy: Option<&[Symbol]>,
 ) -> Result<()> {
-    for (name, type_) in &struct_type.fields {
-        let symbol = read_advice_generic(compiler, type_)?;
+    for (i, (name, type_)) in struct_type.fields.iter().enumerate() {
+        let (_field, field_insts) = {
+            let mut insts = vec![];
+            std::mem::swap(compiler.instructions, &mut insts);
 
-        let sf = struct_field(compiler, struct_symbol, name)?;
-        compiler.memory.read(
-            compiler.instructions,
-            symbol.memory_addr,
-            symbol.type_.miden_width(),
-        );
-        compiler.memory.write(
-            compiler.instructions,
-            sf.memory_addr,
-            &vec![ValueSource::Stack; symbol.type_.miden_width() as _],
-        );
+            let value = read_advice_generic(compiler, type_)?;
+            let sf = struct_field(compiler, struct_symbol, name)?;
+            compiler.memory.read(
+                compiler.instructions,
+                value.memory_addr,
+                value.type_.miden_width(),
+            );
+            compiler.memory.write(
+                compiler.instructions,
+                sf.memory_addr,
+                &vec![ValueSource::Stack; value.type_.miden_width() as _],
+            );
+
+            std::mem::swap(compiler.instructions, &mut insts);
+            (sf, insts)
+        };
+
+        match lazy {
+            Some(lazy) => {
+                compiler.instructions.push(encoder::Instruction::If {
+                    condition: vec![encoder::Instruction::MemLoad(Some(lazy[i].memory_addr))],
+                    then: [
+                        encoder::Instruction::Push(struct_symbol.memory_addr + i as u32),
+                        encoder::Instruction::Push(0),
+                        encoder::Instruction::Push(0),
+                        encoder::Instruction::Push(1),
+                        encoder::Instruction::AdvPushMapval,
+                    ]
+                    .into_iter()
+                    .chain(field_insts)
+                    .collect(),
+                    else_: vec![],
+                });
+            }
+            None => compiler.instructions.extend(field_insts),
+        }
     }
 
     Ok(())
 }
 
+/// Returns (Option<(salts, this)>, args)
 fn read_collection_inputs(
     compiler: &mut Compiler,
     this_struct: Option<Struct>,
     args: &[Type],
-) -> Result<(Option<Symbol>, Vec<Symbol>)> {
+    lazy: Option<&[Symbol]>,
+) -> Result<(Option<(Vec<Symbol>, Symbol)>, Vec<Symbol>)> {
     let this = this_struct.map(|ts| compiler.memory.allocate_symbol(Type::Struct(ts)));
+    let mut salts = vec![];
 
     if let Some(this) = this.as_ref() {
         let struct_ty = match &this.type_ {
             Type::Struct(s) => s,
             _ => unreachable!(),
         };
-        read_struct_from_advice_tape(compiler, this, struct_ty)?;
+
+        salts = struct_ty
+            .fields
+            .iter()
+            .map(|_| read_advice_generic(compiler, &Type::PrimitiveType(PrimitiveType::UInt32)))
+            .collect::<Result<Vec<_>>>()?;
+
+        read_struct_from_advice_tape(compiler, this, struct_ty, lazy)?;
     }
 
     let mut args_symbols = Vec::new();
@@ -3232,7 +3492,7 @@ fn read_collection_inputs(
         args_symbols.push(read_advice_generic(compiler, arg)?);
     }
 
-    Ok((this, args_symbols))
+    Ok((this.map(|t| (salts, t)), args_symbols))
 }
 
 fn prepare_scope(program: &ast::Program) -> Scope {
@@ -3344,6 +3604,11 @@ pub fn compile(
     let mut instructions = vec![];
     let mut memory = Memory::new();
     let this_addr;
+    // A vector of hashmaps for each field, mapping the address of one of the field elements to the count of times it was used
+    let mut used_fields_count: Vec<HashMap<u32, usize>>;
+    let mut dependent_fields = Vec::<(String, Type)>::new();
+    // hashing will generate read instructions
+    const USED_FIELD_COUNT_THRESHOLD: usize = 2;
 
     let ctx_struct = Struct {
         name: "Context".to_string(),
@@ -3373,15 +3638,41 @@ pub fn compile(
         let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
         compiler.record_depenencies = all_possible_record_dependencies.clone();
 
-        let expected_hash = collection_struct.as_ref().map(|_| {
-            let hash = compiler.memory.allocate_symbol(Type::Hash);
-            compiler.memory.write(
-                compiler.instructions,
-                hash.memory_addr,
-                &vec![ValueSource::Stack; hash.type_.miden_width() as _],
-            );
-            hash
-        });
+        let fields_in_use = collection_struct
+            .as_ref()
+            .iter()
+            .flat_map(|s| &s.fields)
+            .map(|_| {
+                let enabled = compiler
+                    .memory
+                    .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+
+                enabled
+            })
+            .collect::<Vec<_>>();
+
+        let expected_hashes = collection_struct
+            .as_ref()
+            .iter()
+            .flat_map(|s| &s.fields)
+            .enumerate()
+            .map(|(i, _)| {
+                let hash = compiler.memory.allocate_symbol(Type::Hash);
+                compiler.instructions.extend([encoder::Instruction::If {
+                    condition: vec![encoder::Instruction::MemLoad(Some(
+                        fields_in_use[i].memory_addr,
+                    ))],
+                    then: vec![
+                        encoder::Instruction::MemStore(Some(hash.memory_addr)),
+                        encoder::Instruction::MemStore(Some(hash.memory_addr + 1)),
+                        encoder::Instruction::MemStore(Some(hash.memory_addr + 2)),
+                        encoder::Instruction::MemStore(Some(hash.memory_addr + 3)),
+                    ],
+                    else_: vec![],
+                }]);
+                hash
+            })
+            .collect::<Vec<_>>();
 
         for (_, symbol) in &all_possible_record_dependencies {
             let array_length = compiler
@@ -3469,17 +3760,21 @@ pub fn compile(
             );
         }
 
-        read_struct_from_advice_tape(&mut compiler, &ctx, &ctx_struct)?;
+        read_struct_from_advice_tape(&mut compiler, &ctx, &ctx_struct, None)?;
 
-        let (this_symbol, arg_symbols) =
-            read_collection_inputs(&mut compiler, collection_struct.clone(), &param_types)?;
+        let (salts_this_symbol, arg_symbols) = read_collection_inputs(
+            &mut compiler,
+            collection_struct.clone(),
+            &param_types,
+            Some(&fields_in_use),
+        )?;
 
         let ctx_pk = struct_field(&mut compiler, &ctx, "publicKey")?;
-        if function.is_some() {
+        if salts_this_symbol.is_some() && function.is_some() {
             let auth_result = compile_call_authorization_proof(
                 &mut compiler,
                 &ctx_pk,
-                this_symbol.as_ref().unwrap(),
+                &salts_this_symbol.as_ref().unwrap().1,
                 collection_name.unwrap(),
                 function_name,
             )?;
@@ -3492,29 +3787,52 @@ pub fn compile(
             compile_function_call(&mut compiler, assert_fn, &[auth_result, error_str], None)?;
         }
 
-        this_addr = this_symbol.as_ref().map(|ts| ts.memory_addr);
+        this_addr = salts_this_symbol.as_ref().map(|(_, ts)| ts.memory_addr);
 
-        if let Some(this_symbol) = &this_symbol {
-            let this_hash = hash(&mut compiler, this_symbol.clone())?;
-            // compiler.memory.read(
-            //     &mut compiler.instructions,
-            //     this_hash.memory_addr,
-            //     this_hash.type_.miden_width(),
-            // );
-            let is_eq = compile_eq(&mut compiler, &this_hash, expected_hash.as_ref().unwrap());
-            let assert_fn = compiler.root_scope.find_function("assert").unwrap();
-            let (error_str, _) = string::new(
-                &mut compiler,
-                "Hash of this does not match the expected hash",
-            );
-            compile_function_call(&mut compiler, assert_fn, &[is_eq, error_str], None)?;
+        if let Some((salts, this_symbol)) = &salts_this_symbol {
+            for (i, field) in collection_struct
+                .as_ref()
+                .unwrap()
+                .fields
+                .iter()
+                .enumerate()
+            {
+                let field_used_instructions = {
+                    let mut insts = vec![];
+                    std::mem::swap(compiler.instructions, &mut insts);
+
+                    let field_symbol = struct_field(&mut compiler, this_symbol, &field.0)?;
+                    let expected_field_hash = expected_hashes[i].clone();
+                    let actual_field_hash = hash(&mut compiler, field_symbol.clone())?;
+                    let actual_field_hash =
+                        add_salt_to_hash(&mut compiler, &actual_field_hash, &salts[i])?;
+
+                    let is_eq = compile_eq(&mut compiler, &expected_field_hash, &actual_field_hash);
+                    let assert_fn = compiler.root_scope.find_function("assert").unwrap();
+                    let (error_str, _) = string::new(
+                        &mut compiler,
+                        &format!("Hash of field {} does not match the expected hash", field.0),
+                    );
+                    compile_function_call(&mut compiler, assert_fn, &[is_eq, error_str], None)?;
+
+                    std::mem::swap(compiler.instructions, &mut insts);
+                    insts
+                };
+                compiler.instructions.extend([encoder::Instruction::If {
+                    condition: vec![encoder::Instruction::MemLoad(Some(
+                        fields_in_use[i].memory_addr,
+                    ))],
+                    then: field_used_instructions,
+                    else_: vec![],
+                }]);
+            }
         }
 
         let result = match function {
             // read auth
             None => compile_read_authorization_proof(
                 &mut compiler,
-                this_symbol.as_ref().unwrap(),
+                &salts_this_symbol.as_ref().unwrap().1,
                 collection.as_ref().unwrap(),
                 &ctx_pk,
             )?,
@@ -3522,7 +3840,7 @@ pub fn compile(
                 function,
                 &mut compiler,
                 &arg_symbols,
-                this_symbol.clone(),
+                salts_this_symbol.as_ref().map(|(_, ts)| ts).cloned(),
             )?,
         };
 
@@ -3533,17 +3851,129 @@ pub fn compile(
             result.type_.miden_width(),
         );
 
-        if let Some(this_symbol) = this_symbol {
+        if let Some((salts, this_symbol)) = &salts_this_symbol {
+            for (i, (field_name, _)) in collection_struct
+                .as_ref()
+                .unwrap()
+                .fields
+                .iter()
+                .enumerate()
+            {
+                let if_in_use_then_insts = {
+                    let mut insts = vec![];
+                    std::mem::swap(compiler.instructions, &mut insts);
+
+                    let field_symbol = struct_field(&mut compiler, &this_symbol, &field_name)?;
+                    let field_hash = hash(&mut compiler, field_symbol.clone())?;
+                    let field_hash = add_salt_to_hash(&mut compiler, &field_hash, &salts[i])?;
+                    comment!(compiler, "Reading output field `{}` hash", field_name);
+                    compiler.memory.read(
+                        &mut compiler.instructions,
+                        field_hash.memory_addr,
+                        field_hash.type_.miden_width(),
+                    );
+
+                    std::mem::swap(compiler.instructions, &mut insts);
+                    insts
+                };
+
+                compiler.instructions.push(encoder::Instruction::If {
+                    condition: vec![encoder::Instruction::MemLoad(Some(
+                        fields_in_use[i].memory_addr,
+                    ))],
+                    then: if_in_use_then_insts,
+                    else_: vec![],
+                });
+            }
+
             comment!(compiler, "Reading selfdestruct flag");
             compiler.memory.read(compiler.instructions, 6, 1);
+        }
 
-            let this_hash = hash(&mut compiler, this_symbol)?;
-            comment!(compiler, "Reading output `this` hash");
-            compiler.memory.read(
-                compiler.instructions,
-                this_hash.memory_addr,
-                this_hash.type_.miden_width(),
-            );
+        assert_eq!(
+            compiler.record_depenencies.len(),
+            all_possible_record_dependencies.len()
+        );
+
+        used_fields_count = vec![HashMap::new(); fields_in_use.len()];
+        let field_addr_ranges = collection_struct
+            .as_ref()
+            .map(|s| {
+                s.fields
+                    .iter()
+                    .map(|(field_name, _)| {
+                        let symbol = struct_field(
+                            &mut compiler,
+                            &salts_this_symbol.as_ref().unwrap().1,
+                            &field_name,
+                        )?;
+
+                        let start = symbol.memory_addr;
+                        let end = symbol.memory_addr + symbol.type_.miden_width();
+                        Ok(start..end)
+                    })
+                    .collect::<Result<Vec<_>>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let struct_addr_range = salts_this_symbol.map(|(_, this_symbol)| {
+            let start = this_symbol.memory_addr;
+            let end = this_symbol.memory_addr + this_symbol.type_.miden_width();
+            start..end
+        });
+        if let Some(struct_addr_range) = struct_addr_range.as_ref() {
+            encoder::walk(&compiler.instructions, &mut |inst| {
+                match inst {
+                    encoder::Instruction::MemLoad(Some(addr)) => {
+                        // First, check if the address is in the struct
+                        if !struct_addr_range.contains(addr) {
+                            return;
+                        }
+
+                        for (i, field_addr_range) in field_addr_ranges.iter().enumerate() {
+                            if field_addr_range.contains(addr) {
+                                *used_fields_count[i].entry(*addr).or_default() += 1;
+                                return;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            });
+        }
+
+        for (i, used) in used_fields_count.iter().enumerate() {
+            let mut insts = vec![];
+            std::mem::swap(compiler.instructions, &mut insts);
+
+            let max_used = used
+                .iter()
+                .max_by_key(|(_, count)| *count)
+                .map(|(_, count)| *count)
+                .unwrap_or(0);
+
+            if max_used > USED_FIELD_COUNT_THRESHOLD {
+                let field_in_use = &fields_in_use[i];
+                compiler.memory.write(
+                    compiler.instructions,
+                    field_in_use.memory_addr,
+                    &[ValueSource::Immediate(1)],
+                );
+
+                dependent_fields.push(
+                    collection_struct
+                        .as_ref()
+                        .unwrap()
+                        .fields
+                        .get(i)
+                        .unwrap()
+                        .clone(),
+                );
+            }
+
+            std::mem::swap(compiler.instructions, &mut insts);
+            insts.extend(compiler.instructions.drain(..));
+            std::mem::swap(compiler.instructions, &mut insts);
         }
 
         assert_eq!(
@@ -3561,7 +3991,25 @@ pub fn compile(
         false,
     );
 
+    let abi = Abi {
+        dependent_fields,
+        this_addr,
+        this_type: collection_struct.map(Type::Struct),
+        param_types,
+        other_collection_types: scope
+            .collections
+            .iter()
+            .map(|c| Type::Struct(Struct::from(c.1.clone())))
+            .collect(),
+        other_records: all_possible_record_dependencies
+            .into_iter()
+            .map(|x| x.0)
+            .collect(),
+        std_version: Some(StdVersion::V0_6_1),
+    };
+
     let mut miden_code = String::new();
+    miden_code.push_str(format!("# ABI: {}\n", serde_json::to_string(&abi).unwrap()).as_str());
     miden_code.push_str("use.std::math::u64\n");
     miden_code.push_str("begin\n");
     miden_code.push_str("  push.");
@@ -3575,24 +4023,7 @@ pub fn compile(
     }
     miden_code.push_str("end\n");
 
-    Ok((
-        miden_code,
-        Abi {
-            this_addr,
-            this_type: collection_struct.map(Type::Struct),
-            param_types,
-            other_collection_types: scope
-                .collections
-                .iter()
-                .map(|c| Type::Struct(Struct::from(c.1.clone())))
-                .collect(),
-            other_records: all_possible_record_dependencies
-                .into_iter()
-                .map(|x| x.0)
-                .collect(),
-            std_version: Some(StdVersion::V0_6_1),
-        },
-    ))
+    Ok((miden_code, abi))
 }
 
 fn compile_read_authorization_proof(
@@ -3790,12 +4221,36 @@ fn compile_check_eq_or_ownership(
                 let record = compiler
                     .memory
                     .allocate_symbol(Type::Struct(Struct::from(collection_type.clone())));
+                compiler.instructions.push(encoder::Instruction::AdvPush(
+                    collection_type.fields.len() as u32,
+                ));
+                let salts = collection_type
+                    .fields
+                    .iter()
+                    .map(|_| {
+                        let salt = compiler
+                            .memory
+                            .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+                        compiler.memory.write(
+                            compiler.instructions,
+                            salt.memory_addr,
+                            &[ValueSource::Stack],
+                        );
+                        salt
+                    })
+                    .collect::<Vec<_>>();
                 read_struct_from_advice_tape(
                     compiler,
                     &record,
                     &Struct::from(collection_type.clone()),
+                    None,
                 )?;
-                let actual_record_hash = hash(compiler, record.clone())?;
+                let actual_record_hash = hash_record_with_salts(compiler, &record, &salts)?;
+                compiler.memory.read(
+                    compiler.instructions,
+                    actual_record_hash.memory_addr,
+                    actual_record_hash.type_.miden_width(),
+                );
 
                 let is_hash_eq = compile_eq(compiler, &record_public_hash, &actual_record_hash);
                 let assert = compiler.root_scope.find_function("assert").unwrap();
@@ -4021,7 +4476,7 @@ fn ast_type_to_type(required: bool, type_: &ast::Type) -> Type {
 }
 
 /// A function that takes in a struct type and generates a program that hashes a value of that type and returns the hash on the stack.
-pub fn compile_hasher(t: Type) -> Result<String> {
+pub fn compile_hasher(t: Type, salts: Option<&[u32]>) -> Result<String> {
     let mut instructions = vec![];
     let mut memory = Memory::new();
     let empty_program = ast::Program { nodes: vec![] };
@@ -4030,12 +4485,42 @@ pub fn compile_hasher(t: Type) -> Result<String> {
     {
         let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
 
-        let this_symbol = match t {
-            Type::Struct(struct_) => read_collection_inputs(&mut compiler, Some(struct_), &[])?.0,
-            t => Some(read_advice_generic(&mut compiler, &t)?),
-        };
+        let salts = salts.map(|s| {
+            s.iter()
+                .map(|s| {
+                    let salt = compiler
+                        .memory
+                        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+                    compiler.memory.write(
+                        compiler.instructions,
+                        salt.memory_addr,
+                        &[ValueSource::Immediate(*s)],
+                    );
+                    salt
+                })
+                .collect::<Vec<_>>()
+        });
 
-        let hash = hash(&mut compiler, this_symbol.unwrap())?;
+        let hash = match t {
+            Type::Struct(struct_) => {
+                let value = compiler
+                    .memory
+                    .allocate_symbol(Type::Struct(struct_.clone()));
+                read_struct_from_advice_tape(&mut compiler, &value, &struct_, None)?;
+
+                hash_record_with_salts(&mut compiler, &value, salts.as_ref().unwrap())?
+            }
+            t => {
+                let value = read_advice_generic(&mut compiler, &t)?;
+
+                let hash = hash(&mut compiler, value)?;
+                if let Some(salts) = salts {
+                    add_salt_to_hash(&mut compiler, &hash, &salts[0])?
+                } else {
+                    hash
+                }
+            }
+        };
 
         comment!(compiler, "Reading result from memory");
         compiler.memory.read(
