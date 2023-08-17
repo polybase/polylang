@@ -1,4 +1,5 @@
 use super::*;
+use test_case::test_case;
 
 fn run_splice(
     arr: serde_json::Value,
@@ -45,35 +46,55 @@ fn run_splice(
     Ok((arr, ret))
 }
 
-#[test]
-fn test_splice_basic() {
+#[test_case(
+    serde_json::json!([1, 2, 3, 4, 5]),
+    0,
+    2,
+    &[3., 4., 5.],
+    &[1., 2.]
+    ; "delete from start"
+)]
+#[test_case(
+    serde_json::json!([1, 2, 3, 4, 5]),
+    1,
+    2,
+    &[1., 4., 5.],
+    &[2., 3.]
+    ; "delete from middle"
+)]
+#[test_case(
+    serde_json::json!([1, 2, 3, 4, 5]),
+    0,
+    0,
+    &[1., 2., 3., 4., 5.],
+    &[]
+    ; "no delete"
+)]
+fn test_splice(
+    arr: serde_json::Value,
+    start: u32,
+    delete_count: u32,
+    expected_new_array: &[f32],
+    expected_returned: &[f32],
+) {
+    let (arr, ret) = run_splice(arr, start, delete_count).unwrap();
     assert_eq!(
-        run_splice(serde_json::json!([1, 2, 3, 4, 5]), 1, 2).unwrap(),
-        (
-            abi::Value::Array(vec![
-                abi::Value::Float32(1.),
-                abi::Value::Float32(4.),
-                abi::Value::Float32(5.),
-            ]),
-            abi::Value::Array(vec![abi::Value::Float32(2.), abi::Value::Float32(3.),]),
-        ),
+        arr,
+        abi::Value::Array(
+            expected_new_array
+                .into_iter()
+                .map(|n| abi::Value::Float32(*n))
+                .collect::<Vec<_>>()
+        )
     );
-}
-
-#[test]
-fn test_splice_no_deletion() {
     assert_eq!(
-        run_splice(serde_json::json!([1, 2, 3, 4, 5]), 1, 0).unwrap(),
-        (
-            abi::Value::Array(vec![
-                abi::Value::Float32(1.),
-                abi::Value::Float32(2.),
-                abi::Value::Float32(3.),
-                abi::Value::Float32(4.),
-                abi::Value::Float32(5.),
-            ]),
-            abi::Value::Array(vec![]),
-        ),
+        ret,
+        abi::Value::Array(
+            expected_returned
+                .into_iter()
+                .map(|n| abi::Value::Float32(*n))
+                .collect::<Vec<_>>()
+        )
     );
 }
 

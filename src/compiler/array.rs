@@ -659,37 +659,53 @@ pub(crate) fn splice(
 
     // Assert that start is less than length
     compiler.instructions.extend([
-        Instruction::MemLoad(Some(start.memory_addr)),
         Instruction::MemLoad(Some(array::length(arr).memory_addr)),
-        Instruction::U32CheckedLT,
+        // [length]
+        Instruction::MemLoad(Some(start.memory_addr)),
+        // [start, length]
+        Instruction::Dup(Some(1)),
+        // [length, start, length]
+        Instruction::Dup(Some(1)),
+        // [start, length, start, length]
+        Instruction::U32CheckedGTE,
+        // [length >= start, start, length]
         Instruction::Assert,
+        // [start, length]
     ]);
 
     // If delete_count is higher than length - start, set it to length - start
-    compiler.instructions.extend([Instruction::If {
-        condition: vec![
-            Instruction::MemLoad(Some(delete_count.memory_addr)),
-            Instruction::MemLoad(Some(array::length(arr).memory_addr)),
-            // [length, delete_count]
-            Instruction::MemLoad(Some(start.memory_addr)),
-            // [start, length, delete_count]
-            Instruction::U32CheckedSub,
-            // [length - start, delete_count]
-            Instruction::U32CheckedGTE,
-            // [delete_count >= length - start]
-        ],
-        then: vec![
-            Instruction::MemLoad(Some(array::length(arr).memory_addr)),
-            // [length]
-            Instruction::MemLoad(Some(start.memory_addr)),
-            // [start, length]
-            Instruction::U32CheckedSub,
-            // [length - start]
-            Instruction::MemStore(Some(delete_count.memory_addr)),
-            // []
-        ],
-        else_: vec![],
-    }]);
+    compiler.instructions.extend([
+        Instruction::If {
+            condition: vec![
+                // [start, length]
+                Instruction::Dup(Some(1)),
+                Instruction::Dup(Some(1)),
+                // [start, length, start, length]
+                Instruction::U32CheckedSub,
+                // [length - start, start, length]
+                Instruction::MemLoad(Some(delete_count.memory_addr)),
+                // [delete_count, length - start, start, length]
+                Instruction::U32CheckedLT,
+                // [length - start < delete_count, start, length]
+            ],
+            then: vec![
+                // [start, length]
+                Instruction::Dup(Some(1)),
+                Instruction::Dup(Some(1)),
+                // [start, length, start, length]
+                Instruction::U32CheckedSub,
+                // [length - start, start, length]
+                Instruction::MemStore(Some(delete_count.memory_addr)),
+                // [start, length]
+            ],
+            else_: vec![],
+        },
+        // [start, length]
+        Instruction::Drop,
+        // [length]
+        Instruction::Drop,
+        // []
+    ]);
 
     let array_of_deletions = dynamic_new(compiler, element_type.clone(), delete_count.clone())?;
 
