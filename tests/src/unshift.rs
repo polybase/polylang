@@ -1,4 +1,5 @@
 use super::*;
+use test_case::test_case;
 
 fn run_unshift(
     arr: serde_json::Value,
@@ -52,50 +53,42 @@ fn run_unshift(
     Ok((arr, len))
 }
 
-#[test]
-fn unshift_single_element() {
+#[test_case(
+    serde_json::json!([2, 3, 4]),
+    vec![serde_json::json!(1)],
+    &[1., 2., 3., 4.],
+    4
+    ; "unshift single element"
+)]
+#[test_case(
+    serde_json::json!([3, 4, 5]),
+    vec![serde_json::json!(1), serde_json::json!(2)],
+    &[1., 2., 3., 4., 5.],
+    5
+    ; "unshift two elements"
+)]
+#[test_case(
+    serde_json::json!([]),
+    vec![serde_json::json!(1)],
+    &[1.],
+    1
+    ; "unshift empty array"
+)]
+fn test_unshift(
+    arr: serde_json::Value,
+    elems: Vec<serde_json::Value>,
+    expected_arr: &[f32],
+    expected_len: u32,
+) {
+    let (arr, len) = run_unshift(arr, elems).unwrap();
     assert_eq!(
-        run_unshift(serde_json::json!([2, 3, 4]), vec![serde_json::json!(1)]).unwrap(),
-        (
-            abi::Value::Array(vec![
-                abi::Value::Float32(1.),
-                abi::Value::Float32(2.),
-                abi::Value::Float32(3.),
-                abi::Value::Float32(4.),
-            ]),
-            abi::Value::UInt32(4),
-        ),
-    );
-}
-
-#[test]
-fn unshift_two_elements() {
-    assert_eq!(
-        run_unshift(
-            serde_json::json!([3, 4, 5]),
-            vec![serde_json::json!(1), serde_json::json!(2)]
+        arr,
+        abi::Value::Array(
+            expected_arr
+                .into_iter()
+                .map(|n| abi::Value::Float32(*n))
+                .collect::<Vec<_>>()
         )
-        .unwrap(),
-        (
-            abi::Value::Array(vec![
-                abi::Value::Float32(1.),
-                abi::Value::Float32(2.),
-                abi::Value::Float32(3.),
-                abi::Value::Float32(4.),
-                abi::Value::Float32(5.),
-            ]),
-            abi::Value::UInt32(5),
-        ),
     );
-}
-
-#[test]
-fn unshift_empty_array() {
-    assert_eq!(
-        run_unshift(serde_json::json!([]), vec![serde_json::json!(1)]).unwrap(),
-        (
-            abi::Value::Array(vec![abi::Value::Float32(1.)]),
-            abi::Value::UInt32(1),
-        ),
-    );
+    assert_eq!(len, abi::Value::UInt32(expected_len));
 }
