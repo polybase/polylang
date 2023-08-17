@@ -574,3 +574,30 @@ fn copy(
 
     Ok(())
 }
+
+pub(crate) fn includes(compiler: &mut Compiler, arr: &Symbol, el: &Symbol) -> Result<Symbol> {
+    ensure_eq_type!(arr, Type::Array(_));
+    let element_type = element_type(&arr.type_);
+    ensure_eq_type!(el, @element_type);
+
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+
+    let index = find_index(compiler, arr, el)?;
+    compiler.memory.read(
+        compiler.instructions,
+        index.memory_addr,
+        index.type_.miden_width(),
+    );
+    // [index]
+    compiler.instructions.extend([
+        Instruction::Push(-1i32 as u32),
+        // [-1, index]
+        Instruction::U32CheckedNeq,
+        // [index != -1]
+        Instruction::MemStore(Some(result.memory_addr)),
+    ]);
+
+    Ok(result)
+}
