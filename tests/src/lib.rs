@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 mod push;
+mod slice;
 mod splice;
 
 use expect_test::expect;
