@@ -830,6 +830,21 @@ lazy_static::lazy_static! {
         ));
 
         builtins.push((
+            "includes".to_string(),
+            Some(TypeConstraint::Array),
+            Function::Builtin(Box::new(&|compiler, _, args| {
+                ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
+
+                let old_root_scope = compiler.root_scope;
+                compiler.root_scope = &BUILTINS_SCOPE;
+                let result = array::includes(compiler, &args[0], &args[1])?;
+                compiler.root_scope = old_root_scope;
+
+                Ok(result)
+            })),
+        ));
+
+        builtins.push((
             "push".to_string(),
             Some(TypeConstraint::Array),
             Function::Builtin(Box::new(&|compiler, scope, args| {
@@ -857,6 +872,19 @@ lazy_static::lazy_static! {
                 let arr = &args[0];
                 let args = &args[1..];
                 array::unshift(compiler, arr, args)
+            })),
+        ));
+
+        builtins.push((
+            "slice".to_string(),
+            Some(TypeConstraint::Array),
+            Function::Builtin(Box::new(&|compiler, _scope, args| {
+                ensure!(args.len() <= 3, ArgumentsCountSnafu { found: args.len(), expected: 3usize });
+                let arr = &args[0];
+                let start = args.get(1);
+                let end = args.get(2);
+
+                array::slice(compiler, arr, start.cloned(), end)
             })),
         ));
 
@@ -905,6 +933,12 @@ fn struct_field(
                 type_: Type::String,
                 memory_addr: struct_symbol.memory_addr,
             });
+        }
+        Type::String if field_name == "length" => {
+            return Ok(string::length(struct_symbol));
+        }
+        Type::Array(_) if field_name == "length" => {
+            return Ok(array::length(struct_symbol));
         }
         t => {
             return Err(ErrorKind::TypeMismatch {

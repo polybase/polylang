@@ -618,52 +618,31 @@ fn copy(
     Ok(())
 }
 
-fn copy_from_element(
-    compiler: &mut Compiler,
-    source_element: &Symbol,
-    target_data_ptr: &Symbol,
-    target_capacity: &Symbol,
-    element_width: u32,
-    index: u32,
-) -> Result<()> {
-    // Ensure that the target array has enough capacity to hold the source element
-    compiler.instructions.extend([
-        Instruction::MemLoad(Some(target_capacity.memory_addr)),
-        // [capacity]
-        Instruction::Push(index + 1),
-        // [index + 1, capacity]
-        Instruction::U32CheckedGTE,
-        // [capacity >= index + 1]
-        Instruction::Assert,
-    ]);
+pub(crate) fn includes(compiler: &mut Compiler, arr: &Symbol, el: &Symbol) -> Result<Symbol> {
+    ensure_eq_type!(arr, Type::Array(_));
+    let element_type = element_type(&arr.type_);
+    ensure_eq_type!(el, @element_type);
 
-    // Copy the source element to the target array at the specified position
+    let result = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
+
+    let index = find_index(compiler, arr, el)?;
     compiler.memory.read(
         compiler.instructions,
-        target_data_ptr.memory_addr,
-        target_data_ptr.type_.miden_width(),
+        index.memory_addr,
+        index.type_.miden_width(),
     );
-    // [target_data_ptr]
-    for i in 0..element_width {
-        let offset = index * element_width + i;
-        compiler.instructions.extend([
-            // [target_data_ptr]
-            Instruction::MemLoad(Some(source_element.memory_addr + i)),
-            // [value, target_data_ptr]
-            Instruction::Dup(Some(1)),
-            // [target_data_ptr, value, target_data_ptr]
-            Instruction::Push(offset),
-            // [offset, target_data_ptr, value, target_data_ptr]
-            Instruction::U32CheckedAdd,
-            // [ptr = target_data_ptr + offset, value, target_data_ptr]
-            Instruction::MemStore(None),
-            // [target_data_ptr]
-        ]);
-    }
-    compiler.instructions.push(Instruction::Drop);
-    // []
+    // [index]
+    compiler.instructions.extend([
+        Instruction::Push(-1i32 as u32),
+        // [-1, index]
+        Instruction::U32CheckedNeq,
+        // [index != -1]
+        Instruction::MemStore(Some(result.memory_addr)),
+    ]);
 
-    Ok(())
+    Ok(result)
 }
 
 pub(crate) fn splice(
@@ -680,37 +659,53 @@ pub(crate) fn splice(
 
     // Assert that start is less than length
     compiler.instructions.extend([
-        Instruction::MemLoad(Some(start.memory_addr)),
         Instruction::MemLoad(Some(array::length(arr).memory_addr)),
-        Instruction::U32CheckedLT,
+        // [length]
+        Instruction::MemLoad(Some(start.memory_addr)),
+        // [start, length]
+        Instruction::Dup(Some(1)),
+        // [length, start, length]
+        Instruction::Dup(Some(1)),
+        // [start, length, start, length]
+        Instruction::U32CheckedGTE,
+        // [length >= start, start, length]
         Instruction::Assert,
+        // [start, length]
     ]);
 
     // If delete_count is higher than length - start, set it to length - start
-    compiler.instructions.extend([Instruction::If {
-        condition: vec![
-            Instruction::MemLoad(Some(delete_count.memory_addr)),
-            Instruction::MemLoad(Some(array::length(arr).memory_addr)),
-            // [length, delete_count]
-            Instruction::MemLoad(Some(start.memory_addr)),
-            // [start, length, delete_count]
-            Instruction::U32CheckedSub,
-            // [length - start, delete_count]
-            Instruction::U32CheckedGTE,
-            // [delete_count >= length - start]
-        ],
-        then: vec![
-            Instruction::MemLoad(Some(array::length(arr).memory_addr)),
-            // [length]
-            Instruction::MemLoad(Some(start.memory_addr)),
-            // [start, length]
-            Instruction::U32CheckedSub,
-            // [length - start]
-            Instruction::MemStore(Some(delete_count.memory_addr)),
-            // []
-        ],
-        else_: vec![],
-    }]);
+    compiler.instructions.extend([
+        Instruction::If {
+            condition: vec![
+                // [start, length]
+                Instruction::Dup(Some(1)),
+                Instruction::Dup(Some(1)),
+                // [start, length, start, length]
+                Instruction::U32CheckedSub,
+                // [length - start, start, length]
+                Instruction::MemLoad(Some(delete_count.memory_addr)),
+                // [delete_count, length - start, start, length]
+                Instruction::U32CheckedLT,
+                // [length - start < delete_count, start, length]
+            ],
+            then: vec![
+                // [start, length]
+                Instruction::Dup(Some(1)),
+                Instruction::Dup(Some(1)),
+                // [start, length, start, length]
+                Instruction::U32CheckedSub,
+                // [length - start, start, length]
+                Instruction::MemStore(Some(delete_count.memory_addr)),
+                // [start, length]
+            ],
+            else_: vec![],
+        },
+        // [start, length]
+        Instruction::Drop,
+        // [length]
+        Instruction::Drop,
+        // []
+    ]);
 
     let array_of_deletions = dynamic_new(compiler, element_type.clone(), delete_count.clone())?;
 
@@ -907,6 +902,156 @@ pub(crate) fn splice(
     );
 
     return Ok(array_of_deletions);
+}
+
+pub(crate) fn slice(
+    compiler: &mut Compiler,
+    arr: &Symbol,
+    start: Option<Symbol>,
+    end: Option<&Symbol>,
+) -> Result<Symbol> {
+    ensure_eq_type!(arr, Type::Array(_));
+    let start = start.unwrap_or(uint32::new(compiler, 0));
+    ensure_eq_type!(start, Type::PrimitiveType(PrimitiveType::UInt32));
+    if let Some(end) = end {
+        ensure_eq_type!(end, Type::PrimitiveType(PrimitiveType::UInt32));
+    }
+
+    let element_type = element_type(&arr.type_);
+
+    compiler.instructions.extend([
+        Instruction::MemLoad(Some(start.memory_addr)),
+        // [start]
+        Instruction::MemLoad(Some(array::length(arr).memory_addr)),
+        // [length, start]
+        Instruction::U32CheckedMin,
+        // [actual_start = min(start, length)]
+    ]);
+
+    match end {
+        Some(end) => {
+            compiler.instructions.extend([
+                Instruction::MemLoad(Some(end.memory_addr)),
+                // [end]
+                Instruction::MemLoad(Some(array::length(arr).memory_addr)),
+                // [length, end]
+                Instruction::U32CheckedMin,
+                // [actual_end = min(end, length)]
+            ]);
+        }
+        None => {
+            compiler
+                .memory
+                .read(compiler.instructions, array::length(arr).memory_addr, 1);
+            // [actual_end = length]
+        }
+    }
+
+    compiler.instructions.extend([
+        // [actual_end, actual_start]
+        Instruction::Dup(Some(1)),
+        // [actual_start, actual_end, actual_start]
+        Instruction::U32CheckedSub,
+        // [new_len = end - start, actual_start]
+    ]);
+
+    let new_len = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+    compiler.memory.write(
+        compiler.instructions,
+        new_len.memory_addr,
+        &[ValueSource::Stack],
+    );
+    // [actual_start]
+
+    let new_arr = dynamic_new(compiler, element_type.clone(), new_len.clone())?;
+
+    let source_data_ptr = {
+        let ptr = compiler
+            .memory
+            .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+        compiler
+            .memory
+            .read(compiler.instructions, data_ptr(arr).memory_addr, 1);
+        // [data_ptr, actual_start]
+        compiler.instructions.push(Instruction::U32CheckedAdd);
+        // [actual_start + data_ptr]
+        compiler.memory.write(
+            compiler.instructions,
+            ptr.memory_addr,
+            &[ValueSource::Stack],
+        );
+        // []
+
+        ptr
+    };
+
+    copy(
+        compiler,
+        &source_data_ptr,
+        &new_len,
+        &data_ptr(&new_arr),
+        &capacity(&new_arr),
+        element_type.miden_width(),
+    )?;
+
+    compiler.memory.write(
+        compiler.instructions,
+        length(&new_arr).memory_addr,
+        &[ValueSource::Memory(new_len.memory_addr)],
+    );
+
+    Ok(new_arr)
+}
+
+fn copy_from_element(
+    compiler: &mut Compiler,
+    source_element: &Symbol,
+    target_data_ptr: &Symbol,
+    target_capacity: &Symbol,
+    element_width: u32,
+    index: u32,
+) -> Result<()> {
+    // Ensure that the target array has enough capacity to hold the source element
+    compiler.instructions.extend([
+        Instruction::MemLoad(Some(target_capacity.memory_addr)),
+        // [capacity]
+        Instruction::Push(index + 1),
+        // [index + 1, capacity]
+        Instruction::U32CheckedGTE,
+        // [capacity >= index + 1]
+        Instruction::Assert,
+    ]);
+
+    // Copy the source element to the target array at the specified position
+    compiler.memory.read(
+        compiler.instructions,
+        target_data_ptr.memory_addr,
+        target_data_ptr.type_.miden_width(),
+    );
+    // [target_data_ptr]
+    for i in 0..element_width {
+        let offset = index * element_width + i;
+        compiler.instructions.extend([
+            // [target_data_ptr]
+            Instruction::MemLoad(Some(source_element.memory_addr + i)),
+            // [value, target_data_ptr]
+            Instruction::Dup(Some(1)),
+            // [target_data_ptr, value, target_data_ptr]
+            Instruction::Push(offset),
+            // [offset, target_data_ptr, value, target_data_ptr]
+            Instruction::U32CheckedAdd,
+            // [ptr = target_data_ptr + offset, value, target_data_ptr]
+            Instruction::MemStore(None),
+            // [target_data_ptr]
+        ]);
+    }
+    compiler.instructions.push(Instruction::Drop);
+    // []
+
+    Ok(())
 }
 
 pub(crate) fn unshift(

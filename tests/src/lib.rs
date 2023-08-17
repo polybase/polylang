@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 mod push;
+mod slice;
 mod splice;
 mod unshift;
 
