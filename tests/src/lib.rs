@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 mod push;
+mod splice;
 
 use expect_test::expect;
 use serde::de::Deserialize;

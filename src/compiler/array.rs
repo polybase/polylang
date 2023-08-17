@@ -40,6 +40,49 @@ pub(crate) fn new(compiler: &mut Compiler, len: u32, element_type: Type) -> (Sym
     (symbol, allocated_ptr)
 }
 
+fn dynamic_new(compiler: &mut Compiler, element_type: Type, needed_len: Symbol) -> Result<Symbol> {
+    let array = compiler
+        .memory
+        .allocate_symbol(Type::Array(Box::new(element_type)));
+
+    let cap = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+    compiler
+        .memory
+        .read(compiler.instructions, cap.memory_addr, 1);
+    // [needed_len]
+    compiler.instructions.extend([
+        Instruction::Push(2),
+        Instruction::U32CheckedMul,
+        // [needed_len * 2]
+        Instruction::Push(16),
+        Instruction::U32CheckedAdd,
+        // [cap = needed_len * 2 + 16]
+    ]);
+    compiler.memory.write(
+        compiler.instructions,
+        cap.memory_addr,
+        &[ValueSource::Stack],
+    );
+    // []
+
+    let array_data_ptr = dynamic_alloc(compiler, &[needed_len])?;
+
+    compiler.memory.write(
+        compiler.instructions,
+        capacity(&array).memory_addr,
+        &[ValueSource::Memory(cap.memory_addr)],
+    );
+    compiler.memory.write(
+        compiler.instructions,
+        data_ptr(&array).memory_addr,
+        &[ValueSource::Memory(array_data_ptr.memory_addr)],
+    );
+
+    Ok(array)
+}
+
 pub(crate) fn element_type(type_: &Type) -> &Type {
     match type_ {
         Type::Array(inner_type) => inner_type,
@@ -600,4 +643,263 @@ pub(crate) fn includes(compiler: &mut Compiler, arr: &Symbol, el: &Symbol) -> Re
     ]);
 
     Ok(result)
+}
+
+pub(crate) fn splice(
+    compiler: &mut Compiler,
+    arr: &Symbol,
+    start: &Symbol,
+    delete_count: &Symbol,
+) -> Result<Symbol> {
+    ensure_eq_type!(arr, Type::Array(_));
+    ensure_eq_type!(start, Type::PrimitiveType(PrimitiveType::UInt32));
+    ensure_eq_type!(delete_count, Type::PrimitiveType(PrimitiveType::UInt32));
+
+    let element_type = element_type(&arr.type_);
+
+    // Assert that start is less than length
+    compiler.instructions.extend([
+        Instruction::MemLoad(Some(array::length(arr).memory_addr)),
+        // [length]
+        Instruction::MemLoad(Some(start.memory_addr)),
+        // [start, length]
+        Instruction::Dup(Some(1)),
+        // [length, start, length]
+        Instruction::Dup(Some(1)),
+        // [start, length, start, length]
+        Instruction::U32CheckedGTE,
+        // [length >= start, start, length]
+        Instruction::Assert,
+        // [start, length]
+    ]);
+
+    // If delete_count is higher than length - start, set it to length - start
+    compiler.instructions.extend([
+        Instruction::If {
+            condition: vec![
+                // [start, length]
+                Instruction::Dup(Some(1)),
+                Instruction::Dup(Some(1)),
+                // [start, length, start, length]
+                Instruction::U32CheckedSub,
+                // [length - start, start, length]
+                Instruction::MemLoad(Some(delete_count.memory_addr)),
+                // [delete_count, length - start, start, length]
+                Instruction::U32CheckedLT,
+                // [length - start < delete_count, start, length]
+            ],
+            then: vec![
+                // [start, length]
+                Instruction::Dup(Some(1)),
+                Instruction::Dup(Some(1)),
+                // [start, length, start, length]
+                Instruction::U32CheckedSub,
+                // [length - start, start, length]
+                Instruction::MemStore(Some(delete_count.memory_addr)),
+                // [start, length]
+            ],
+            else_: vec![],
+        },
+        // [start, length]
+        Instruction::Drop,
+        // [length]
+        Instruction::Drop,
+        // []
+    ]);
+
+    let array_of_deletions = dynamic_new(compiler, element_type.clone(), delete_count.clone())?;
+
+    let new_arr_len = {
+        let new_arr_len = compiler
+            .memory
+            .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+        // length(arr) - delete_count
+        compiler
+            .memory
+            .read(compiler.instructions, length(arr).memory_addr, 1);
+        // [length(arr)]
+        compiler
+            .memory
+            .read(compiler.instructions, delete_count.memory_addr, 1);
+        // [delete_count, length(arr)]
+        compiler.instructions.push(Instruction::U32CheckedSub);
+        // [length(arr) - delete_count]
+        compiler.memory.write(
+            compiler.instructions,
+            new_arr_len.memory_addr,
+            &[ValueSource::Stack],
+        );
+
+        new_arr_len
+    };
+    let new_arr = dynamic_new(compiler, element_type.clone(), new_arr_len.clone())?;
+
+    let start_data_ptr = {
+        let ptr = compiler
+            .memory
+            .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+        compiler
+            .memory
+            .read(compiler.instructions, data_ptr(arr).memory_addr, 1);
+        // [data_ptr]
+        compiler.memory.read(
+            compiler.instructions,
+            start.memory_addr,
+            start.type_.miden_width(),
+        );
+        // [start]
+        compiler.instructions.push(Instruction::U32CheckedAdd);
+        // [data_ptr + start]
+        compiler.memory.write(
+            compiler.instructions,
+            ptr.memory_addr,
+            &[ValueSource::Stack],
+        );
+        // []
+
+        ptr
+    };
+    copy(
+        compiler,
+        &start_data_ptr,
+        delete_count,
+        &data_ptr(&array_of_deletions),
+        &capacity(&array_of_deletions),
+        element_type.miden_width(),
+    )?;
+    compiler.memory.write(
+        compiler.instructions,
+        length(&array_of_deletions).memory_addr,
+        &[ValueSource::Memory(delete_count.memory_addr)],
+    );
+
+    copy(
+        compiler,
+        &data_ptr(arr),
+        start,
+        &data_ptr(&new_arr),
+        &capacity(&new_arr),
+        element_type.miden_width(),
+    )?;
+
+    let second_source_data_ptr = {
+        let ptr = compiler
+            .memory
+            .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+        compiler
+            .memory
+            .read(compiler.instructions, data_ptr(arr).memory_addr, 1);
+        // [data_ptr]
+        compiler.memory.read(
+            compiler.instructions,
+            start.memory_addr,
+            start.type_.miden_width(),
+        );
+        // [start]
+        compiler.instructions.push(Instruction::U32CheckedAdd);
+        // [data_ptr + start]
+        compiler.memory.read(
+            compiler.instructions,
+            delete_count.memory_addr,
+            delete_count.type_.miden_width(),
+        );
+        // [delete_count, data_ptr + start]
+        compiler.instructions.push(Instruction::U32CheckedAdd);
+        // [data_ptr + start + delete_count]
+        compiler.memory.write(
+            compiler.instructions,
+            ptr.memory_addr,
+            &[ValueSource::Stack],
+        );
+        // []
+
+        ptr
+    };
+
+    let second_target_data_ptr = {
+        let ptr = compiler
+            .memory
+            .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+        compiler
+            .memory
+            .read(compiler.instructions, data_ptr(&new_arr).memory_addr, 1);
+        // [data_ptr]
+        compiler.memory.read(
+            compiler.instructions,
+            start.memory_addr,
+            start.type_.miden_width(),
+        );
+        // [start]
+        compiler.instructions.push(Instruction::U32CheckedAdd);
+        // [data_ptr + start]
+        compiler.memory.write(
+            compiler.instructions,
+            ptr.memory_addr,
+            &[ValueSource::Stack],
+        );
+        // []
+
+        ptr
+    };
+
+    let second_length = {
+        let len = compiler
+            .memory
+            .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+        compiler.memory.read(
+            compiler.instructions,
+            length(&arr).memory_addr,
+            length(&arr).type_.miden_width(),
+        );
+        // [length]
+        compiler.memory.read(
+            compiler.instructions,
+            delete_count.memory_addr,
+            delete_count.type_.miden_width(),
+        );
+        // [delete_count, length]
+        compiler.instructions.push(Instruction::U32CheckedSub);
+        // [length - delete_count]
+        compiler.memory.write(
+            compiler.instructions,
+            len.memory_addr,
+            &[ValueSource::Stack],
+        );
+        // []
+
+        len
+    };
+
+    copy(
+        compiler,
+        &second_source_data_ptr,
+        &second_length,
+        &second_target_data_ptr,
+        &capacity(&new_arr),
+        element_type.miden_width(),
+    )?;
+
+    compiler.memory.write(
+        compiler.instructions,
+        length(&new_arr).memory_addr,
+        &vec![ValueSource::Memory(new_arr_len.memory_addr)],
+    );
+
+    compiler.memory.read(
+        compiler.instructions,
+        new_arr.memory_addr,
+        new_arr.type_.miden_width(),
+    );
+    compiler.memory.write(
+        compiler.instructions,
+        arr.memory_addr,
+        &vec![ValueSource::Stack; arr.type_.miden_width() as usize],
+    );
+
+    return Ok(array_of_deletions);
 }
