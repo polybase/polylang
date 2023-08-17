@@ -876,73 +876,51 @@ pub(crate) fn slice(
 
     let element_type = element_type(&arr.type_);
 
-    let actual_start = {
-        let actual_start = compiler
-            .memory
-            .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+    compiler.instructions.extend([
+        Instruction::MemLoad(Some(start.memory_addr)),
+        // [start]
+        Instruction::MemLoad(Some(array::length(arr).memory_addr)),
+        // [length, start]
+        Instruction::U32CheckedMin,
+        // [actual_start = min(start, length)]
+    ]);
 
-        compiler.instructions.extend([
-            Instruction::MemLoad(Some(start.memory_addr)),
-            // [start]
-            Instruction::MemLoad(Some(array::length(arr).memory_addr)),
-            // [length, start]
-            Instruction::U32CheckedMin,
-            // [min(start, length)]
-            Instruction::MemStore(Some(actual_start.memory_addr)),
-            // []
-        ]);
-
-        actual_start
-    };
-
-    let actual_end = {
-        let actual_end = compiler
-            .memory
-            .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
-
-        match end {
-            Some(end) => {
-                compiler.instructions.extend([
-                    Instruction::MemLoad(Some(end.memory_addr)),
-                    // [end]
-                    Instruction::MemLoad(Some(array::length(arr).memory_addr)),
-                    // [length, end]
-                    Instruction::U32CheckedMin,
-                    // [min(end, length)]
-                    Instruction::MemStore(Some(actual_end.memory_addr)),
-                    // []
-                ]);
-            }
-            None => {
-                compiler.memory.write(
-                    compiler.instructions,
-                    actual_end.memory_addr,
-                    &[ValueSource::Memory(array::length(arr).memory_addr)],
-                );
-            }
+    match end {
+        Some(end) => {
+            compiler.instructions.extend([
+                Instruction::MemLoad(Some(end.memory_addr)),
+                // [end]
+                Instruction::MemLoad(Some(array::length(arr).memory_addr)),
+                // [length, end]
+                Instruction::U32CheckedMin,
+                // [actual_end = min(end, length)]
+            ]);
         }
+        None => {
+            compiler
+                .memory
+                .read(compiler.instructions, array::length(arr).memory_addr, 1);
+            // [actual_end = length]
+        }
+    }
 
-        actual_end
-    };
+    compiler.instructions.extend([
+        // [actual_end, actual_start]
+        Instruction::Dup(Some(1)),
+        // [actual_start, actual_end, actual_start]
+        Instruction::U32CheckedSub,
+        // [new_len = end - start, actual_start]
+    ]);
 
-    let new_len = {
-        let new_len = compiler
-            .memory
-            .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
-
-        compiler.instructions.extend([
-            Instruction::MemLoad(Some(actual_end.memory_addr)),
-            // [end]
-            Instruction::MemLoad(Some(actual_start.memory_addr)),
-            // [start, end]
-            Instruction::U32CheckedSub,
-            // [end - start]
-            Instruction::MemStore(Some(new_len.memory_addr)),
-            // []
-        ]);
-
-        new_len
-    };
+    let new_len = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+    compiler.memory.write(
+        compiler.instructions,
+        new_len.memory_addr,
+        &[ValueSource::Stack],
+    );
+    // [actual_start]
 
     let new_arr = dynamic_new(compiler, element_type.clone(), new_len.clone())?;
 
@@ -954,15 +932,9 @@ pub(crate) fn slice(
         compiler
             .memory
             .read(compiler.instructions, data_ptr(arr).memory_addr, 1);
-        // [data_ptr]
-        compiler.memory.read(
-            compiler.instructions,
-            actual_start.memory_addr,
-            actual_start.type_.miden_width(),
-        );
-        // [start, data_ptr]
+        // [data_ptr, actual_start]
         compiler.instructions.push(Instruction::U32CheckedAdd);
-        // [data_ptr + start]
+        // [actual_start + data_ptr]
         compiler.memory.write(
             compiler.instructions,
             ptr.memory_addr,
