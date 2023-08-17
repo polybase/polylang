@@ -1,4 +1,5 @@
 use super::*;
+use test_case::test_case;
 
 fn run_slice(
     arr: serde_json::Value,
@@ -76,42 +77,36 @@ fn run_slice(
     }
 }
 
-#[test]
-fn slice_with_both_args() {
-    // [1, 2, 3, 4, 5].slice(1, 3) = [2, 3]
-    let sliced = run_slice(serde_json::json!([1, 2, 3, 4, 5]), Some(1), Some(3)).unwrap();
+#[test_case(
+    serde_json::json!([1, 2, 3, 4, 5]),
+    Some(1),
+    Some(3),
+    &[2., 3.]
+    ; "slice with both args"
+)]
+#[test_case(
+    serde_json::json!([1, 2, 3, 4, 5]),
+    Some(2),
+    None,
+    &[3., 4., 5.]
+    ; "slice with only start"
+)]
+#[test_case(
+    serde_json::json!([1, 2, 3, 4, 5]),
+    None,
+    None,
+    &[1., 2., 3., 4., 5.]
+    ; "slice with no args"
+)]
+fn test_slice(arr: serde_json::Value, start: Option<u32>, end: Option<u32>, expected: &[f32]) {
+    let sliced = run_slice(arr, start, end).unwrap();
     assert_eq!(
         sliced,
-        abi::Value::Array(vec![abi::Value::Float32(2.), abi::Value::Float32(3.),])
-    );
-}
-
-#[test]
-fn slice_with_only_start() {
-    // [1, 2, 3, 4, 5].slice(2) = [3, 4, 5]
-    let sliced = run_slice(serde_json::json!([1, 2, 3, 4, 5]), Some(2), None).unwrap();
-    assert_eq!(
-        sliced,
-        abi::Value::Array(vec![
-            abi::Value::Float32(3.),
-            abi::Value::Float32(4.),
-            abi::Value::Float32(5.),
-        ])
-    );
-}
-
-#[test]
-fn slice_with_no_args() {
-    // [1, 2, 3, 4, 5].slice() = [1, 2, 3, 4, 5]
-    let sliced = run_slice(serde_json::json!([1, 2, 3, 4, 5]), None, None).unwrap();
-    assert_eq!(
-        sliced,
-        abi::Value::Array(vec![
-            abi::Value::Float32(1.),
-            abi::Value::Float32(2.),
-            abi::Value::Float32(3.),
-            abi::Value::Float32(4.),
-            abi::Value::Float32(5.),
-        ])
+        abi::Value::Array(
+            expected
+                .into_iter()
+                .map(|n| abi::Value::Float32(*n))
+                .collect::<Vec<_>>()
+        )
     );
 }
