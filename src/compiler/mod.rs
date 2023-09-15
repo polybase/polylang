@@ -868,11 +868,11 @@ lazy_static::lazy_static! {
         builtins.push((
             "unshift".to_string(),
             Some(TypeConstraint::Array),
-            Function::Builtin(Box::new(&|compiler, _, args| {
+            Function::Builtin(|compiler, _, args| {
                 let arr = &args[0];
                 let args = &args[1..];
                 array::unshift(compiler, arr, args)
-            })),
+            }),
         ));
 
         builtins.push((
