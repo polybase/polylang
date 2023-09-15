@@ -354,13 +354,24 @@ mod tests {
     }
 
     #[test]
-    fn test_string() {
-        let string = polylang_parser::parse_expression("'hello world'");
+    fn test_string_single() {
+        let string = polylang_parser::parse_expression("'hello\" world'");
 
         assert!(string.is_ok());
         assert_eq!(
             *string.unwrap(),
-            ast::ExpressionKind::Primitive(ast::Primitive::String("hello world".to_string()))
+            ast::ExpressionKind::Primitive(ast::Primitive::String("hello\" world".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_string_double() {
+        let string = polylang_parser::parse_expression("\"hello' world\"");
+
+        assert!(string.is_ok());
+        assert_eq!(
+            *string.unwrap(),
+            ast::ExpressionKind::Primitive(ast::Primitive::String("hello' world".to_string()))
         );
     }
 
@@ -1035,6 +1046,114 @@ function x() {
                 ])
                 .into(),
             ])
+        );
+    }
+
+    #[test]
+    fn test_expr_object_empty() {
+        let code = "{}";
+        let expr = polylang_parser::parse_expression(code).unwrap();
+        assert_eq!(
+            *expr,
+            ast::ExpressionKind::Object(ast::Object { fields: vec![] })
+        );
+    }
+
+    #[test]
+    fn test_object() {
+        let code = r#"
+            collection Test {
+                field: { a?: number; };
+
+                constructor () {
+                    self.field = {};
+                }
+            }
+        "#;
+
+        let mut program = None;
+        let (program, _) = parse(code, "", &mut program).unwrap();
+        assert_eq!(program.nodes.len(), 1);
+
+        let collection = match &program.nodes[0] {
+            ast::RootNode::Collection(c) => c,
+            _ => panic!("expected collection"),
+        };
+
+        assert_eq!(collection.items.len(), 2);
+
+        let field = match &collection.items[0] {
+            ast::CollectionItem::Field(f) => f,
+            _ => panic!("expected field"),
+        };
+
+        assert_eq!(field.name, "field");
+        assert_eq!(
+            field.type_,
+            ast::Type::Object(vec![ast::Field {
+                name: "a".to_string(),
+                type_: ast::Type::Number,
+                required: false,
+                decorators: vec![],
+            }])
+        );
+
+        let function = match &collection.items[1] {
+            ast::CollectionItem::Function(f) => f,
+            _ => panic!("expected function"),
+        };
+
+        assert_eq!(function.name, "constructor");
+        assert_eq!(function.parameters.len(), 0);
+
+        let (_l, r) = match &*function.statements[0] {
+            ast::StatementKind::Expression(e) => match &**e {
+                ast::ExpressionKind::Assign(l, r) => (l, r),
+                _ => panic!("expected assignment"),
+            },
+            _ => panic!("expected assignment"),
+        };
+
+        assert_eq!(
+            ***r,
+            ast::ExpressionKind::Object(ast::Object { fields: vec![] })
+        );
+    }
+
+    #[test]
+    fn test_public_key_array_decl() {
+        let code = r#"
+            collection PublicKeyArrayDemo {
+              publicKeys: PublicKey[];
+
+              constructor () {
+                this.publicKeys = [];
+                this.publicKeys.push(ctx.publicKey);
+                this.publicKeys.push(ctx.publicKey);
+              }
+            }
+        "#;
+
+        let mut program = None;
+        let (program, _) = parse(code, "", &mut program).unwrap();
+        assert_eq!(program.nodes.len(), 1);
+
+        let collection = match &program.nodes[0] {
+            ast::RootNode::Collection(c) => c,
+            _ => panic!("expected collection"),
+        };
+
+        assert_eq!(collection.items.len(), 2);
+
+        let field = match &collection.items[0] {
+            ast::CollectionItem::Field(f) => f,
+            _ => panic!("expected publicKeys"),
+        };
+
+        assert_eq!(field.name, "publicKeys");
+        assert_eq!(
+            field.type_,
+            ast::Type::Array(Box::new(ast::Type::PublicKey))
         );
     }
 
