@@ -115,21 +115,21 @@ lazy_static::lazy_static! {
         builtins.push((
             "hiddenNoopMarker".to_string(),
             None,
-            Function::Builtin(Box::new(&|_, _, _| {
+            Function::Builtin(|_, _, _| {
                 panic!("this function should never be called");
-            })),
+            }),
         ));
 
         builtins.push((
             "dynamicAlloc".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _scope, args| dynamic_alloc(compiler, args))),
+            Function::Builtin(|compiler, _scope, args| dynamic_alloc(compiler, args)),
         ));
 
         builtins.push((
             "writeMemory".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _, args| {
+            Function::Builtin(|compiler, _, args| {
                 ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
                 let address = args.get(0).unwrap();
                 let value = args.get(1).unwrap();
@@ -158,13 +158,13 @@ lazy_static::lazy_static! {
                     type_: Type::PrimitiveType(PrimitiveType::UInt32),
                     memory_addr: 0,
                 })
-            })),
+            }),
         ));
 
         builtins.push((
             "readAdvice".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _, _| {
+            Function::Builtin(|compiler, _, _| {
                 let symbol = compiler
                     .memory
                     .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
@@ -177,13 +177,13 @@ lazy_static::lazy_static! {
                 );
 
                 Ok(symbol)
-            })),
+            }),
         ));
 
         builtins.push((
             "unsafeToString".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _, args| {
+            Function::Builtin(|compiler, _, args| {
                 ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
                 let length = args.get(0).unwrap();
                 let address_ptr = args.get(1).unwrap();
@@ -218,13 +218,13 @@ lazy_static::lazy_static! {
                 );
 
                 Ok(s)
-            })),
+            }),
         ));
 
         builtins.push((
             "unsafeToBytes".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _, args| {
+            Function::Builtin(|compiler, _, args| {
                 ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
                 let length = args.get(0).unwrap();
                 let address_ptr = args.get(1).unwrap();
@@ -257,13 +257,13 @@ lazy_static::lazy_static! {
                 );
 
                 Ok(s)
-            })),
+            }),
         ));
 
         builtins.push((
             "unsafeToPublicKey".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _, args| {
+            Function::Builtin(|compiler, _, args| {
                 let [kty, crv, alg, use_, extra_ptr] = args else {
                     return ArgumentsCountSnafu { found: args.len(), expected: 5usize }.fail().map_err(Into::into);
                 };
@@ -336,10 +336,10 @@ lazy_static::lazy_static! {
                 );
 
                 Ok(pk)
-            })),
+            }),
         ));
 
-        builtins.push(("deref".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("deref".to_string(), None, Function::Builtin(|compiler, _, args| {
             ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
             let address = args.get(0).unwrap();
 
@@ -362,25 +362,25 @@ lazy_static::lazy_static! {
             );
 
             Ok(result)
-         }))));
+         })));
 
-        builtins.push(("addressOf".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("addressOf".to_string(), None, Function::Builtin(|compiler, _, args| {
            ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
            let a = args.get(0).unwrap();
            Ok(uint32::new(compiler, a.memory_addr))
-        }))));
+        })));
 
 
-        builtins.push(("hashString".to_string(), None, Function::Builtin(Box::new(&|compiler, scope, args| string::hash(compiler, scope, args)))));
+        builtins.push(("hashString".to_string(), None, Function::Builtin(|compiler, scope, args| string::hash(compiler, scope, args))));
 
         // bytes and collection reference have the same layout as strings,
         // so we can reuse the hashing function
-        builtins.push(("hashBytes".to_owned(), None, Function::Builtin(Box::new(&|compiler, scope, args| string::hash(compiler, scope, args)))));
-        builtins.push(("hashCollectionReference".to_owned(), None, Function::Builtin(Box::new(&|compiler, scope, args| string::hash(compiler, scope, args)))));
+        builtins.push(("hashBytes".to_owned(), None, Function::Builtin(|compiler, scope, args| string::hash(compiler, scope, args))));
+        builtins.push(("hashCollectionReference".to_owned(), None, Function::Builtin(|compiler, scope, args| string::hash(compiler, scope, args))));
 
-        builtins.push(("hashArray".to_owned(), None, Function::Builtin(Box::new(&array::hash))));
+        builtins.push(("hashArray".to_owned(), None, Function::Builtin(array::hash)));
 
-        builtins.push(("hashMap".to_owned(), None, Function::Builtin(Box::new(&|compiler, _scope, args| {
+        builtins.push(("hashMap".to_owned(), None, Function::Builtin(|compiler, _scope, args| {
            ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
            let map = args.get(0).unwrap();
 
@@ -415,28 +415,28 @@ lazy_static::lazy_static! {
            );
 
            Ok(result)
-       }))));
+       })));
 
-       builtins.push(("hashPublicKey".to_owned(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+       builtins.push(("hashPublicKey".to_owned(), None, Function::Builtin(|compiler, _, args| {
            publickey::hash(compiler, args)
-       }))));
+       })));
 
        builtins.push((
            "uintToFloat".to_string(),
            None,
-           Function::Builtin(Box::new(&|compiler, _scope, args| {
+           Function::Builtin(|compiler, _scope, args| {
                ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
                Ok(float32::from_uint32(compiler, &args[0]))
-           }))
+           })
        ));
 
        builtins.push((
            "intToFloat".to_string(),
            None,
-           Function::Builtin(Box::new(&|compiler, _scope, args| {
+           Function::Builtin(|compiler, _scope, args| {
                ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
                Ok(float32::from_int32(compiler, &args[0]))
-           }))
+           })
        ));
 
        Box::leak(Box::new(builtins))
@@ -447,7 +447,7 @@ lazy_static::lazy_static! {
         builtins.push((
             "assert".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _, args| {
+            Function::Builtin(|compiler, _, args| {
                 ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
                 let condition = &args[0];
                 let message = &args[1];
@@ -475,13 +475,13 @@ lazy_static::lazy_static! {
                     type_: Type::PrimitiveType(PrimitiveType::Boolean),
                     memory_addr: 0,
                 })
-            })),
+            }),
         ));
 
         builtins.push((
             "error".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _, args| {
+            Function::Builtin(|compiler, _, args| {
                 ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
                 let message = &args[0];
                 ensure_eq_type!(message, Type::String);
@@ -507,26 +507,26 @@ lazy_static::lazy_static! {
                     type_: Type::PrimitiveType(PrimitiveType::Boolean),
                     memory_addr: 0,
                 })
-            })),
+            }),
         ));
 
         builtins.push((
             "log".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _, args| {
+            Function::Builtin(|compiler, _, args| {
                 let old_root_scope = compiler.root_scope;
                 compiler.root_scope = &BUILTINS_SCOPE;
                 let mut scope = compiler.root_scope.deeper();
                 let result = log(compiler, &mut scope, args);
                 compiler.root_scope = old_root_scope;
                 result
-            })),
+            }),
         ));
 
         builtins.push((
             "readAdviceString".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _, args| {
+            Function::Builtin(|compiler, _, args| {
                 assert_eq!(args.len(), 0);
 
                 let old_root_scope = compiler.root_scope;
@@ -535,13 +535,13 @@ lazy_static::lazy_static! {
                 let result = read_advice_string(compiler)?;
                 compiler.root_scope = old_root_scope;
                 Ok(result)
-            })),
+            }),
         ));
 
         builtins.push((
             "readAdviceBytes".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _, _args| {
+            Function::Builtin(|compiler, _, _args| {
                 let old_root_scope = compiler.root_scope;
                 compiler.root_scope = &BUILTINS_SCOPE;
 
@@ -553,13 +553,13 @@ lazy_static::lazy_static! {
 
                 compiler.root_scope = old_root_scope;
                 Ok(result)
-            })),
+            }),
         ));
 
         builtins.push((
             "readAdviceCollectionReference".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _, _args| {
+            Function::Builtin(|compiler, _, _args| {
                 let old_root_scope = compiler.root_scope;
                 compiler.root_scope = &BUILTINS_SCOPE;
 
@@ -575,13 +575,13 @@ lazy_static::lazy_static! {
                     type_: Type::CollectionReference { collection: "".to_owned() },
                     ..result
                 })
-            })),
+            }),
         ));
 
         builtins.push((
             "readAdvicePublicKey".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _, _args| {
+            Function::Builtin(|compiler, _, _args| {
                 let old_root_scope = compiler.root_scope;
                 compiler.root_scope = &BUILTINS_SCOPE;
 
@@ -589,10 +589,10 @@ lazy_static::lazy_static! {
 
                 compiler.root_scope = old_root_scope;
                 result
-            })),
+            }),
         ));
 
-        builtins.push(("readAdviceUInt32".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("readAdviceUInt32".to_string(), None, Function::Builtin(|compiler, _, args| {
             ensure!(args.is_empty(), ArgumentsCountSnafu { found: args.len(), expected: 0usize });
 
             compiler.instructions.push(encoder::Instruction::AdvPush(1));
@@ -600,9 +600,9 @@ lazy_static::lazy_static! {
             let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
             compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
             Ok(symbol)
-        }))));
+        })));
 
-        builtins.push(("readAdviceUInt64".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("readAdviceUInt64".to_string(), None, Function::Builtin(|compiler, _, args| {
             ensure!(args.is_empty(), ArgumentsCountSnafu { found: args.len(), expected: 0usize });
 
             let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt64));
@@ -616,9 +616,9 @@ lazy_static::lazy_static! {
             compiler.memory.write(compiler.instructions, result.memory_addr + 1, &[ValueSource::Stack]);
 
             Ok(result)
-        }))));
+        })));
 
-        builtins.push(("readAdviceInt32".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("readAdviceInt32".to_string(), None, Function::Builtin(|compiler, _, args| {
             ensure!(args.is_empty(), ArgumentsCountSnafu { found: args.len(), expected: 0usize });
 
             compiler.instructions.push(encoder::Instruction::AdvPush(1));
@@ -626,9 +626,9 @@ lazy_static::lazy_static! {
             let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Int32));
             compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
             Ok(symbol)
-        }))));
+        })));
 
-        builtins.push(("readAdviceInt64".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("readAdviceInt64".to_string(), None, Function::Builtin(|compiler, _, args| {
             ensure!(args.is_empty(), ArgumentsCountSnafu { found: args.len(), expected: 0usize });
 
             let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Int64));
@@ -642,9 +642,9 @@ lazy_static::lazy_static! {
             compiler.memory.write(compiler.instructions, result.memory_addr + 1, &[ValueSource::Stack]);
 
             Ok(result)
-        }))));
+        })));
 
-        builtins.push(("readAdviceFloat32".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("readAdviceFloat32".to_string(), None, Function::Builtin(|compiler, _, args| {
             ensure!(args.is_empty(), ArgumentsCountSnafu { found: args.len(), expected: 0usize });
 
             compiler.instructions.push(encoder::Instruction::AdvPush(1));
@@ -652,10 +652,10 @@ lazy_static::lazy_static! {
             let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Float32));
             compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
             Ok(symbol)
-        }))));
+        })));
 
 
-        builtins.push(("readAdviceFloat64".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("readAdviceFloat64".to_string(), None, Function::Builtin(|compiler, _, args| {
             ensure!(args.is_empty(), ArgumentsCountSnafu { found: args.len(), expected: 0usize });
 
             let result = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Float64));
@@ -669,9 +669,9 @@ lazy_static::lazy_static! {
             compiler.memory.write(compiler.instructions, result.memory_addr + 1, &[ValueSource::Stack]);
 
             Ok(result)
-        }))));
+        })));
 
-        builtins.push(("readAdviceBoolean".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("readAdviceBoolean".to_string(), None, Function::Builtin(|compiler, _, args| {
             ensure!(args.is_empty(), ArgumentsCountSnafu { found: args.len(), expected: 0usize });
 
             compiler.instructions.push(encoder::Instruction::AdvPush(1));
@@ -679,17 +679,17 @@ lazy_static::lazy_static! {
             let symbol = compiler.memory.allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
             compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
             Ok(symbol)
-        }))));
+        })));
 
-        builtins.push(("uint32ToString".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("uint32ToString".to_string(), None, Function::Builtin(|compiler, _, args| {
             let old_root_scope = compiler.root_scope;
             compiler.root_scope = &BUILTINS_SCOPE;
             let result = compile_ast_function_call(&UINT32_TO_STRING, compiler, args, None);
             compiler.root_scope = old_root_scope;
             result
-        }))));
+        })));
 
-        builtins.push(("uint32WrappingAdd".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("uint32WrappingAdd".to_string(), None, Function::Builtin(|compiler, _, args| {
             ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
             let a = &args[0];
             let b = &args[1];
@@ -711,9 +711,9 @@ lazy_static::lazy_static! {
             compiler.instructions.push(encoder::Instruction::U32WrappingAdd);
             compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
             Ok(symbol)
-        }))));
+        })));
 
-        builtins.push(("uint32WrappingSub".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("uint32WrappingSub".to_string(), None, Function::Builtin(|compiler, _, args| {
             ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
             let a = &args[0];
             let b = &args[1];
@@ -735,9 +735,9 @@ lazy_static::lazy_static! {
             compiler.instructions.push(encoder::Instruction::U32WrappingSub);
             compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
             Ok(symbol)
-        }))));
+        })));
 
-        builtins.push(("uint32WrappingMul".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("uint32WrappingMul".to_string(), None, Function::Builtin(|compiler, _, args| {
             ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
             let a = &args[0];
             let b = &args[1];
@@ -759,9 +759,9 @@ lazy_static::lazy_static! {
             compiler.instructions.push(encoder::Instruction::U32WrappingMul);
             compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
             Ok(symbol)
-        }))));
+        })));
 
-        builtins.push(("uint32CheckedXor".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("uint32CheckedXor".to_string(), None, Function::Builtin(|compiler, _, args| {
             ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
             let a = &args[0];
             let b = &args[1];
@@ -783,9 +783,9 @@ lazy_static::lazy_static! {
             compiler.instructions.push(encoder::Instruction::U32CheckedXOR);
             compiler.memory.write(compiler.instructions, result.memory_addr, &[ValueSource::Stack]);
             Ok(result)
-        }))));
+        })));
 
-        builtins.push(("int32".to_string(), None, Function::Builtin(Box::new(&|compiler, _, args| {
+        builtins.push(("int32".to_string(), None, Function::Builtin(|compiler, _, args| {
             ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
             let a = &args[0];
             ensure_eq_type!(a, Type::PrimitiveType(PrimitiveType::UInt32));
@@ -800,24 +800,24 @@ lazy_static::lazy_static! {
             compiler.memory.write(compiler.instructions, symbol.memory_addr, &[ValueSource::Stack]);
 
             Ok(symbol)
-        }))));
+        })));
 
         builtins.push((
             "toHex".to_string(),
             Some(TypeConstraint::Exact(Type::PublicKey)),
-            Function::Builtin(Box::new(&|compiler, _, args| {
+            Function::Builtin(|compiler, _, args| {
                 let old_root_scope = compiler.root_scope;
                 compiler.root_scope = &BUILTINS_SCOPE;
                 let result = publickey::to_hex(compiler, args);
                 compiler.root_scope = old_root_scope;
                 Ok(result)
-            })),
+            }),
         ));
 
         builtins.push((
             "indexOf".to_string(),
             Some(TypeConstraint::Array),
-            Function::Builtin(Box::new(&|compiler, _, args| {
+            Function::Builtin(|compiler, _, args| {
                 ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
 
                 let old_root_scope = compiler.root_scope;
@@ -826,13 +826,13 @@ lazy_static::lazy_static! {
                 compiler.root_scope = old_root_scope;
 
                 Ok(result)
-            })),
+            }),
         ));
 
         builtins.push((
             "includes".to_string(),
             Some(TypeConstraint::Array),
-            Function::Builtin(Box::new(&|compiler, _, args| {
+            Function::Builtin(|compiler, _, args| {
                 ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
 
                 let old_root_scope = compiler.root_scope;
@@ -841,59 +841,59 @@ lazy_static::lazy_static! {
                 compiler.root_scope = old_root_scope;
 
                 Ok(result)
-            })),
+            }),
         ));
 
         builtins.push((
             "push".to_string(),
             Some(TypeConstraint::Array),
-            Function::Builtin(Box::new(&|compiler, scope, args| {
+            Function::Builtin(|compiler, scope, args| {
                 array::push(compiler, scope, args)
-            })),
+            }),
         ));
 
         builtins.push((
             "splice".to_string(),
             Some(TypeConstraint::Array),
-            Function::Builtin(Box::new(&|compiler, _scope, args| {
+            Function::Builtin(|compiler, _scope, args| {
                 ensure!(args.len() == 3, ArgumentsCountSnafu { found: args.len(), expected: 3usize });
                 let arr = &args[0];
                 let start = &args[1];
                 let delete_count = &args[2];
 
                 array::splice(compiler, arr, start, delete_count)
-            })),
+            }),
         ));
 
         builtins.push((
             "slice".to_string(),
             Some(TypeConstraint::Array),
-            Function::Builtin(Box::new(&|compiler, _scope, args| {
+            Function::Builtin(|compiler, _scope, args| {
                 ensure!(args.len() <= 3, ArgumentsCountSnafu { found: args.len(), expected: 3usize });
                 let arr = &args[0];
                 let start = args.get(1);
                 let end = args.get(2);
 
                 array::slice(compiler, arr, start.cloned(), end)
-            })),
+            }),
         ));
 
         builtins.push((
             "mapLength".to_string(),
             None,
-            Function::Builtin(Box::new(&|_compiler, _scope, args| {
+            Function::Builtin(|_compiler, _scope, args| {
                 ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
                 let m = &args[0];
                 ensure_eq_type!(m, Type::Map(_, _));
 
                 Ok(array::length(&map::keys_arr(m)?))
-            }))
+            })
         ));
 
         builtins.push((
             "selfdestruct".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _scope, _args| {
+            Function::Builtin(|compiler, _scope, _args| {
                 compiler.memory.write(
                     compiler.instructions,
                     6,
@@ -904,38 +904,40 @@ lazy_static::lazy_static! {
                     type_: Type::PrimitiveType(PrimitiveType::Boolean),
                     memory_addr: 0,
                 })
-            })),
+            }),
         ));
 
         builtins.push((
             "hashRPO".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, scope, args| {
+            Function::Builtin(|compiler, scope, args| {
                 ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
 
                 array::hash(compiler, scope, args)
-            })),
+            }),
         ));
 
         builtins.push((
             "hashSHA256".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _scope, args| {
+            Function::Builtin(|compiler, _scope, args| {
                 ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
 
                 array::hash_sha256_blake3(compiler, &args[0], array::HashFn::Sha256)
-            })),
+            }),
         ));
 
         builtins.push((
             "hashBlake3".to_string(),
             None,
-            Function::Builtin(Box::new(&|compiler, _scope, args| {
+            Function::Builtin(|compiler, _scope, args| {
                 ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
 
                 array::hash_sha256_blake3(compiler, &args[0], array::HashFn::Blake3)
-            })),
+            }),
         ));
+
+        builtins.extend(string::builtins());
 
         Box::leak(Box::new(builtins))
     };
@@ -1025,13 +1027,12 @@ impl From<Collection<'_>> for Struct {
     }
 }
 
-type BuiltinFn<'a> =
-    Box<&'a (dyn Fn(&mut Compiler, &mut Scope, &[Symbol]) -> Result<Symbol> + Sync)>;
+type BuiltinFn = fn(&mut Compiler, &mut Scope, &[Symbol]) -> Result<Symbol>;
 
 #[derive(Clone)]
 enum Function<'ast> {
     Ast(&'ast ast::Function),
-    Builtin(BuiltinFn<'ast>),
+    Builtin(BuiltinFn),
 }
 
 impl std::fmt::Debug for Function<'_> {
