@@ -1010,11 +1010,13 @@ fn copy_from_element(
     compiler: &mut Compiler,
     source_element: &Symbol,
     target_data_ptr: &Symbol,
-    target_capacity: &Symbol,
+    #[allow(unused)] target_capacity: &Symbol,
     element_width: u32,
     index: u32,
 ) -> Result<()> {
-    // Ensure that the target array has enough capacity to hold the source element
+    // Ensure that the target array has enough capacity to hold the source element.
+    // Should be covered by the caller, so we only do this in tests.
+    #[cfg(test)]
     compiler.instructions.extend([
         Instruction::MemLoad(Some(target_capacity.memory_addr)),
         // [capacity]
@@ -1087,10 +1089,10 @@ pub(crate) fn unshift(
     // []
 
     let new_arr = dynamic_new(compiler, element_type.clone(), new_len.clone())?;
-    for i in 0..elements.len() {
+    for (i, el) in elements.iter().enumerate() {
         copy_from_element(
             compiler,
-            &elements[i],
+            el,
             &data_ptr(&new_arr),
             &capacity(&new_arr),
             element_type.miden_width(),
