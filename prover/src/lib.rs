@@ -643,7 +643,7 @@ pub fn run<'a>(
         },
         move || {
             let (_stack_outputs, proof) =
-                miden::prove(program, input_stack, advice_tape, ProofOptions::default())
+                miden_prover::prove(program, input_stack, advice_tape, ProofOptions::default())
                     .wrap_err()?;
 
             Ok(proof)

@@ -99,6 +99,8 @@ pub enum Type {
     Map(Box<Type>, Box<Type>),
     /// A type that can contain a 4-field wide hash, such as one returned by `hmerge`
     Hash,
+    /// A hash that holds 8 field elements. Returned by sha256's and blake3's hash function.
+    Hash8,
     PublicKey,
     Struct(Struct),
 }
@@ -114,6 +116,7 @@ impl Type {
             Type::Array(_) => ARRAY_MIDEN_WIDTH,
             Type::Map(_, _) => MAP_MIDEN_WIDTH,
             Type::Hash => 4,
+            Type::Hash8 => 8,
             Type::PublicKey => publickey::WIDTH,
             Type::Struct(struct_) => struct_.fields.iter().map(|(_, t)| t.miden_width()).sum(),
         }
@@ -135,6 +138,7 @@ impl Type {
             Type::Array(_) => Value::Array(Vec::new()),
             Type::Map(_, _) => Value::Map(Vec::new()),
             Type::Hash => Value::Hash([0; 4]),
+            Type::Hash8 => Value::Hash8([0; 8]),
             Type::PublicKey => Value::PublicKey(publickey::Key::default()),
             Type::Struct(t) => Value::StructValue(
                 t.fields
@@ -163,6 +167,7 @@ pub enum Value {
     Int32(i32),
     Int64(i64),
     Hash([u64; 4]),
+    Hash8([u64; 8]),
     String(String),
     Bytes(Vec<u8>),
     CollectionReference(Vec<u8>),
@@ -224,6 +229,13 @@ impl TryInto<serde_json::Value> for Value {
                 serde_json::Value::Number(serde_json::Number::from_str(&x.to_string()).wrap_err()?)
             }
             Value::Hash(h) => {
+                let mut s = String::new();
+                for x in h.iter() {
+                    s.push_str(&format!("{:016x}", x));
+                }
+                serde_json::Value::String(s)
+            }
+            Value::Hash8(h) => {
                 let mut s = String::new();
                 for x in h.iter() {
                     s.push_str(&format!("{:016x}", x));
@@ -391,6 +403,23 @@ impl TypeReader for Type {
                     type_name: "hash",
                 })
                 .map_err(Into::into),
+            Type::Hash8 => {
+                let mut hash = [0u64; 8];
+                for i in 0..2 {
+                    let [a, b, c, d] = reader(addr + i * 4).context(InvalidAddressSnafu {
+                        addr,
+                        type_name: "hash8",
+                    })?;
+
+                    let offset = (i * 4) as usize;
+                    hash[offset] = a;
+                    hash[offset + 1] = b;
+                    hash[offset + 2] = c;
+                    hash[offset + 3] = d;
+                }
+
+                Ok(Value::Hash8(hash))
+            }
             Type::String => {
                 let mut bytes = vec![];
 
@@ -685,6 +714,17 @@ impl Parser<str> for Type {
                 hash.copy_from_slice(&bytes);
                 Ok(Value::Hash(hash))
             }
+            Type::Hash8 => {
+                let mut bytes = vec![];
+                if !value.is_empty() {
+                    for byte in value.split(',') {
+                        bytes.push(byte.parse().parse_err("hash8", value)?);
+                    }
+                }
+                let mut hash = [0; 8];
+                hash.copy_from_slice(&bytes);
+                Ok(Value::Hash8(hash))
+            }
             Type::String => Ok(Value::String(value.to_string())),
             Type::Bytes => {
                 let mut bytes = vec![];
@@ -813,6 +853,28 @@ impl Parser<serde_json::Value> for Type {
                     hash.reverse();
                 }
                 Ok(Value::Hash(hash))
+            }
+            Type::Hash8 => {
+                let mut hash = [0u64; 8];
+                if !value.is_null() {
+                    let hex = value.as_str().parse_err("invalid", "hash8", "json")?;
+                    let hex = hex.trim_start_matches("0x");
+
+                    let mut bytes = vec![];
+                    for byte in hex.as_bytes().chunks(16) {
+                        let mut byte = byte.to_vec();
+                        byte.resize(16, b'0');
+                        bytes.push(byte);
+                    }
+
+                    for (i, byte) in bytes.iter().enumerate() {
+                        hash[i] = u64::from_str_radix(std::str::from_utf8(byte).wrap_err()?, 16)
+                            .wrap_err()?;
+                    }
+
+                    hash.reverse();
+                }
+                Ok(Value::Hash8(hash))
             }
             Type::String => Ok(Value::String(
                 value
@@ -950,6 +1012,7 @@ impl Value {
             Value::Float32(x) => vec![x.to_bits() as u64],
             Value::Float64(x) => vec![(x.to_bits() >> 32), (x.to_bits() & 0xffffffff)],
             Value::Hash(h) => h.to_vec(),
+            Value::Hash8(h) => h.to_vec(),
             Value::String(s) => [s.len() as u64]
                 .into_iter()
                 .chain(s.bytes().map(|b| b as u64))
@@ -1003,6 +1066,7 @@ impl Value {
             Value::Int32(x) => Some(x.to_string()),
             Value::Int64(x) => Some(x.to_string()),
             Value::Hash(_) => None,
+            Value::Hash8(_) => None,
             Value::String(s) => Some(s),
             Value::Bytes(_) => None,
             Value::CollectionReference(_) => None,

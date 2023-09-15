@@ -907,6 +907,36 @@ lazy_static::lazy_static! {
             }),
         ));
 
+        builtins.push((
+            "hashRPO".to_string(),
+            None,
+            Function::Builtin(|compiler, scope, args| {
+                ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
+
+                array::hash(compiler, scope, args)
+            }),
+        ));
+
+        builtins.push((
+            "hashSHA256".to_string(),
+            None,
+            Function::Builtin(|compiler, _scope, args| {
+                ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
+
+                array::hash_sha256_blake3(compiler, &args[0], array::HashFn::Sha256)
+            }),
+        ));
+
+        builtins.push((
+            "hashBlake3".to_string(),
+            None,
+            Function::Builtin(|compiler, _scope, args| {
+                ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
+
+                array::hash_sha256_blake3(compiler, &args[0], array::HashFn::Blake3)
+            }),
+        ));
+
         builtins.extend(string::builtins());
 
         Box::leak(Box::new(builtins))
@@ -1598,28 +1628,40 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
             boolean::compile_or(compiler, &a, &b)
         }
         ExpressionKind::Array(exprs) => {
+            let all_zeros = exprs.iter().all(|expr| match &**expr {
+                ExpressionKind::Primitive(ast::Primitive::Number(n, _has_decimal_point)) => {
+                    *n == 0.0
+                }
+                _ => false,
+            });
             let mut symbols = vec![];
-            for expr in exprs {
-                symbols.push(compile_expression(expr, compiler, scope)?);
+            if !all_zeros {
+                for expr in exprs {
+                    symbols.push(compile_expression(expr, compiler, scope)?);
+                }
             }
+            let type_ = if symbols.is_empty() {
+                Type::PrimitiveType(PrimitiveType::Float32)
+            } else {
+                symbols[0].type_.clone()
+            };
 
             for (a, b) in symbols.iter().zip(symbols.iter().skip(1)) {
                 ensure_eq_type!(@a.type_, @b.type_);
             }
 
-            if symbols.is_empty() {
+            if exprs.is_empty() {
                 array::new(
                     compiler,
                     0,
                     // TODO: We need to infer what the type of the array is,
                     // for example, if the user does `this.array = []` we need
                     // the type to be the same as this.array
-                    Type::PrimitiveType(PrimitiveType::UInt32),
+                    type_.clone(),
                 )
                 .0
             } else {
-                let type_ = symbols[0].type_.clone();
-                let (array, data_ptr) = array::new(compiler, symbols.len() as u32, type_);
+                let (array, data_ptr) = array::new(compiler, exprs.len() as u32, type_);
 
                 for (i, symbol) in symbols.iter().enumerate() {
                     compiler.memory.read(
@@ -3207,6 +3249,7 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Result<Symbol> {
         }
         Type::PrimitiveType(_) => generic_hash(compiler, &value),
         Type::Hash => generic_hash(compiler, &value),
+        Type::Hash8 => generic_hash(compiler, &value),
         Type::String => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("hashString").unwrap(),
@@ -4056,9 +4099,27 @@ pub fn compile(
         std_version: Some(StdVersion::V0_6_1),
     };
 
+    let mut uses_sha256 = false;
+    let mut uses_blake3 = false;
+    encoder::walk(&instructions, &mut |inst| match inst {
+        encoder::Instruction::Exec(name) if name.starts_with("sha256::") => {
+            uses_sha256 = true;
+        }
+        encoder::Instruction::Exec(name) if name.starts_with("blake3::") => {
+            uses_blake3 = true;
+        }
+        _ => {}
+    });
+
     let mut miden_code = String::new();
     miden_code.push_str(format!("# ABI: {}\n", serde_json::to_string(&abi).unwrap()).as_str());
     miden_code.push_str("use.std::math::u64\n");
+    if uses_sha256 {
+        miden_code.push_str("use.std::crypto::hashes::sha256\n");
+    }
+    if uses_blake3 {
+        miden_code.push_str("use.std::crypto::hashes::blake3\n");
+    }
     miden_code.push_str("begin\n");
     miden_code.push_str("  push.");
     miden_code.push_str(&memory.static_alloc_ptr.to_string());
