@@ -1174,3 +1174,145 @@ pub(crate) fn slice(
 
     Ok(new_arr)
 }
+
+fn copy_from_element(
+    compiler: &mut Compiler,
+    source_element: &Symbol,
+    target_data_ptr: &Symbol,
+    #[allow(unused)] target_capacity: &Symbol,
+    element_width: u32,
+    index: u32,
+) -> Result<()> {
+    // Ensure that the target array has enough capacity to hold the source element.
+    // Should be covered by the caller, so we only do this in tests.
+    #[cfg(test)]
+    compiler.instructions.extend([
+        Instruction::MemLoad(Some(target_capacity.memory_addr)),
+        // [capacity]
+        Instruction::Push(index + 1),
+        // [index + 1, capacity]
+        Instruction::U32CheckedGTE,
+        // [capacity >= index + 1]
+        Instruction::Assert,
+    ]);
+
+    // Copy the source element to the target array at the specified position
+    compiler.memory.read(
+        compiler.instructions,
+        target_data_ptr.memory_addr,
+        target_data_ptr.type_.miden_width(),
+    );
+    // [target_data_ptr]
+    for i in 0..element_width {
+        let offset = index * element_width + i;
+        compiler.instructions.extend([
+            // [target_data_ptr]
+            Instruction::MemLoad(Some(source_element.memory_addr + i)),
+            // [value, target_data_ptr]
+            Instruction::Dup(Some(1)),
+            // [target_data_ptr, value, target_data_ptr]
+            Instruction::Push(offset),
+            // [offset, target_data_ptr, value, target_data_ptr]
+            Instruction::U32CheckedAdd,
+            // [ptr = target_data_ptr + offset, value, target_data_ptr]
+            Instruction::MemStore(None),
+            // [target_data_ptr]
+        ]);
+    }
+    compiler.instructions.push(Instruction::Drop);
+    // []
+
+    Ok(())
+}
+
+pub(crate) fn unshift(
+    compiler: &mut Compiler,
+    arr: &Symbol,
+    elements: &[Symbol],
+) -> Result<Symbol> {
+    let element_type = element_type(&arr.type_);
+    for el in elements {
+        ensure_eq_type!(el, @element_type);
+    }
+
+    compiler
+        .memory
+        .read(compiler.instructions, array::length(arr).memory_addr, 1);
+    // [len]
+    compiler
+        .instructions
+        .push(encoder::Instruction::Push(elements.len() as u32));
+    // [elements.len(), len]
+    compiler
+        .instructions
+        .push(encoder::Instruction::U32CheckedAdd);
+    // [len + elements.len()]
+    let new_len = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+    compiler.memory.write(
+        compiler.instructions,
+        new_len.memory_addr,
+        &[ValueSource::Stack],
+    );
+    // []
+
+    let new_arr = dynamic_new(compiler, element_type.clone(), new_len.clone())?;
+    for (i, el) in elements.iter().enumerate() {
+        copy_from_element(
+            compiler,
+            el,
+            &data_ptr(&new_arr),
+            &capacity(&new_arr),
+            element_type.miden_width(),
+            i as u32,
+        )?;
+    }
+
+    let data_ptr_after_new_elements = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+    compiler
+        .memory
+        .read(compiler.instructions, data_ptr(&new_arr).memory_addr, 1);
+    // [data_ptr]
+    compiler.instructions.extend([
+        Instruction::Push(elements.len() as u32 * element_type.miden_width()),
+        // [offset, data_ptr]
+        Instruction::U32CheckedAdd,
+        // [data_ptr + offset]
+    ]);
+    compiler.memory.write(
+        compiler.instructions,
+        data_ptr_after_new_elements.memory_addr,
+        &[ValueSource::Stack],
+    );
+
+    copy(
+        compiler,
+        &data_ptr(arr),
+        &length(arr),
+        &data_ptr_after_new_elements,
+        &capacity(&new_arr),
+        element_type.miden_width(),
+    )?;
+
+    compiler.memory.write(
+        compiler.instructions,
+        length(&new_arr).memory_addr,
+        &vec![ValueSource::Memory(new_len.memory_addr)],
+    );
+
+    compiler.memory.read(
+        compiler.instructions,
+        new_arr.memory_addr,
+        new_arr.type_.miden_width(),
+    );
+    compiler.memory.write(
+        compiler.instructions,
+        arr.memory_addr,
+        &vec![ValueSource::Stack; arr.type_.miden_width() as usize],
+    );
+
+    Ok(length(&new_arr))
+}

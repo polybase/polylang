@@ -4,6 +4,7 @@ mod push;
 mod slice;
 mod splice;
 mod string;
+mod unshift;
 
 use expect_test::expect;
 use serde::de::Deserialize;
