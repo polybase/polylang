@@ -31,7 +31,7 @@ cargo run --bin compile -- collection:Account function:setName <<<'@public colle
 
 cargo run --bin compile -- collection:Account function:setName <<<'@public collection Account { id: string; name: string; function setName(newName: string) { this.name = newName; } }' \
   | cargo run -p miden-run -- \
-    --abi '{"std_version":"0.6.1","this_addr":37,"this_type":{"Struct":{"name":"Account","fields":[["id","String"],["name","String"]]}},"param_types":["String"],"other_records":[{"collection":"Account"}],"other_collection_types":[{"Struct":{"name":"Account","fields":[["id","String"],["name","String"]]}}]}' \
+    --abi '{"std_version":"0.6.1","this_addr":43,"this_type":{"Struct":{"name":"Account","fields":[["id","String"],["name","String"]]}},"param_types":["String"],"other_records":[{"collection":"Account"}],"other_collection_types":[{"Struct":{"name":"Account","fields":[["id","String"],["name","String"]]}}],"dependent_fields":[]}' \
     --this-json '{ "id": "id1", "name": "John" }' \
     --advice-tape-json '["Tom"]'
 # Output: this_json: {"id":"id1","name":"Tom"}
@@ -41,7 +41,7 @@ cargo run --bin compile -- collection:Account function:setName <<<'@public colle
 
 ```bash
 # Copy the ABI from compile's output and paste it in --abi to miden-run
-cargo run --bin compile -- function:main <<<'function main() { }' | cargo run -p miden-run -- --abi '{"std_version":"0.6.1","this_addr":null,"this_type":null,"param_types":[],"other_records":[],"other_collection_types":[]}' 
+cargo run --bin compile -- function:main <<<'function main() { }' | cargo run -p miden-run -- --abi ' {"std_version":"0.6.1","this_addr":null,"this_type":null,"param_types":[],"other_records":[],"other_collection_types":[],"dependent_fields":[]}'
 ```
 
 ## Test
