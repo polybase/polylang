@@ -226,6 +226,175 @@ pub(crate) fn hash(compiler: &mut Compiler, _scope: &mut Scope, args: &[Symbol])
     Ok(result)
 }
 
+pub(crate) enum HashFn {
+    Sha256,
+    Blake3,
+}
+
+pub(crate) fn hash_sha256_blake3(
+    compiler: &mut Compiler,
+    arr: &Symbol,
+    hash: HashFn,
+) -> Result<Symbol> {
+    let result = compiler.memory.allocate_symbol(Type::Hash8);
+
+    ensure_eq_type!(arr, Type::Array(_));
+    let element_type = element_type(&arr.type_);
+    assert_eq!(element_type.miden_width(), 1);
+
+    let hash_fn_name = match hash {
+        HashFn::Sha256 => "sha256::hash_2to1",
+        HashFn::Blake3 => "blake3::hash_2to1",
+    };
+
+    let len_div_8 = compiler
+        .memory
+        .allocate_symbol(Type::Array(Box::new(Type::PrimitiveType(
+            PrimitiveType::UInt32,
+        ))));
+    compiler.memory.read(
+        compiler.instructions,
+        length(arr).memory_addr,
+        length(arr).type_.miden_width(),
+    );
+    // [len]
+    compiler
+        .instructions
+        .push(Instruction::U32CheckedDiv(Some(8)));
+    compiler.memory.write(
+        compiler.instructions,
+        len_div_8.memory_addr,
+        &[ValueSource::Stack],
+    );
+    let len_mod_8 = compiler
+        .memory
+        .allocate_symbol(Type::Array(Box::new(Type::PrimitiveType(
+            PrimitiveType::UInt32,
+        ))));
+    compiler.memory.read(
+        compiler.instructions,
+        length(arr).memory_addr,
+        length(arr).type_.miden_width(),
+    );
+    // [len]
+    compiler
+        .instructions
+        .push(Instruction::U32CheckedMod(Some(8)));
+    compiler.memory.write(
+        compiler.instructions,
+        len_mod_8.memory_addr,
+        &[ValueSource::Stack],
+    );
+
+    let index = compiler
+        .memory
+        .allocate_symbol(Type::PrimitiveType(PrimitiveType::UInt32));
+
+    compiler.memory.read(
+        compiler.instructions,
+        result.memory_addr,
+        result.type_.miden_width(),
+    );
+    // [...hash]
+
+    compiler.instructions.extend([Instruction::While {
+        condition: vec![
+            Instruction::MemLoad(Some(index.memory_addr)),
+            // [index]
+            Instruction::MemLoad(Some(len_div_8.memory_addr)),
+            // [len_div_8, index]
+            Instruction::U32CheckedLT,
+            // [index < len_div_8]
+        ],
+        body: vec![
+            Instruction::MemLoad(Some(data_ptr(arr).memory_addr)),
+            // [data_ptr]
+            Instruction::MemLoad(Some(index.memory_addr)),
+            // [index, data_ptr]
+            Instruction::Push(8),
+            // [8, index, data_ptr]
+            Instruction::U32CheckedMul,
+            // [offset = index * 8, data_ptr]
+            Instruction::U32CheckedAdd,
+            // [target_ptr = data_ptr + offset]
+            Instruction::Dup(None),
+            // [target_ptr, target_ptr]
+            Instruction::MemLoad(None),
+            // [value, target_ptr]
+        ]
+        .into_iter()
+        .chain((1..8).flat_map(|i| {
+            [
+                Instruction::Dup(Some(i)),
+                // [target_ptr, ...values, target_ptr]
+                Instruction::Push(1),
+                Instruction::U32CheckedAdd,
+                // [target_ptr + 1, value, target_ptr]
+                Instruction::MemLoad(None),
+                // [...values, target_ptr]
+            ]
+        }))
+        .chain([
+            // [value_0, value_1, ..., value_7, target_ptr]
+            Instruction::MovUp(8),
+            // [target_ptr, value_0, value_1, ..., value_7]
+            Instruction::Drop,
+            // [value_0, value_1, ..., value_7, ...old_hash]
+            Instruction::Exec(hash_fn_name),
+            // [...hash]
+            Instruction::MemLoad(Some(index.memory_addr)),
+            Instruction::Push(1),
+            Instruction::U32CheckedAdd,
+            Instruction::MemStore(Some(index.memory_addr)),
+            // [...hash], index += 1
+        ])
+        .collect(),
+    }]);
+
+    for i in 0..8 {
+        compiler.instructions.push(encoder::Instruction::If {
+            condition: vec![
+                Instruction::MemLoad(Some(len_mod_8.memory_addr)),
+                // [len_mod_8]
+                Instruction::Push(i),
+                // [i, len_mod_8]
+                Instruction::U32CheckedGT,
+                // [len_mod_8 > i]
+            ],
+            then: vec![
+                Instruction::MemLoad(Some(data_ptr(arr).memory_addr)),
+                // [data_ptr]
+                Instruction::MemLoad(Some(len_div_8.memory_addr)),
+                // [len_div_8, data_ptr]
+                Instruction::Push(8),
+                // [8, len_div_8, data_ptr]
+                Instruction::U32CheckedMul,
+                // [offset = len_div_8 * 8, data_ptr]
+                Instruction::Push(i),
+                // [i + offset, data_ptr]
+                Instruction::U32CheckedAdd,
+                // [target_ptr = data_ptr + offset + i]
+                Instruction::MemLoad(None),
+            ],
+            else_: vec![Instruction::Push(0)],
+        });
+    }
+
+    compiler.instructions.extend([
+        // [value_0, value_1, ..., value_7, ...old_hash]
+        Instruction::Exec(hash_fn_name),
+        // [...hash]
+    ]);
+
+    compiler.memory.write(
+        compiler.instructions,
+        result.memory_addr,
+        &[ValueSource::Stack; 8],
+    );
+
+    Ok(result)
+}
+
 pub(crate) fn get(compiler: &mut Compiler, arr: &Symbol, index: &Symbol) -> Symbol {
     assert!(matches!(arr.type_, Type::Array(_)));
     assert!(matches!(
