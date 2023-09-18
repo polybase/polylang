@@ -202,6 +202,9 @@ impl Key {
                 x.copy_from_slice(&bytes[..32]);
                 y.copy_from_slice(&bytes[32..]);
             }
+            #[cfg(target_arch = "wasm32")]
+            33 => whatever!("33 byte public key is not supported in wasm32"),
+            #[cfg(not(target_arch = "wasm32"))]
             33 => {
                 let pk = secp256k1::PublicKey::from_slice(bytes).with_whatever_context(|e| {
                     format!("invalid secp256k1 public key bytes: {e}")
