@@ -12,7 +12,7 @@ pub fn generate_js_collection(collection_ast: &stableast::Collection) -> JSColle
         .iter()
         .filter_map(|item| {
             if let stableast::CollectionAttribute::Method(m) = item {
-                let JSFunc { name, code } = generate_js_function(&m);
+                let JSFunc { name, code } = generate_js_function(m);
                 Some(format!("instance.{} = {}", &name, &code))
             } else {
                 None

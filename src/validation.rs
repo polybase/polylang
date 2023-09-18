@@ -134,6 +134,94 @@ pub(crate) fn validate_value<'a>(
                     })
                 }
             }
+            stableast::PrimitiveType::F32 => {
+                if let Value::Number(_) = value {
+                    Ok(())
+                } else {
+                    Err(ValidationError::InvalidType {
+                        path: path.clone(),
+                        expected: expected_type.clone(),
+                    })
+                }
+            }
+            stableast::PrimitiveType::F64 => {
+                if let Value::Number(_) = value {
+                    Ok(())
+                } else {
+                    Err(ValidationError::InvalidType {
+                        path: path.clone(),
+                        expected: expected_type.clone(),
+                    })
+                }
+            }
+            stableast::PrimitiveType::U32 => {
+                if let Value::Number(n) = value {
+                    if n.fract() != 0.0 {
+                        Err(ValidationError::InvalidType {
+                            path: path.clone(),
+                            expected: expected_type.clone(),
+                        })
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    Err(ValidationError::InvalidType {
+                        path: path.clone(),
+                        expected: expected_type.clone(),
+                    })
+                }
+            }
+            stableast::PrimitiveType::U64 => {
+                if let Value::Number(n) = value {
+                    if n.fract() != 0.0 {
+                        Err(ValidationError::InvalidType {
+                            path: path.clone(),
+                            expected: expected_type.clone(),
+                        })
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    Err(ValidationError::InvalidType {
+                        path: path.clone(),
+                        expected: expected_type.clone(),
+                    })
+                }
+            }
+            stableast::PrimitiveType::I32 => {
+                if let Value::Number(n) = value {
+                    if n.fract() != 0.0 {
+                        Err(ValidationError::InvalidType {
+                            path: path.clone(),
+                            expected: expected_type.clone(),
+                        })
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    Err(ValidationError::InvalidType {
+                        path: path.clone(),
+                        expected: expected_type.clone(),
+                    })
+                }
+            }
+            stableast::PrimitiveType::I64 => {
+                if let Value::Number(n) = value {
+                    if n.fract() != 0.0 {
+                        Err(ValidationError::InvalidType {
+                            path: path.clone(),
+                            expected: expected_type.clone(),
+                        })
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    Err(ValidationError::InvalidType {
+                        path: path.clone(),
+                        expected: expected_type.clone(),
+                    })
+                }
+            }
             stableast::PrimitiveType::Boolean => {
                 if let Value::Boolean(_) = value {
                     Ok(())
@@ -252,10 +340,10 @@ pub(crate) fn validate_value<'a>(
 
                 Ok(())
             } else {
-                return Err(ValidationError::InvalidType {
+                Err(ValidationError::InvalidType {
                     path: path.clone(),
                     expected: expected_type.clone(),
-                });
+                })
             }
         }
         stableast::Type::PublicKey(_) => {
@@ -431,7 +519,7 @@ pub(crate) fn validate_value<'a>(
         }
         stableast::Type::ForeignRecord(stableast::ForeignRecord { collection: _ }) => {
             if let Value::Map(map) = value {
-                if let Some(extra_field) = map.keys().filter(|k| *k != "id").nth(0) {
+                if let Some(extra_field) = map.keys().find(|k| *k != "id") {
                     let mut path = path.clone();
                     path.0.push(PathPart::Field(extra_field));
                     return Err(ValidationError::ExtraField { path });
@@ -462,18 +550,14 @@ pub(crate) fn validate_value<'a>(
                 })
             }
         }
-        stableast::Type::Record(_) => {
-            return Err(ValidationError::InvalidType {
-                path: path.clone(),
-                expected: expected_type.clone(),
-            })
-        }
-        stableast::Type::Unknown => {
-            return Err(ValidationError::InvalidType {
-                path: path.clone(),
-                expected: expected_type.clone(),
-            })
-        }
+        stableast::Type::Record(_) => Err(ValidationError::InvalidType {
+            path: path.clone(),
+            expected: expected_type.clone(),
+        }),
+        stableast::Type::Unknown => Err(ValidationError::InvalidType {
+            path: path.clone(),
+            expected: expected_type.clone(),
+        }),
     }
 }
 
@@ -510,7 +594,7 @@ pub(crate) fn validate_set<'a>(
         }
     }
 
-    for (key, _) in data {
+    for key in data.keys() {
         if !fields.iter().any(|item| item.name == key.as_str()) {
             return Err(ValidationError::ExtraField {
                 path: PathParts(vec![PathPart::Field(key)]),
@@ -1205,14 +1289,14 @@ mod tests {
                     "x".to_string(),
                     Value::String(
                         base64::engine::general_purpose::URL_SAFE
-                            .encode(&rand::random::<[u8; 32]>())
+                            .encode(rand::random::<[u8; 32]>())
                     )
                 ),
                 (
                     "y".to_string(),
                     Value::String(
                         base64::engine::general_purpose::URL_SAFE
-                            .encode(&rand::random::<[u8; 32]>())
+                            .encode(rand::random::<[u8; 32]>())
                     )
                 ),
             ])),
@@ -1233,14 +1317,14 @@ mod tests {
                     "x".to_string(),
                     Value::String(
                         base64::engine::general_purpose::URL_SAFE
-                            .encode(&rand::random::<[u8; 16]>())
+                            .encode(rand::random::<[u8; 16]>())
                     )
                 ),
                 (
                     "y".to_string(),
                     Value::String(
                         base64::engine::general_purpose::URL_SAFE
-                            .encode(&rand::random::<[u8; 32]>())
+                            .encode(rand::random::<[u8; 32]>())
                     )
                 ),
             ])),
@@ -1264,14 +1348,14 @@ mod tests {
                     "x".to_string(),
                     Value::String(
                         base64::engine::general_purpose::URL_SAFE
-                            .encode(&rand::random::<[u8; 32]>())
+                            .encode(rand::random::<[u8; 32]>())
                     )
                 ),
                 (
                     "y".to_string(),
                     Value::String(
                         base64::engine::general_purpose::URL_SAFE
-                            .encode(&rand::random::<[u8; 16]>())
+                            .encode(rand::random::<[u8; 16]>())
                     )
                 ),
             ])),
@@ -1362,7 +1446,7 @@ mod tests {
                     "x".to_string(),
                     Value::String(
                         base64::engine::general_purpose::URL_SAFE
-                            .encode(&rand::random::<[u8; 32]>())
+                            .encode(rand::random::<[u8; 32]>())
                     )
                 )
             ])),
@@ -1385,14 +1469,14 @@ mod tests {
                     "x".to_string(),
                     Value::String(
                         base64::engine::general_purpose::URL_SAFE
-                            .encode(&rand::random::<[u8; 32]>())
+                            .encode(rand::random::<[u8; 32]>())
                     )
                 ),
                 (
                     "y".to_string(),
                     Value::String(
                         base64::engine::general_purpose::URL_SAFE
-                            .encode(&rand::random::<[u8; 32]>())
+                            .encode(rand::random::<[u8; 32]>())
                     )
                 ),
                 ("extra".to_string(), Value::String("extra".to_string()))
@@ -1546,7 +1630,7 @@ mod tests {
         HashMap::from([(
             "bytes".to_string(),
             Value::String(
-                base64::engine::general_purpose::STANDARD.encode(&rand::random::<[u8; 32]>())
+                base64::engine::general_purpose::STANDARD.encode(rand::random::<[u8; 32]>())
             )
         )]),
         Ok(())

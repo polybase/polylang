@@ -1,0 +1,23 @@
+[package]
+name = "polylang-prover"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = []
+multi-cpu = ["miden-processor/concurrent"]
+metal = ["miden-prover/metal"]
+
+[dependencies]
+abi = { path = "../abi" }
+error = { path = "../error" }
+polylang = { path = "../", default-features = false }
+
+miden-vm = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.6.1" }
+miden-processor = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.6.1" }
+miden-stdlib = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.6.1" }
+miden-prover = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.6.1" }
+
+serde_json = { version = "1.0", features = ["arbitrary_precision"] }

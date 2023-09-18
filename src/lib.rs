@@ -1,4 +1,6 @@
+#[cfg(feature = "bindings")]
 mod bindings;
+pub mod compiler;
 pub mod js;
 pub mod stableast;
 mod validation;
@@ -43,7 +45,7 @@ where
         let column = column - (line_len_before_trim - line.len());
 
         message.push_str(line);
-        message.push_str("\n");
+        message.push('\n');
         message.push_str(&" ".repeat(column));
         message.push_str(&"^".repeat(if start_byte == end_byte {
             1
@@ -94,21 +96,21 @@ where
     }
 }
 
+pub fn parse_program(input: &str) -> Result<ast::Program, Error> {
+    polylang_parser::parse(input).map_err(|e| parse_error_to_error(input, e))
+}
+
 pub fn parse<'a>(
     input: &'a str,
     namespace: &'a str,
     program_holder: &'a mut Option<ast::Program>,
 ) -> Result<(&'a ast::Program, stableast::Root<'a>), Error> {
-    program_holder
-        .replace(polylang_parser::parse(input).map_err(|e| parse_error_to_error(input, e))?);
+    program_holder.replace(parse_program(input)?);
 
     Ok((
         program_holder.as_ref().unwrap(),
-        stableast::Root::from_ast(namespace, program_holder.as_ref().unwrap()).map_err(|e| {
-            Error {
-                message: e.to_string(),
-            }
-        })?,
+        stableast::Root::from_ast(namespace, program_holder.as_ref().unwrap())
+            .map_err(|e| Error { message: e })?,
     ))
 }
 
@@ -299,7 +301,7 @@ mod tests {
                 statements,
                 statements_code,
                 return_type,
-            }) if name == "get_age" && decorators.is_empty() && parameters.len() == 2 && statements.len() == 1 && statements_code == "return 42;" && return_type == &None)
+            }) if name == "get_age" && decorators.is_empty() && parameters.len() == 2 && statements.len() == 1 && statements_code == "return 42;" && return_type.is_none())
         );
 
         let function = match &collection.items[0] {
@@ -308,13 +310,13 @@ mod tests {
         };
 
         assert!(
-            matches!(function.statements[0], ast::Statement::Return(ast::Expression::Primitive(ast::Primitive::Number(number))) if number == 42.0)
+            matches!(&*function.statements[0], ast::StatementKind::Return(ref expr) if matches!(**expr, ast::ExpressionKind::Primitive(ast::Primitive::Number(number, has_decimal_point)) if number == 42.0 && !has_decimal_point))
         );
         assert!(
-            matches!(&function.parameters[0], ast::Parameter{ name, type_, required } if *required == true && name == "a" && *type_ == ast::ParameterType::Number)
+            matches!(&function.parameters[0], ast::Parameter{ name, type_, required } if *required && name == "a" && *type_ == ast::ParameterType::Number)
         );
         assert!(
-            matches!(&function.parameters[1], ast::Parameter{ name, type_, required } if *required == false && name == "b" && *type_ == ast::ParameterType::String)
+            matches!(&function.parameters[1], ast::Parameter{ name, type_, required } if !(*required) && name == "b" && *type_ == ast::ParameterType::String)
         );
     }
 
@@ -324,8 +326,30 @@ mod tests {
 
         assert!(number.is_ok());
         assert_eq!(
-            number.unwrap(),
-            ast::Expression::Primitive(ast::Primitive::Number(42.0))
+            &*number.unwrap(),
+            &ast::ExpressionKind::Primitive(ast::Primitive::Number(42.0, false))
+        );
+    }
+
+    #[test]
+    fn test_number_decimal() {
+        let number = polylang_parser::parse_expression("42.0");
+
+        assert!(number.is_ok());
+        assert_eq!(
+            *number.unwrap(),
+            ast::ExpressionKind::Primitive(ast::Primitive::Number(42.0, true))
+        );
+    }
+
+    #[test]
+    fn test_number_decimal_2() {
+        let number = polylang_parser::parse_expression("42.5");
+
+        assert!(number.is_ok());
+        assert_eq!(
+            *number.unwrap(),
+            ast::ExpressionKind::Primitive(ast::Primitive::Number(42.5, true))
         );
     }
 
@@ -335,8 +359,8 @@ mod tests {
 
         assert!(string.is_ok());
         assert_eq!(
-            string.unwrap(),
-            ast::Expression::Primitive(ast::Primitive::String("hello\" world".to_string()))
+            *string.unwrap(),
+            ast::ExpressionKind::Primitive(ast::Primitive::String("hello\" world".to_string()))
         );
     }
 
@@ -346,8 +370,8 @@ mod tests {
 
         assert!(string.is_ok());
         assert_eq!(
-            string.unwrap(),
-            ast::Expression::Primitive(ast::Primitive::String("hello' world".to_string()))
+            *string.unwrap(),
+            ast::ExpressionKind::Primitive(ast::Primitive::String("hello' world".to_string()))
         );
     }
 
@@ -355,11 +379,13 @@ mod tests {
     fn test_comparison() {
         let comparison = polylang_parser::parse_expression("1 > 2");
 
-        assert!(matches!(
-            comparison.unwrap(),
-            ast::Expression::GreaterThan(left, right) if *left == ast::Expression::Primitive(ast::Primitive::Number(1.0))
-                && *right == ast::Expression::Primitive(ast::Primitive::Number(2.0)),
-        ));
+        assert_eq!(
+            *comparison.unwrap(),
+            ast::ExpressionKind::GreaterThan(
+                Box::new(ast::ExpressionKind::Primitive(ast::Primitive::Number(1.0, false)).into()),
+                Box::new(ast::ExpressionKind::Primitive(ast::Primitive::Number(2.0, false)).into()),
+            )
+        );
     }
 
     // #[test]
@@ -395,7 +421,7 @@ mod tests {
     //     };
 
     //     assert!(
-    //         matches!(if_.condition, ast::Expression::Equal(n, m) if *n == ast::Expression::Primitive(ast::Primitive::Number(1.0)) && *m == ast::Expression::Primitive(ast::Primitive::Number(1.0)))
+    //         matches!(if_.condition, ast::ExpressionKind::Equal(n, m) if *n == ast::ExpressionKind::Primitive(ast::Primitive::Number(1.0)) && *m == ast::ExpressionKind::Primitive(ast::Primitive::Number(1.0)))
     //     );
     //     assert_eq!(if_.then_statements.len(), 1);
     //     assert_eq!(if_.else_statements.len(), 1);
@@ -406,8 +432,8 @@ mod tests {
         let call = polylang_parser::parse_expression("get_age(a, b, c)");
 
         assert!(matches!(
-            call.unwrap(),
-            ast::Expression::Call(f, args) if *f == ast::Expression::Ident("get_age".to_owned()) && args.len() == 3
+            &*call.unwrap(),
+            ast::ExpressionKind::Call(f, args) if ***f == ast::ExpressionKind::Ident("get_age".to_owned()) && args.len() == 3
         ));
     }
 
@@ -415,20 +441,26 @@ mod tests {
     fn test_dot() {
         let dot = polylang_parser::parse_expression("a.b").unwrap();
 
-        assert!(matches!(
-            dot,
-            ast::Expression::Dot(left, right) if *left == ast::Expression::Ident("a".to_owned()) && right == "b".to_owned()
-        ));
+        assert_eq!(
+            &*dot,
+            &ast::ExpressionKind::Dot(
+                Box::new(ast::ExpressionKind::Ident("a".to_owned()).into()),
+                "b".to_string()
+            )
+        );
     }
 
     #[test]
     fn test_assign_sub() {
         let dot = polylang_parser::parse_expression("a -= b").unwrap();
 
-        assert!(matches!(
-            dot,
-            ast::Expression::AssignSub(left, right) if *left == ast::Expression::Ident("a".to_owned()) && *right == ast::Expression::Ident("b".to_owned())
-        ));
+        assert_eq!(
+            &*dot,
+            &ast::ExpressionKind::AssignSub(
+                Box::new(ast::ExpressionKind::Ident("a".to_owned()).into()),
+                Box::new(ast::ExpressionKind::Ident("b".to_owned()).into())
+            )
+        );
     }
 
     #[test]
@@ -503,44 +535,46 @@ mod tests {
         dbg!(&function.statements);
 
         assert!(matches!(
-            &function.statements[0],
-            ast::Statement::If(ast::If {
+            &*function.statements[0],
+            ast::StatementKind::If(ast::If {
                 condition,
                 then_statements,
                 else_statements,
-            }) if *condition == ast::Expression::NotEqual(
-                Box::new(ast::Expression::Dot(
-                    Box::new(ast::Expression::Ident("this".to_owned())),
+            }) if **condition == ast::ExpressionKind::NotEqual(
+                Box::new(ast::ExpressionKind::Dot(
+                    Box::new(ast::ExpressionKind::Ident("this".to_owned()).into()),
                     "publicKey".to_owned(),
-                )),
-                Box::new(ast::Expression::Dot(
-                    Box::new(ast::Expression::Ident("$auth".to_owned())),
+                ).into()),
+                Box::new(ast::ExpressionKind::Dot(
+                    Box::new(ast::ExpressionKind::Ident("$auth".to_owned()).into()),
                     "publicKey".to_owned(),
-                )),
-            ) && then_statements.len() == 1 && else_statements.len() == 0
+                ).into()),
+            ) && then_statements.len() == 1 && else_statements.is_empty()
         ));
 
         assert!(matches!(
-            &function.statements[1],
-            ast::Statement::Expression(ast::Expression::AssignSub(
+            &*function.statements[1],
+            ast::StatementKind::Expression(expr)
+            if matches!(&**expr, ast::ExpressionKind::AssignSub(
                 left,
                 right,
-            )) if **left == ast::Expression::Dot(
-                Box::new(ast::Expression::Ident("this".to_owned())),
+            ) if ***left == ast::ExpressionKind::Dot(
+                Box::new(ast::ExpressionKind::Ident("this".to_owned()).into()),
                 "balance".to_owned(),
-            ) && **right == ast::Expression::Ident("amount".to_owned())
-        ));
+            ) && ***right == ast::ExpressionKind::Ident("amount".to_owned())
+        )));
 
         assert!(matches!(
-            &function.statements[2],
-            ast::Statement::Expression(ast::Expression::AssignAdd(
+            &*function.statements[2],
+            ast::StatementKind::Expression(expr)
+            if matches!(&**expr, ast::ExpressionKind::AssignAdd(
                 left,
                 right,
-            )) if **left == ast::Expression::Dot(
-                Box::new(ast::Expression::Ident("b".to_owned())),
-                "balance".to_owned(),
-            ) && **right == ast::Expression::Ident("amount".to_owned())
-        ));
+            ) if matches!(&***left, ast::ExpressionKind::Dot(
+                expr,
+                v,
+            ) if v == "balance" && ***expr == ast::ExpressionKind::Ident("b".to_owned())) && ***right == ast::ExpressionKind::Ident("amount".to_owned())
+        )));
     }
 
     //     #[test]
@@ -921,7 +955,10 @@ function x() {
         assert_eq!(function.decorators.len(), 1);
         assert_eq!(function.decorators[0].name, "call");
         assert_eq!(function.decorators[0].arguments.len(), 1);
-        assert_eq!(function.decorators[0].arguments[0], "owner");
+        assert_eq!(
+            function.decorators[0].arguments[0],
+            ast::DecoratorArgument::Identifier("owner".to_owned()),
+        );
     }
 
     #[test]
@@ -961,7 +998,7 @@ function x() {
     fn test_expr_array_empty() {
         let code = "[]";
         let expr = polylang_parser::parse_expression(code).unwrap();
-        assert_eq!(expr, ast::Expression::Array(vec![]));
+        assert_eq!(*expr, ast::ExpressionKind::Array(vec![]));
     }
 
     #[test]
@@ -969,10 +1006,11 @@ function x() {
         let code = "[1]";
         let expr = polylang_parser::parse_expression(code).unwrap();
         assert_eq!(
-            expr,
-            ast::Expression::Array(vec![ast::Expression::Primitive(ast::Primitive::Number(
-                1.0
-            ))])
+            *expr,
+            ast::ExpressionKind::Array(vec![ast::ExpressionKind::Primitive(
+                ast::Primitive::Number(1.0, false)
+            )
+            .into()])
         );
     }
 
@@ -981,11 +1019,11 @@ function x() {
         let code = "[1, 2, 3]";
         let expr = polylang_parser::parse_expression(code).unwrap();
         assert_eq!(
-            expr,
-            ast::Expression::Array(vec![
-                ast::Expression::Primitive(ast::Primitive::Number(1.0)),
-                ast::Expression::Primitive(ast::Primitive::Number(2.0)),
-                ast::Expression::Primitive(ast::Primitive::Number(3.0)),
+            *expr,
+            ast::ExpressionKind::Array(vec![
+                ast::ExpressionKind::Primitive(ast::Primitive::Number(1.0, false)).into(),
+                ast::ExpressionKind::Primitive(ast::Primitive::Number(2.0, false)).into(),
+                ast::ExpressionKind::Primitive(ast::Primitive::Number(3.0, false)).into(),
             ])
         );
     }
@@ -995,15 +1033,18 @@ function x() {
         let code = "[[1], [2, 3]]";
         let expr = polylang_parser::parse_expression(code).unwrap();
         assert_eq!(
-            expr,
-            ast::Expression::Array(vec![
-                ast::Expression::Array(vec![ast::Expression::Primitive(ast::Primitive::Number(
-                    1.0
-                ))]),
-                ast::Expression::Array(vec![
-                    ast::Expression::Primitive(ast::Primitive::Number(2.0)),
-                    ast::Expression::Primitive(ast::Primitive::Number(3.0)),
-                ]),
+            *expr,
+            ast::ExpressionKind::Array(vec![
+                ast::ExpressionKind::Array(vec![ast::ExpressionKind::Primitive(
+                    ast::Primitive::Number(1.0, false)
+                )
+                .into()])
+                .into(),
+                ast::ExpressionKind::Array(vec![
+                    ast::ExpressionKind::Primitive(ast::Primitive::Number(2.0, false)).into(),
+                    ast::ExpressionKind::Primitive(ast::Primitive::Number(3.0, false)).into(),
+                ])
+                .into(),
             ])
         );
     }
@@ -1013,8 +1054,8 @@ function x() {
         let code = "{}";
         let expr = polylang_parser::parse_expression(code).unwrap();
         assert_eq!(
-            expr,
-            ast::Expression::Object(ast::Object { fields: vec![] })
+            *expr,
+            ast::ExpressionKind::Object(ast::Object { fields: vec![] })
         );
     }
 
@@ -1065,14 +1106,17 @@ function x() {
         assert_eq!(function.name, "constructor");
         assert_eq!(function.parameters.len(), 0);
 
-        let (_l, r) = match &function.statements[0] {
-            ast::Statement::Expression(ast::Expression::Assign(l, r)) => (l, r),
+        let (_l, r) = match &*function.statements[0] {
+            ast::StatementKind::Expression(e) => match &**e {
+                ast::ExpressionKind::Assign(l, r) => (l, r),
+                _ => panic!("expected assignment"),
+            },
             _ => panic!("expected assignment"),
         };
 
         assert_eq!(
-            r.as_ref(),
-            &ast::Expression::Object(ast::Object { fields: vec![] })
+            ***r,
+            ast::ExpressionKind::Object(ast::Object { fields: vec![] })
         );
     }
 
@@ -1124,6 +1168,7 @@ function x() {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
             Err(e) => panic!("Error reading directory: {}", e),
         };
+        let mut results = vec![];
         for entry in entries {
             let entry = entry.unwrap();
             let path = entry.path();
@@ -1134,11 +1179,15 @@ function x() {
             let code = std::fs::read_to_string(&path).unwrap();
             let mut program = None::<ast::Program>;
             let result = parse(&code, "", &mut program);
-            if result.is_err() {
+            if let Err(err) = result {
                 eprintln!("Error parsing collection: {}", path.display());
-                eprintln!("{}", result.as_ref().unwrap_err().message);
+                eprintln!("{}", err.message);
+                results.push(err);
             }
-            assert!(result.is_ok());
+        }
+
+        if !results.is_empty() {
+            panic!("found {} failed tests", results.len());
         }
     }
 }

@@ -34,9 +34,17 @@ pub struct Field {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Decorator {
+pub struct DecoratorNode {
     pub name: String,
-    pub arguments: Vec<String>,
+    pub arguments: Vec<DecoratorArgument>,
+}
+
+pub type Decorator = MaybeSpanned<DecoratorNode>;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum DecoratorArgument {
+    Identifier(String),
+    Literal(Literal),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -44,6 +52,12 @@ pub struct Decorator {
 pub enum Type {
     String,
     Number,
+    F32,
+    F64,
+    U32,
+    U64,
+    I32,
+    I64,
     Boolean,
     Array(Box<Type>),
     Map(Box<Type>, Box<Type>),
@@ -58,6 +72,12 @@ pub enum Type {
 pub enum ParameterType {
     String,
     Number,
+    F32,
+    F64,
+    U32,
+    U64,
+    I32,
+    I64,
     Boolean,
     Array(Type),
     Map(Type, Type),
@@ -102,8 +122,74 @@ pub enum Order {
     Desc,
 }
 
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
+pub struct Span {
+    pub start: usize,
+    pub end: usize,
+}
+
+impl From<Span> for error::span::Span {
+    fn from(val: Span) -> Self {
+        error::span::Span::new(val.start, val.end)
+    }
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct Spanned<T> {
+    pub span: Span,
+    pub inner: T,
+}
+
+#[derive(Debug, Serialize, Deserialize, derive_more::From, Clone)]
+pub enum MaybeSpanned<T> {
+    T(T),
+    Spanned(Spanned<T>),
+}
+
+impl<T> MaybeSpanned<T> {
+    pub fn with_span(self, start: usize, end: usize) -> Self {
+        let inner = match self {
+            Self::T(inner) => inner,
+            Self::Spanned(Spanned { inner, .. }) => inner,
+        };
+        Self::Spanned(Spanned {
+            span: Span { start, end },
+            inner,
+        })
+    }
+
+    pub fn span(&self) -> Option<Span> {
+        let Self::Spanned(spanned) = self else { return None };
+        Some(spanned.span)
+    }
+
+    pub fn into_inner(self) -> T {
+        match self {
+            Self::T(t) => t,
+            Self::Spanned(spanned) => spanned.inner,
+        }
+    }
+}
+
+impl<T: PartialEq> PartialEq for MaybeSpanned<T> {
+    fn eq(&self, other: &Self) -> bool {
+        <T as PartialEq>::eq(&**self, &**other)
+    }
+}
+
+impl<T> std::ops::Deref for MaybeSpanned<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            MaybeSpanned::T(inner) => inner,
+            MaybeSpanned::Spanned(s) => &s.inner,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
-pub enum Statement {
+pub enum StatementKind {
     Break,
     If(If),
     While(While),
@@ -114,8 +200,21 @@ pub enum Statement {
     Let(Let),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub enum Expression {
+pub type Expression = MaybeSpanned<ExpressionKind>;
+pub type Statement = MaybeSpanned<StatementKind>;
+
+pub trait WithSpan: Sized {
+    fn with_span(self, start: usize, end: usize) -> MaybeSpanned<Self> {
+        MaybeSpanned::Spanned(Spanned {
+            span: Span { start, end },
+            inner: self,
+        })
+    }
+}
+impl<T> WithSpan for T {}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub enum ExpressionKind {
     Primitive(Primitive),
     Ident(String),
     Boolean(bool),
@@ -172,10 +271,22 @@ pub struct While {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct For {
-    pub initial_statement: ForInitialStatement,
-    pub condition: Expression,
-    pub post_statement: Expression,
+    pub for_kind: ForKind,
     pub statements: Vec<Statement>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ForKind {
+    Basic {
+        initial_statement: ForInitialStatement,
+        condition: Expression,
+        post_statement: Expression,
+    },
+    ForEach {
+        for_each_type: ForEachType,
+        identifier: String,
+        iterable: Expression,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -184,14 +295,29 @@ pub enum ForInitialStatement {
     Expression(Expression),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub enum Primitive {
-    Number(f64),
-    String(String),
-    Regex(String),
+#[derive(Debug, Serialize, Deserialize, derive_more::Display)]
+pub enum ForEachType {
+    // for .. in ..
+    #[display(fmt = "in")]
+    In,
+    // for .. of ..
+    #[display(fmt = "of")]
+    Of,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub enum Primitive {
+    // (value, has_decimal_point)
+    Number(f64, bool),
+    String(String),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Object {
     pub fields: Vec<(String, Expression)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Literal {
+    Eth(Vec<u8>),
 }
