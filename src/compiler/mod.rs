@@ -920,10 +920,10 @@ lazy_static::lazy_static! {
         builtins.push((
             "hashRPO".to_string(),
             None,
-            Function::Builtin(|compiler, scope, args| {
+            Function::Builtin(|compiler, _scope, args| {
                 ensure!(args.len() == 1, ArgumentsCountSnafu { found: args.len(), expected: 1usize });
 
-                array::hash(compiler, scope, args)
+                array::hash_width_1(compiler, &args[0], array::HashFn::Rpo)
             }),
         ));
 

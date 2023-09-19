@@ -126,10 +126,6 @@ pub(crate) fn hash(compiler: &mut Compiler, _scope: &mut Scope, args: &[Symbol])
         unreachable!()
     };
 
-    if inner_type.miden_width() == 1 {
-        return hash_width_1(compiler, arr, HashFn::Rpo);
-    }
-
     let (inner_hashing_input, inner_hashing_insts, inner_hashing_output) = {
         let mut insts = Vec::new();
 
