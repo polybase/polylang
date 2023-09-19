@@ -44,6 +44,7 @@ extern {
         "function" => lexer::Tok::Function,
         "@index" => lexer::Tok::Index,
         "collection" => lexer::Tok::Collection,
+        "contract" => lexer::Tok::Collection,
         "eth#" => lexer::Tok::EthLiteralStart,
         "falcon#" => lexer::Tok::FalconLiteralStart,
         "{" => lexer::Tok::LBrace,
@@ -531,7 +532,12 @@ CollectionItem: CollectionItem = {
 };
 
 Collection: Collection = {
-    <decorators:Decorator*> "collection" <name:Ident> "{" <items:CollectionItem*> "}" => Collection {
+    <decorators:Decorator*>  "collection" <name:Ident> "{" <items:CollectionItem*> "}" => Collection {
+        name: name,
+        decorators: decorators,
+        items: items,
+    },
+    <decorators:Decorator*>  "contract" <name:Ident> "{" <items:CollectionItem*> "}" => Collection {
         name: name,
         decorators: decorators,
         items: items,

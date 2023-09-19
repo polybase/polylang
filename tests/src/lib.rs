@@ -163,10 +163,110 @@ fn call_public_collection() {
 }
 
 #[test]
+fn call_public_contract() {
+    let code = r#"
+        @public
+        contract Account {
+            id: string;
+            name: string;
+
+            setName(name: string) {
+                this.name = name;
+            }
+        }
+    "#;
+
+    let (abi, output) = run(
+        code,
+        "Account",
+        "setName",
+        serde_json::json!({
+            "id": "",
+            "name": "",
+        }),
+        vec![serde_json::json!("test")],
+        None,
+        HashMap::new(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        output.this(&abi).unwrap(),
+        abi::Value::StructValue(vec![
+            ("id".to_owned(), abi::Value::String("".to_owned())),
+            ("name".to_owned(), abi::Value::String("test".to_owned())),
+        ])
+    );
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                []
+            "#]],
+        dependencies:
+            expect![[r#"
+                []
+            "#]]
+    );
+}
+
+#[test]
 fn call_any_call_collection() {
     let code = r#"
         @call
         collection Account {
+            id: string;
+            name: string;
+
+            setName(name: string) {
+                this.name = name;
+            }
+        }
+    "#;
+
+    let (abi, output) = run(
+        code,
+        "Account",
+        "setName",
+        serde_json::json!({
+            "id": "",
+            "name": "",
+        }),
+        vec![serde_json::json!("test")],
+        None,
+        HashMap::new(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        output.this(&abi).unwrap(),
+        abi::Value::StructValue(vec![
+            ("id".to_owned(), abi::Value::String("".to_owned())),
+            ("name".to_owned(), abi::Value::String("test".to_owned())),
+        ])
+    );
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                []
+            "#]],
+        dependencies:
+            expect![[r#"
+                []
+            "#]]
+    );
+}
+
+#[test]
+fn call_any_call_contract() {
+    let code = r#"
+        @call
+        contract Account {
             id: string;
             name: string;
 

@@ -185,6 +185,17 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_contract() {
+        let input = "contract Test {}";
+        let expected_output = expect![[
+            r#"{"Ok":[{"nodes":[{"Collection":{"name":"Test","decorators":[],"items":[]}}]},[{"kind":"collection","namespace":{"kind":"namespace","value":""},"name":"Test","attributes":[]}]]}"#
+        ]];
+
+        let output = parse_out_json(input, "");
+        expected_output.assert_eq(&output);
+    }
+
+    #[test]
     fn test_parse_collection_metadata() {
         let input = "@public collection Collection { id: string; name?: string; lastRecordUpdated?: string; code?: string; ast?: string; publicKey?: PublicKey; @index(publicKey); @index([lastRecordUpdated, desc]); constructor (id: string, code: string) { this.id = id; this.code = code; this.ast = parse(code); if (ctx.publicKey) this.publicKey = ctx.publicKey; } updateCode (code: string) { if (this.publicKey != ctx.publicKey) { throw error('invalid owner'); } this.code = code; this.ast = parse(code); } }";
         let expected_output = expect![[
