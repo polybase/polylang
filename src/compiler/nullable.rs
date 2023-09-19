@@ -32,7 +32,7 @@ pub(crate) fn eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
         let mut insts = vec![];
         std::mem::swap(compiler.instructions, &mut insts);
 
-        let res = compile_eq(compiler, &value(a.clone()), &value(b.clone()));
+        let res = compile_eq(compiler, &value(a.clone()), &value(b.clone())).unwrap();
 
         std::mem::swap(compiler.instructions, &mut insts);
         (res, insts)
