@@ -689,7 +689,7 @@ lazy_static::lazy_static! {
             result
         })));
 
-        builtins.push(("uint32WrappingAdd".to_string(), None, Function::Builtin(|compiler, _, args| {
+        builtins.push(("wrappingAdd".to_string(), Some(TypeConstraint::Exact(Type::PrimitiveType(PrimitiveType::UInt32))), Function::Builtin(|compiler, _, args| {
             ensure!(args.len() == 2, ArgumentsCountSnafu { found: args.len(), expected: 2usize });
             let a = &args[0];
             let b = &args[1];
@@ -1345,7 +1345,7 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
             let a = compile_expression(a, compiler, scope)?;
             let b = compile_expression(b, compiler, scope)?;
 
-            compile_eq(compiler, &a, &b)
+            compile_eq(compiler, &a, &b)?
         }
         ExpressionKind::NotEqual(a, b) => {
             let a = compile_expression(a, compiler, scope)?;
@@ -1584,6 +1584,39 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
             compiler,
             scope,
         )?,
+        ExpressionKind::Increment(a) => {
+            let a = match &***a {
+                ExpressionKind::Ident(id) => scope.find_symbol(id).not_found("symbol", id)?,
+                _ => {
+                    return TypeMismatchSnafu {
+                        context: "tried to increment non-ident",
+                    }
+                    .fail()
+                    .map_err(Into::into)
+                }
+            };
+
+            let one = match &a.type_ {
+                Type::PrimitiveType(PrimitiveType::UInt32) => uint32::new(compiler, 1),
+                Type::PrimitiveType(PrimitiveType::Float32) => float32::new(compiler, 1.0),
+                _ => panic!("increment not supported for type {:?}", a.type_),
+            };
+
+            let incremented = compile_add(compiler, &a, &one)?;
+
+            compiler.memory.read(
+                compiler.instructions,
+                incremented.memory_addr,
+                incremented.type_.miden_width(),
+            );
+            compiler.memory.write(
+                compiler.instructions,
+                a.memory_addr,
+                &vec![ValueSource::Stack; incremented.type_.miden_width() as usize],
+            );
+
+            incremented
+        }
         ExpressionKind::Dot(a, b) => {
             let a = compile_expression(a, compiler, scope)?;
 
@@ -2098,7 +2131,30 @@ fn compile_let_statement(
     compiler: &mut Compiler,
     scope: &mut Scope,
 ) -> Result<()> {
-    let new_symbol = add_new_symbol(&let_statement.expression, compiler, scope)?;
+    let new_symbol = match &*let_statement.expression {
+        ast::ExpressionKind::Primitive(ast::Primitive::Number(n, has_decimal)) => {
+            match &let_statement.type_ {
+                Some(ast::Type::U32) => {
+                    ensure!(
+                        !*has_decimal,
+                        TypeMismatchSnafu {
+                            context: "expected integer, not float"
+                        }
+                    );
+
+                    uint32::new(compiler, *n as u32)
+                }
+                Some(_) => {
+                    return Err(Error::unimplemented(format!(
+                        "let statement with type {:?}",
+                        let_statement.type_
+                    )));
+                }
+                None => add_new_symbol(&let_statement.expression, compiler, scope)?,
+            }
+        }
+        _ => add_new_symbol(&let_statement.expression, compiler, scope)?,
+    };
 
     scope.add_symbol(let_statement.identifier.to_string(), new_symbol);
     Ok(())
@@ -2363,8 +2419,8 @@ fn compile_mul(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
     }
 }
 
-fn compile_eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
-    match (&a.type_, &b.type_) {
+fn compile_eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Result<Symbol> {
+    Ok(match (&a.type_, &b.type_) {
         (
             Type::PrimitiveType(PrimitiveType::UInt32),
             Type::PrimitiveType(PrimitiveType::UInt32),
@@ -2443,10 +2499,10 @@ fn compile_eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
                 else_: vec![],
             });
 
-            eq_result
+            eq_result?
         }
-        e => unimplemented!("{:?}", e),
-    }
+        e => return Err(Error::unimplemented(format!("eq {:?} {:?}", e.0, e.1))),
+    })
 }
 
 fn compile_neq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
@@ -2456,7 +2512,7 @@ fn compile_neq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
         return float32::ne(compiler, a, b);
     }
 
-    let eq = compile_eq(compiler, a, b);
+    let eq = compile_eq(compiler, a, b).unwrap();
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
@@ -3908,7 +3964,8 @@ pub fn compile(
                     let actual_field_hash =
                         add_salt_to_hash(&mut compiler, &actual_field_hash, &salts[i])?;
 
-                    let is_eq = compile_eq(&mut compiler, &expected_field_hash, &actual_field_hash);
+                    let is_eq =
+                        compile_eq(&mut compiler, &expected_field_hash, &actual_field_hash)?;
                     let assert_fn = compiler.root_scope.find_function("assert").unwrap();
                     let (error_str, _) = string::new(
                         &mut compiler,
@@ -4302,8 +4359,8 @@ fn compile_check_eq_or_ownership(
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
 
     let is_eq = match &field.type_ {
-        Type::PublicKey => compile_eq(compiler, &field, auth_pk),
-        Type::Nullable(t) if **t == Type::PublicKey => compile_eq(compiler, &field, auth_pk),
+        Type::PublicKey => compile_eq(compiler, &field, auth_pk)?,
+        Type::Nullable(t) if **t == Type::PublicKey => compile_eq(compiler, &field, auth_pk)?,
         Type::CollectionReference { collection } => {
             let collection_type = compiler.root_scope.find_collection(&collection).unwrap();
             let collection_record_hashes = compiler.get_record_dependency(collection_type).unwrap();
@@ -4371,14 +4428,14 @@ fn compile_check_eq_or_ownership(
                     actual_record_hash.type_.miden_width(),
                 );
 
-                let is_hash_eq = compile_eq(compiler, &record_public_hash, &actual_record_hash);
+                let is_hash_eq = compile_eq(compiler, &record_public_hash, &actual_record_hash)?;
                 let assert = compiler.root_scope.find_function("assert").unwrap();
                 let (error_str, _) =
                     string::new(compiler, "Record hash does not match the expected hash");
                 compile_function_call(compiler, assert, &[is_hash_eq, error_str], None)?;
 
                 let record_id = struct_field(compiler, &record, "id")?;
-                let is_id_eq = compile_eq(compiler, &record_id, &id);
+                let is_id_eq = compile_eq(compiler, &record_id, &id)?;
                 let (error_str, _) = string::new(compiler, "Record id does not match");
                 compile_function_call(compiler, assert, &[is_id_eq, error_str], None)?;
 

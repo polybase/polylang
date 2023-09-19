@@ -122,7 +122,7 @@ pub(crate) fn get(
         let mut inst = vec![];
         std::mem::swap(compiler.instructions, &mut inst);
 
-        let eq = compile_eq(compiler, key, &current_key_symbol);
+        let eq = compile_eq(compiler, key, &current_key_symbol)?;
 
         std::mem::swap(compiler.instructions, &mut inst);
 

@@ -223,6 +223,7 @@ pub enum ExpressionKind {
     Assign(Box<Expression>, Box<Expression>),
     AssignSub(Box<Expression>, Box<Expression>),
     AssignAdd(Box<Expression>, Box<Expression>),
+    Increment(Box<Expression>),
     Or(Box<Expression>, Box<Expression>),
     And(Box<Expression>, Box<Expression>),
     Equal(Box<Expression>, Box<Expression>),
@@ -253,6 +254,7 @@ pub enum ExpressionKind {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Let {
     pub identifier: String,
+    pub type_: Option<Type>,
     pub expression: Expression,
 }
 

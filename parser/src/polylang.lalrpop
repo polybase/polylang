@@ -242,8 +242,7 @@ pub Expression: Expression = {
     #[precedence(level="5")] #[assoc(side="left")]
     <lo:@L> <l:Expression> "+" <r:Expression> <hi:@R> => ExpressionKind::Add(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="5")] #[assoc(side="left")]
-    // TODO: Make this a separate ExpressionKind
-    <lo:@L> <l:Expression> "+" "+" <hi:@R> => ExpressionKind::AssignAdd(Box::new(l), Box::new(ExpressionKind::Primitive(Primitive::Number(1., false)).with_span(lo, hi))).with_span(lo, hi).into(),
+    <lo:@L> <l:Expression> "+" "+" <hi:@R> => ExpressionKind::Increment(Box::new(l)).with_span(lo, hi).into(),
     #[precedence(level="5")] #[assoc(side="left")]
     <lo:@L> <l:Expression> "-" <r:Expression> <hi:@R> => ExpressionKind::Subtract(Box::new(l), Box::new(r)).with_span(lo, hi).into(),
     #[precedence(level="6")] #[assoc(side="left")]
@@ -311,7 +310,7 @@ CompoundStatement: Statement = {
 };
 
 Let: Let = {
-    "let" <i:Ident> "=" <e:Expression> => Let { identifier: i, expression: e },
+    "let" <i:Ident> <type_:(":" <Type>)?> "=" <e:Expression> => Let { identifier: i, type_, expression: e },
 };
 
 SmallStatement: StatementKind = {
