@@ -229,25 +229,43 @@ pub(crate) fn hash(compiler: &mut Compiler, _scope: &mut Scope, args: &[Symbol])
 pub(crate) enum HashFn {
     Sha256,
     Blake3,
+    Rpo,
 }
 
-pub(crate) fn hash_sha256_blake3(
-    compiler: &mut Compiler,
-    arr: &Symbol,
-    hash: HashFn,
-) -> Result<Symbol> {
-    let result = compiler.memory.allocate_symbol(Type::Hash8);
-
+/// Hashes an array with elements where width = 1
+pub(crate) fn hash_width_1(compiler: &mut Compiler, arr: &Symbol, hash: HashFn) -> Result<Symbol> {
     ensure_eq_type!(arr, Type::Array(_));
     let element_type = element_type(&arr.type_);
     assert_eq!(element_type.miden_width(), 1);
 
-    let hash_fn_name = match hash {
-        HashFn::Sha256 => "sha256::hash_2to1",
-        HashFn::Blake3 => "blake3::hash_2to1",
+    let (n_width, hash_fn_inst) = match hash {
+        HashFn::Sha256 => {
+            // Sha256 and Blake3 take uint32s as input, so the element has to fit
+            ensure_eq_type!(
+                @element_type,
+                pat Type::PrimitiveType(PrimitiveType::UInt32) | Type::PrimitiveType(PrimitiveType::Float32)
+            );
+
+            (8, Instruction::Exec("sha256::hash_2to1"))
+        }
+        HashFn::Blake3 => {
+            ensure_eq_type!(
+                @element_type,
+                pat Type::PrimitiveType(PrimitiveType::UInt32) | Type::PrimitiveType(PrimitiveType::Float32)
+            );
+
+            (8, Instruction::Exec("blake3::hash_2to1"))
+        }
+        HashFn::Rpo => (4, Instruction::HMerge),
     };
 
-    let len_div_8 = compiler
+    let result = match n_width {
+        8 => compiler.memory.allocate_symbol(Type::Hash8),
+        4 => compiler.memory.allocate_symbol(Type::Hash),
+        _ => unreachable!(),
+    };
+
+    let len_div_n = compiler
         .memory
         .allocate_symbol(Type::Array(Box::new(Type::PrimitiveType(
             PrimitiveType::UInt32,
@@ -260,13 +278,13 @@ pub(crate) fn hash_sha256_blake3(
     // [len]
     compiler
         .instructions
-        .push(Instruction::U32CheckedDiv(Some(8)));
+        .push(Instruction::U32CheckedDiv(Some(n_width)));
     compiler.memory.write(
         compiler.instructions,
-        len_div_8.memory_addr,
+        len_div_n.memory_addr,
         &[ValueSource::Stack],
     );
-    let len_mod_8 = compiler
+    let len_mod_n = compiler
         .memory
         .allocate_symbol(Type::Array(Box::new(Type::PrimitiveType(
             PrimitiveType::UInt32,
@@ -279,10 +297,10 @@ pub(crate) fn hash_sha256_blake3(
     // [len]
     compiler
         .instructions
-        .push(Instruction::U32CheckedMod(Some(8)));
+        .push(Instruction::U32CheckedMod(Some(n_width)));
     compiler.memory.write(
         compiler.instructions,
-        len_mod_8.memory_addr,
+        len_mod_n.memory_addr,
         &[ValueSource::Stack],
     );
 
@@ -301,20 +319,20 @@ pub(crate) fn hash_sha256_blake3(
         condition: vec![
             Instruction::MemLoad(Some(index.memory_addr)),
             // [index]
-            Instruction::MemLoad(Some(len_div_8.memory_addr)),
-            // [len_div_8, index]
+            Instruction::MemLoad(Some(len_div_n.memory_addr)),
+            // [len_div_n, index]
             Instruction::U32CheckedLT,
-            // [index < len_div_8]
+            // [index < len_div_n]
         ],
         body: vec![
             Instruction::MemLoad(Some(data_ptr(arr).memory_addr)),
             // [data_ptr]
             Instruction::MemLoad(Some(index.memory_addr)),
             // [index, data_ptr]
-            Instruction::Push(8),
-            // [8, index, data_ptr]
+            Instruction::Push(n_width),
+            // [n_width, index, data_ptr]
             Instruction::U32CheckedMul,
-            // [offset = index * 8, data_ptr]
+            // [offset = index * n_width, data_ptr]
             Instruction::U32CheckedAdd,
             // [target_ptr = data_ptr + offset]
             Instruction::Dup(None),
@@ -323,7 +341,7 @@ pub(crate) fn hash_sha256_blake3(
             // [value, target_ptr]
         ]
         .into_iter()
-        .chain((1..8).flat_map(|i| {
+        .chain((1..n_width).flat_map(|i| {
             [
                 Instruction::Dup(Some(i)),
                 // [target_ptr, ...values, target_ptr]
@@ -336,11 +354,11 @@ pub(crate) fn hash_sha256_blake3(
         }))
         .chain([
             // [value_0, value_1, ..., value_7, target_ptr]
-            Instruction::MovUp(8),
+            Instruction::MovUp(n_width),
             // [target_ptr, value_0, value_1, ..., value_7]
             Instruction::Drop,
             // [value_0, value_1, ..., value_7, ...old_hash]
-            Instruction::Exec(hash_fn_name),
+            hash_fn_inst.clone(),
             // [...hash]
             Instruction::MemLoad(Some(index.memory_addr)),
             Instruction::Push(1),
@@ -351,25 +369,25 @@ pub(crate) fn hash_sha256_blake3(
         .collect(),
     }]);
 
-    for i in 0..8 {
+    for i in 0..n_width {
         compiler.instructions.push(encoder::Instruction::If {
             condition: vec![
-                Instruction::MemLoad(Some(len_mod_8.memory_addr)),
-                // [len_mod_8]
+                Instruction::MemLoad(Some(len_mod_n.memory_addr)),
+                // [len_mod_n]
                 Instruction::Push(i),
-                // [i, len_mod_8]
+                // [i, len_mod_n]
                 Instruction::U32CheckedGT,
-                // [len_mod_8 > i]
+                // [len_mod_n > i]
             ],
             then: vec![
                 Instruction::MemLoad(Some(data_ptr(arr).memory_addr)),
                 // [data_ptr]
-                Instruction::MemLoad(Some(len_div_8.memory_addr)),
-                // [len_div_8, data_ptr]
-                Instruction::Push(8),
-                // [8, len_div_8, data_ptr]
+                Instruction::MemLoad(Some(len_div_n.memory_addr)),
+                // [len_div_n, data_ptr]
+                Instruction::Push(n_width),
+                // [n_width, len_div_n, data_ptr]
                 Instruction::U32CheckedMul,
-                // [offset = len_div_8 * 8, data_ptr]
+                // [offset = len_div_n * n, data_ptr]
                 Instruction::Push(i),
                 // [i + offset, data_ptr]
                 Instruction::U32CheckedAdd,
@@ -382,14 +400,14 @@ pub(crate) fn hash_sha256_blake3(
 
     compiler.instructions.extend([
         // [value_0, value_1, ..., value_7, ...old_hash]
-        Instruction::Exec(hash_fn_name),
+        hash_fn_inst,
         // [...hash]
     ]);
 
     compiler.memory.write(
         compiler.instructions,
         result.memory_addr,
-        &[ValueSource::Stack; 8],
+        &vec![ValueSource::Stack; n_width as usize],
     );
 
     Ok(result)

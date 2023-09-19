@@ -154,6 +154,18 @@ macro_rules! ensure_eq_type {
             }
         );
     };
+    (@$type_got:expr, pat $type_expected:pat) => {
+        $crate::prelude::ensure!(
+            matches!($type_got, $type_expected),
+            $crate::kind::TypeMismatchSnafu {
+                context: format!(
+                    "assertion of type {:?} equals to {:?}",
+                    $type_got,
+                    stringify!($type_expected)
+                )
+            }
+        );
+    };
 }
 
 pub trait OptionExt2<T> {
