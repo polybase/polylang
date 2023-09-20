@@ -2194,8 +2194,8 @@ fn compile_ast_function_call(
             Some(ast::Type::String) => Type::String,
             Some(ast::Type::PublicKey) => Type::PublicKey,
             Some(ast::Type::Bytes) => Type::Bytes,
-            Some(ast::Type::ForeignRecord { collection }) => Type::CollectionReference {
-                collection: collection.clone(),
+            Some(ast::Type::ForeignRecord { contract }) => Type::CollectionReference {
+                collection: contract.clone(),
             },
             Some(ast::Type::Boolean) => {
                 return Err(Error::simple("unexpected function call of boolean"))
@@ -3664,7 +3664,7 @@ fn prepare_scope(program: &ast::Program) -> Scope {
 
     for node in &program.nodes {
         match node {
-            ast::RootNode::Collection(c) => {
+            ast::RootNode::Contract(c) => {
                 let mut collection = Collection {
                     name: c.name.clone(),
                     functions: vec![],
@@ -3695,7 +3695,7 @@ fn prepare_scope(program: &ast::Program) -> Scope {
 
                 for item in &c.items {
                     match item {
-                        ast::CollectionItem::Field(f) => {
+                        ast::ContractItem::Field(f) => {
                             collection.fields.push(CollectionField {
                                 name: f.name.clone(),
                                 type_: ast_type_to_type(f.required, &f.type_),
@@ -3703,10 +3703,10 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                                 read: f.decorators.iter().any(|d| d.name == "read"),
                             });
                         }
-                        ast::CollectionItem::Function(f) => {
+                        ast::ContractItem::Function(f) => {
                             collection.functions.push((f.name.clone(), f));
                         }
-                        ast::CollectionItem::Index(_) => {}
+                        ast::ContractItem::Index(_) => {}
                     }
                 }
 
@@ -4581,8 +4581,8 @@ fn ast_param_type_to_type(
         ast::ParameterType::Record => Type::Struct(collection_struct.unwrap().clone()),
         ast::ParameterType::PublicKey => Type::PublicKey,
         ast::ParameterType::Bytes => Type::Bytes,
-        ast::ParameterType::ForeignRecord { collection } => Type::CollectionReference {
-            collection: collection.clone(),
+        ast::ParameterType::ForeignRecord { contract } => Type::CollectionReference {
+            collection: contract.clone(),
         },
         ast::ParameterType::Array(t) => Type::Array(Box::new(ast_type_to_type(true, t))),
         ast::ParameterType::Boolean => {
@@ -4620,8 +4620,8 @@ fn ast_type_to_type(required: bool, type_: &ast::Type) -> Type {
         ast::Type::I64 => Type::PrimitiveType(PrimitiveType::Int64),
         ast::Type::PublicKey => Type::PublicKey,
         ast::Type::Bytes => Type::Bytes,
-        ast::Type::ForeignRecord { collection } => Type::CollectionReference {
-            collection: collection.clone(),
+        ast::Type::ForeignRecord { contract } => Type::CollectionReference {
+            collection: contract.clone(),
         },
         ast::Type::Array(t) => Type::Array(Box::new(ast_type_to_type(true, t))),
         ast::Type::Boolean => Type::PrimitiveType(PrimitiveType::Boolean),

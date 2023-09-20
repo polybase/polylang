@@ -177,7 +177,7 @@ mod tests {
     fn test_parse() {
         let input = "collection Test {}";
         let expected_output = expect![[
-            r#"{"Ok":[{"nodes":[{"Collection":{"name":"Test","decorators":[],"items":[]}}]},[{"kind":"collection","namespace":{"kind":"namespace","value":""},"name":"Test","attributes":[]}]]}"#
+            r#"{"Ok":[{"nodes":[{"Contract":{"name":"Test","decorators":[],"items":[]}}]},[{"kind":"collection","namespace":{"kind":"namespace","value":""},"name":"Test","attributes":[]}]]}"#
         ]];
 
         let output = parse_out_json(input, "");
@@ -188,7 +188,7 @@ mod tests {
     fn test_parse_contract() {
         let input = "contract Test {}";
         let expected_output = expect![[
-            r#"{"Ok":[{"nodes":[{"Collection":{"name":"Test","decorators":[],"items":[]}}]},[{"kind":"collection","namespace":{"kind":"namespace","value":""},"name":"Test","attributes":[]}]]}"#
+            r#"{"Ok":[{"nodes":[{"Contract":{"name":"Test","decorators":[],"items":[]}}]},[{"kind":"collection","namespace":{"kind":"namespace","value":""},"name":"Test","attributes":[]}]]}"#
         ]];
 
         let output = parse_out_json(input, "");
@@ -216,7 +216,7 @@ mod tests {
 
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.is_empty())
+            matches!(&program.nodes[0], ast::RootNode::Contract(ast::Contract { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.is_empty())
         );
     }
 
@@ -237,19 +237,19 @@ mod tests {
 
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 2)
+            matches!(&program.nodes[0], ast::RootNode::Contract(ast::Contract { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 2)
         );
 
         let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(collection) => collection,
+            ast::RootNode::Contract(contract) => contract,
             _ => panic!("Expected collection"),
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "name" && *type_ == ast::Type::String && decorators.is_empty())
+            matches!(&collection.items[0], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "name" && *type_ == ast::Type::String && decorators.is_empty())
         );
         assert!(
-            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "age" && *type_ == ast::Type::Number && decorators.is_empty())
+            matches!(&collection.items[1], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "age" && *type_ == ast::Type::Number && decorators.is_empty())
         );
     }
 
@@ -270,19 +270,19 @@ mod tests {
 
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 2)
+            matches!(&program.nodes[0], ast::RootNode::Contract(ast::Contract { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 2)
         );
 
         let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(collection) => collection,
+            ast::RootNode::Contract(contract) => contract,
             _ => panic!("Expected collection"),
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "asc" && *type_ == ast::Type::String && decorators.is_empty()),
+            matches!(&collection.items[0], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "asc" && *type_ == ast::Type::String && decorators.is_empty()),
         );
         assert!(
-            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "desc" && *type_ == ast::Type::String && decorators.is_empty()),
+            matches!(&collection.items[1], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "desc" && *type_ == ast::Type::String && decorators.is_empty()),
         );
     }
 
@@ -304,16 +304,16 @@ mod tests {
 
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 1)
+            matches!(&program.nodes[0], ast::RootNode::Contract(ast::Contract { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 1)
         );
 
         let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(collection) => collection,
+            ast::RootNode::Contract(contract) => contract,
             _ => panic!("Expected collection"),
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Function(ast::Function {
+            matches!(&collection.items[0], ast::ContractItem::Function(ast::Function {
                 name,
                 decorators,
                 parameters,
@@ -324,7 +324,7 @@ mod tests {
         );
 
         let function = match &collection.items[0] {
-            ast::CollectionItem::Function(function) => function,
+            ast::ContractItem::Function(function) => function,
             _ => panic!("Expected function"),
         };
 
@@ -508,7 +508,7 @@ mod tests {
         assert_eq!(program.nodes.len(), 1);
 
         let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(collection) => collection,
+            ast::RootNode::Contract(contract) => contract,
             _ => panic!("Expected collection"),
         };
 
@@ -517,38 +517,38 @@ mod tests {
 
         assert!(matches!(
             &collection.items[0],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators })
+            ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators })
             if name == "name" && *type_ == ast::Type::String && decorators.is_empty()
         ));
 
         assert!(matches!(
             &collection.items[1],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: false, decorators })
+            ast::ContractItem::Field(ast::Field { name, type_, required: false, decorators })
             if name == "age" && *type_ == ast::Type::Number && decorators.is_empty()
         ));
 
         assert!(matches!(
             &collection.items[2],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators })
+            ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators })
             if name == "balance" && *type_ == ast::Type::Number && decorators.is_empty()
         ));
 
         assert!(matches!(
             &collection.items[3],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators })
+            ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators })
             if name == "publicKey" && *type_ == ast::Type::String && decorators.is_empty()
         ));
 
         assert!(matches!(
             &collection.items[4],
-            ast::CollectionItem::Index(ast::Index {
+            ast::ContractItem::Index(ast::Index {
                 fields,
             }) if fields[0].path == ["field"] && fields[0].order == ast::Order::Asc
                 && fields[1].path == ["field2"] && fields[1].order == ast::Order::Asc
         ));
 
         let function = match &collection.items[5] {
-            ast::CollectionItem::Function(f) => f,
+            ast::ContractItem::Function(f) => f,
             _ => panic!("expected function"),
         };
         dbg!(&function.statements);
@@ -698,14 +698,14 @@ function x() {
         let (program, _) = parse(code, "", &mut program).unwrap();
 
         let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(c) => c,
+            ast::RootNode::Contract(c) => c,
             _ => panic!("expected collection"),
         };
 
         assert_eq!(collection.items.len(), 1);
 
         let field = match &collection.items[0] {
-            ast::CollectionItem::Field(f) => f,
+            ast::ContractItem::Field(f) => f,
             _ => panic!("expected field"),
         };
 
@@ -713,7 +713,7 @@ function x() {
         assert_eq!(
             field.type_,
             ast::Type::ForeignRecord {
-                collection: "Account".to_string(),
+                contract: "Account".to_string(),
             }
         );
     }
@@ -764,7 +764,7 @@ function x() {
             let (program, _) = parse(code, "", &mut program).unwrap();
             assert_eq!(program.nodes.len(), 1);
             let collection = match &program.nodes[0] {
-                ast::RootNode::Collection(c) => c,
+                ast::RootNode::Contract(c) => c,
                 _ => panic!("expected collection"),
             };
             assert_eq!(collection.items.len(), expected.len());
@@ -773,7 +773,7 @@ function x() {
                 assert!(
                     matches!(
                         &collection.items[i],
-                        ast::CollectionItem::Field(ast::Field {
+                        ast::ContractItem::Field(ast::Field {
                             name,
                             type_,
                             required,
@@ -853,7 +853,7 @@ function x() {
             let (program, _) = parse(code, "", &mut program).unwrap();
             assert_eq!(program.nodes.len(), 1);
             let collection = match &program.nodes[0] {
-                ast::RootNode::Collection(c) => c,
+                ast::RootNode::Contract(c) => c,
                 _ => panic!("expected collection"),
             };
             assert_eq!(collection.items.len(), expected.len());
@@ -862,7 +862,7 @@ function x() {
                 assert!(
                     matches!(
                         &collection.items[i],
-                        ast::CollectionItem::Field(ast::Field {
+                        ast::ContractItem::Field(ast::Field {
                             name,
                             type_,
                             required,
@@ -913,7 +913,7 @@ function x() {
         assert_eq!(program.nodes.len(), 1);
 
         let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(c) => c,
+            ast::RootNode::Contract(c) => c,
             _ => panic!("expected collection"),
         };
         assert_eq!(collection.items.len(), 2);
@@ -921,7 +921,7 @@ function x() {
         assert!(
             matches!(
                 &collection.items[1],
-                ast::CollectionItem::Index(ast::Index {
+                ast::ContractItem::Index(ast::Index {
                     fields,
                 }) if fields == &[ast::IndexField { path: vec!["person".to_string(), "name".to_string()], order: ast::Order::Asc }]
             ),
@@ -949,7 +949,7 @@ function x() {
         assert_eq!(program.nodes.len(), 1);
 
         let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(c) => c,
+            ast::RootNode::Contract(c) => c,
             _ => panic!("expected collection"),
         };
 
@@ -959,7 +959,7 @@ function x() {
         assert_eq!(collection.items.len(), 2);
 
         let field = match &collection.items[0] {
-            ast::CollectionItem::Field(f) => f,
+            ast::ContractItem::Field(f) => f,
             _ => panic!("expected field"),
         };
 
@@ -967,7 +967,7 @@ function x() {
         assert_eq!(field.decorators[0].name, "read");
 
         let function = match &collection.items[1] {
-            ast::CollectionItem::Function(f) => f,
+            ast::ContractItem::Function(f) => f,
             _ => panic!("expected function"),
         };
 
@@ -993,14 +993,14 @@ function x() {
         assert_eq!(program.nodes.len(), 1);
 
         let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(c) => c,
+            ast::RootNode::Contract(c) => c,
             _ => panic!("expected collection"),
         };
 
         assert_eq!(collection.items.len(), 1);
 
         let field = match &collection.items[0] {
-            ast::CollectionItem::Field(f) => f,
+            ast::ContractItem::Field(f) => f,
             _ => panic!("expected field"),
         };
 
@@ -1008,7 +1008,7 @@ function x() {
         assert_eq!(
             field.type_,
             ast::Type::Array(Box::new(ast::Type::ForeignRecord {
-                collection: "Person".to_string()
+                contract: "Person".to_string()
             }))
         );
     }
@@ -1095,14 +1095,14 @@ function x() {
         assert_eq!(program.nodes.len(), 1);
 
         let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(c) => c,
+            ast::RootNode::Contract(c) => c,
             _ => panic!("expected collection"),
         };
 
         assert_eq!(collection.items.len(), 2);
 
         let field = match &collection.items[0] {
-            ast::CollectionItem::Field(f) => f,
+            ast::ContractItem::Field(f) => f,
             _ => panic!("expected field"),
         };
 
@@ -1118,7 +1118,7 @@ function x() {
         );
 
         let function = match &collection.items[1] {
-            ast::CollectionItem::Function(f) => f,
+            ast::ContractItem::Function(f) => f,
             _ => panic!("expected function"),
         };
 
@@ -1158,14 +1158,14 @@ function x() {
         assert_eq!(program.nodes.len(), 1);
 
         let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(c) => c,
+            ast::RootNode::Contract(c) => c,
             _ => panic!("expected collection"),
         };
 
         assert_eq!(collection.items.len(), 2);
 
         let field = match &collection.items[0] {
-            ast::CollectionItem::Field(f) => f,
+            ast::ContractItem::Field(f) => f,
             _ => panic!("expected publicKeys"),
         };
 

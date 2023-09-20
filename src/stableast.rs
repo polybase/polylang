@@ -275,7 +275,7 @@ impl<'a> Root<'a> {
         let mut root = Root(vec![]);
         for node in &program.nodes {
             root.0.push(match node {
-                ast::RootNode::Collection(c) => RootNode::Collection(Collection {
+                ast::RootNode::Contract(c) => RootNode::Collection(Collection {
                     namespace: Namespace {
                         value: Cow::Borrowed(namespace),
                     },
@@ -284,7 +284,7 @@ impl<'a> Root<'a> {
                         .items
                         .iter()
                         .map(|item| match item {
-                            ast::CollectionItem::Field(f) => {
+                            ast::ContractItem::Field(f) => {
                                 CollectionAttribute::Property(Property {
                                     name: Cow::Borrowed(&f.name),
                                     type_: Type::from_ast_type(&f.type_),
@@ -296,45 +296,39 @@ impl<'a> Root<'a> {
                                     required: f.required,
                                 })
                             }
-                            ast::CollectionItem::Function(f) => {
-                                CollectionAttribute::Method(Method {
-                                    name: Cow::Borrowed(&f.name),
-                                    code: Cow::Borrowed(&f.statements_code),
-                                    attributes: {
-                                        let mut attributes = vec![];
+                            ast::ContractItem::Function(f) => CollectionAttribute::Method(Method {
+                                name: Cow::Borrowed(&f.name),
+                                code: Cow::Borrowed(&f.statements_code),
+                                attributes: {
+                                    let mut attributes = vec![];
 
-                                        for param in &f.parameters {
-                                            attributes.push(MethodAttribute::Parameter(
-                                                Parameter {
-                                                    name: Cow::Borrowed(&param.name),
-                                                    type_: Type::from_ast_parameter_type(
-                                                        &param.type_,
-                                                    ),
-                                                    required: param.required,
-                                                },
-                                            ));
-                                        }
+                                    for param in &f.parameters {
+                                        attributes.push(MethodAttribute::Parameter(Parameter {
+                                            name: Cow::Borrowed(&param.name),
+                                            type_: Type::from_ast_parameter_type(&param.type_),
+                                            required: param.required,
+                                        }));
+                                    }
 
-                                        if let Some(return_type) = &f.return_type {
-                                            attributes.push(MethodAttribute::ReturnValue(
-                                                ReturnValue {
-                                                    name: Cow::Borrowed("_"),
-                                                    type_: Type::from_ast_type(return_type),
-                                                },
-                                            ));
-                                        }
+                                    if let Some(return_type) = &f.return_type {
+                                        attributes.push(MethodAttribute::ReturnValue(
+                                            ReturnValue {
+                                                name: Cow::Borrowed("_"),
+                                                type_: Type::from_ast_type(return_type),
+                                            },
+                                        ));
+                                    }
 
-                                        for decorator in &f.decorators {
-                                            attributes.push(MethodAttribute::Directive(
-                                                Directive::from_decorator_ast(decorator),
-                                            ));
-                                        }
+                                    for decorator in &f.decorators {
+                                        attributes.push(MethodAttribute::Directive(
+                                            Directive::from_decorator_ast(decorator),
+                                        ));
+                                    }
 
-                                        attributes
-                                    },
-                                })
-                            }
-                            ast::CollectionItem::Index(i) => CollectionAttribute::Index(Index {
+                                    attributes
+                                },
+                            }),
+                            ast::ContractItem::Index(i) => CollectionAttribute::Index(Index {
                                 fields: i
                                     .fields
                                     .iter()
@@ -412,8 +406,8 @@ impl<'a> Type<'a> {
                     })
                     .collect(),
             }),
-            ast::Type::ForeignRecord { collection } => Type::ForeignRecord(ForeignRecord {
-                collection: Cow::Borrowed(collection),
+            ast::Type::ForeignRecord { contract } => Type::ForeignRecord(ForeignRecord {
+                collection: Cow::Borrowed(contract),
             }),
             ast::Type::PublicKey => Type::PublicKey(PublicKey {}),
             ast::Type::Bytes => Type::Primitive(Primitive {
@@ -469,11 +463,9 @@ impl<'a> Type<'a> {
                     .collect(),
             }),
             ast::ParameterType::Record => Type::Record(Record {}),
-            ast::ParameterType::ForeignRecord { collection } => {
-                Type::ForeignRecord(ForeignRecord {
-                    collection: Cow::Borrowed(collection.as_str()),
-                })
-            }
+            ast::ParameterType::ForeignRecord { contract } => Type::ForeignRecord(ForeignRecord {
+                collection: Cow::Borrowed(contract.as_str()),
+            }),
             ast::ParameterType::PublicKey => Type::PublicKey(PublicKey {}),
             ast::ParameterType::Bytes => Type::Primitive(Primitive {
                 value: PrimitiveType::Bytes,

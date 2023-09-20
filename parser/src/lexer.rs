@@ -113,7 +113,7 @@ impl std::fmt::Display for Tok<'_> {
             Tok::Of => write!(f, "of"),
             Tok::Function => write!(f, "function"),
             Tok::Index => write!(f, "index"),
-            Tok::Collection => write!(f, "collection"),
+            Tok::Collection => write!(f, "contract"),
             Tok::Contract => write!(f, "contract"),
             Tok::LBrace => write!(f, "{{"),
             Tok::RBrace => write!(f, "}}"),
