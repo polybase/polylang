@@ -44,7 +44,7 @@ extern {
         "function" => lexer::Tok::Function,
         "@index" => lexer::Tok::Index,
         "collection" => lexer::Tok::Collection,
-        "contract" => lexer::Tok::Collection,
+        "contract" => lexer::Tok::Contract,
         "eth#" => lexer::Tok::EthLiteralStart,
         "falcon#" => lexer::Tok::FalconLiteralStart,
         "{" => lexer::Tok::LBrace,

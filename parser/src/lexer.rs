@@ -38,6 +38,7 @@ pub enum Tok<'input> {
     Function,
     Index,
     Collection,
+    Contract,
     LBrace,
     RBrace,
     LBracket,
@@ -113,6 +114,7 @@ impl std::fmt::Display for Tok<'_> {
             Tok::Function => write!(f, "function"),
             Tok::Index => write!(f, "index"),
             Tok::Collection => write!(f, "collection"),
+            Tok::Contract => write!(f, "contract"),
             Tok::LBrace => write!(f, "{{"),
             Tok::RBrace => write!(f, "}}"),
             Tok::LBracket => write!(f, "["),
@@ -233,7 +235,7 @@ const KEYWORDS: &[(Tok, &str)] = &[
     (Tok::Function, "function"),
     (Tok::Index, "@index"),
     (Tok::Collection, "collection"),
-    (Tok::Collection, "contract"),
+    (Tok::Contract, "contract"),
     (Tok::PublicKey, "PublicKey"),
     (Tok::Bytes, "bytes"),
 ];
@@ -814,7 +816,7 @@ mod tests {
         let input = "contract collection";
         let mut lexer = Lexer::new(input);
 
-        assert_eq!(lexer.next(), Some(Ok((0, Tok::Collection, 8))));
+        assert_eq!(lexer.next(), Some(Ok((0, Tok::Contract, 8))));
         assert_eq!(lexer.next(), Some(Ok((9, Tok::Collection, 19))));
     }
 
