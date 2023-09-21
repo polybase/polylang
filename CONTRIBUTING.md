@@ -7,11 +7,19 @@ adhering to the guidelines as closely as possible will make the contribution pro
 
 We welcome all kinds of contributions - bug reports, feature requests, or enhancement requests.
 
-## Project Setup
+## How to contribute?
 
-### Project Structure
+  1. Create a tracking issue in the `Polylang` repo here - https://github.com/polybase/polylang/issues.
 
-The `Polylang` repository is a `Cargo` [workspace](https://doc.rust-lang.org/cargo/reference/workspaces.html) comprising of the following packages with the [package
+  2. Fork the `Polylang` project, and create a clone from your fork.
+
+  3. Make the code changes in a branch of your clone. Ensure that you test your changes locally.
+
+  4. Create a Pull Request (PR) with your code changes linking the issue created in step 1.
+
+## Setup
+
+The `Polylang` repository is a modular `Cargo` [workspace](https://doc.rust-lang.org/cargo/reference/workspaces.html) comprising of the following packages with the [package
 name](https://doc.rust-lang.org/cargo/reference/manifest.html#the-name-field) in parentheses:
 
   * parser (`polylang_parser`)
@@ -23,15 +31,13 @@ name](https://doc.rust-lang.org/cargo/reference/manifest.html#the-name-field) in
 
 in addition to the `Polylang` [root package](https://doc.rust-lang.org/cargo/reference/workspaces.html#root-package).
 
-### Setup
-
-Clone the `Polylang` repository:
+The first step is to fork the `Polylang` repository on Github, and clone your fork. Navigate to your clone:
 
 ```bash
-$ https://github.com/polybase/polylang
+$ cd polylang # this is your clone
 ```
 
-Build the project:
+Now build the project:
 
 ```bash
 $ cargo build
@@ -64,7 +70,3 @@ For instance, to run the tests for the `Polylang` prover:
 ```bash
 $ cargo test -p polylang-prover
 ```
-
-## How to contribute?
-
-### Style Guide
