@@ -53,3 +53,7 @@ You can download and test that collections from the testnet still parse by runni
 ```bash
 ./pull-collections && cargo test
 ```
+
+## Contribution
+
+Contributions of all sorts (bug reports, enhancement requests etc.) are welcome. For more information on contribution tips and guidelines, please see the [Contributing](CONTRIBUTING.md) page.

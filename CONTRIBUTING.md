@@ -59,7 +59,7 @@ $ cargo test -p <package-name>
 
 Note that the `<package-name>` must be the value of the `name` field in the package's `Cargo.toml` file, and **not** the name in the workspace's `members` list.
 
-For instance, to run tests for the `Polylang` prover:
+For instance, to run the tests for the `Polylang` prover:
 
 ```bash
 $ cargo test -p polylang-prover
