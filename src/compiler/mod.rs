@@ -373,10 +373,10 @@ lazy_static::lazy_static! {
 
         builtins.push(("hashString".to_string(), None, Function::Builtin(|compiler, scope, args| string::hash(compiler, scope, args))));
 
-        // bytes and collection reference have the same layout as strings,
+        // bytes and contract reference have the same layout as strings,
         // so we can reuse the hashing function
         builtins.push(("hashBytes".to_owned(), None, Function::Builtin(|compiler, scope, args| string::hash(compiler, scope, args))));
-        builtins.push(("hashCollectionReference".to_owned(), None, Function::Builtin(|compiler, scope, args| string::hash(compiler, scope, args))));
+        builtins.push(("hashContractReference".to_owned(), None, Function::Builtin(|compiler, scope, args| string::hash(compiler, scope, args))));
 
         builtins.push(("hashArray".to_owned(), None, Function::Builtin(array::hash)));
 
@@ -557,7 +557,7 @@ lazy_static::lazy_static! {
         ));
 
         builtins.push((
-            "readAdviceCollectionReference".to_string(),
+            "readAdviceContractReference".to_string(),
             None,
             Function::Builtin(|compiler, _, _args| {
                 let old_root_scope = compiler.root_scope;
@@ -572,7 +572,7 @@ lazy_static::lazy_static! {
                 compiler.root_scope = old_root_scope;
 
                 Ok(Symbol {
-                    type_: Type::CollectionReference { collection: "".to_owned() },
+                    type_: Type::ContractReference { contract: "".to_owned() },
                     ..result
                 })
             }),
@@ -960,7 +960,7 @@ fn struct_field(
 ) -> Result<Symbol> {
     let struct_ = match &struct_symbol.type_ {
         Type::Struct(struct_) => struct_,
-        Type::CollectionReference { collection: _ } if field_name == "id" => {
+        Type::ContractReference { contract: _ } if field_name == "id" => {
             return Ok(Symbol {
                 type_: Type::String,
                 memory_addr: struct_symbol.memory_addr,
@@ -2194,8 +2194,8 @@ fn compile_ast_function_call(
             Some(ast::Type::String) => Type::String,
             Some(ast::Type::PublicKey) => Type::PublicKey,
             Some(ast::Type::Bytes) => Type::Bytes,
-            Some(ast::Type::ForeignRecord { contract }) => Type::CollectionReference {
-                collection: contract.clone(),
+            Some(ast::Type::ForeignRecord { contract }) => Type::ContractReference {
+                contract: contract.clone(),
             },
             Some(ast::Type::Boolean) => {
                 return Err(Error::simple("unexpected function call of boolean"))
@@ -2823,18 +2823,18 @@ fn log(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Result<Sy
     })
 }
 
-fn read_advice_collection_reference(compiler: &mut Compiler, collection: String) -> Result<Symbol> {
+fn read_advice_collection_reference(compiler: &mut Compiler, contract: String) -> Result<Symbol> {
     let r = compile_function_call(
         compiler,
         BUILTINS_SCOPE
-            .find_function("readAdviceCollectionReference")
+            .find_function("readAdviceContractReference")
             .unwrap(),
         &[],
         None,
     )?;
 
     Ok(Symbol {
-        type_: Type::CollectionReference { collection },
+        type_: Type::ContractReference { contract },
         ..r
     })
 }
@@ -3328,10 +3328,10 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Result<Symbol> {
             &[value],
             None,
         )?,
-        Type::CollectionReference { .. } => compile_function_call(
+        Type::ContractReference { .. } => compile_function_call(
             compiler,
             BUILTINS_SCOPE
-                .find_function("hashCollectionReference")
+                .find_function("hashContractReference")
                 .unwrap(),
             &[value],
             None,
@@ -3543,8 +3543,8 @@ fn read_advice_generic(compiler: &mut Compiler, type_: &Type) -> Result<Symbol> 
             &[],
             None,
         ),
-        Type::CollectionReference { collection } => {
-            read_advice_collection_reference(compiler, collection.clone())
+        Type::ContractReference { contract } => {
+            read_advice_collection_reference(compiler, contract.clone())
         }
         Type::Array(t) => read_advice_array(compiler, t),
         Type::Struct(s) => {
@@ -4359,10 +4359,17 @@ fn compile_check_eq_or_ownership(
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
 
     let is_eq = match &field.type_ {
+<<<<<<< HEAD
         Type::PublicKey => compile_eq(compiler, &field, auth_pk)?,
         Type::Nullable(t) if **t == Type::PublicKey => compile_eq(compiler, &field, auth_pk)?,
         Type::CollectionReference { collection } => {
             let collection_type = compiler.root_scope.find_collection(&collection).unwrap();
+=======
+        Type::PublicKey => compile_eq(compiler, &field, auth_pk),
+        Type::Nullable(t) if **t == Type::PublicKey => compile_eq(compiler, &field, auth_pk),
+        Type::ContractReference { contract } => {
+            let collection_type = compiler.root_scope.find_collection(&contract).unwrap();
+>>>>>>> 5b6355c (Changes:)
             let collection_record_hashes = compiler.get_record_dependency(collection_type).unwrap();
             let id = struct_field(compiler, &field, "id").unwrap();
 
@@ -4581,8 +4588,8 @@ fn ast_param_type_to_type(
         ast::ParameterType::Record => Type::Struct(collection_struct.unwrap().clone()),
         ast::ParameterType::PublicKey => Type::PublicKey,
         ast::ParameterType::Bytes => Type::Bytes,
-        ast::ParameterType::ForeignRecord { contract } => Type::CollectionReference {
-            collection: contract.clone(),
+        ast::ParameterType::ForeignRecord { contract } => Type::ContractReference {
+            contract: contract.clone(),
         },
         ast::ParameterType::Array(t) => Type::Array(Box::new(ast_type_to_type(true, t))),
         ast::ParameterType::Boolean => {
@@ -4620,8 +4627,8 @@ fn ast_type_to_type(required: bool, type_: &ast::Type) -> Type {
         ast::Type::I64 => Type::PrimitiveType(PrimitiveType::Int64),
         ast::Type::PublicKey => Type::PublicKey,
         ast::Type::Bytes => Type::Bytes,
-        ast::Type::ForeignRecord { contract } => Type::CollectionReference {
-            collection: contract.clone(),
+        ast::Type::ForeignRecord { contract } => Type::ContractReference {
+            contract: contract.clone(),
         },
         ast::Type::Array(t) => Type::Array(Box::new(ast_type_to_type(true, t))),
         ast::Type::Boolean => Type::PrimitiveType(PrimitiveType::Boolean),

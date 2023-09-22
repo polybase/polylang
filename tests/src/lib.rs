@@ -798,8 +798,8 @@ fn call_auth_delegate(use_correct_pk: bool) -> Result<(), Box<dyn std::error::Er
                 [
                     (
                         "user",
-                        CollectionReference {
-                            collection: "User",
+                        ContractReference {
+                            contract: "User",
                         },
                     ),
                 ]

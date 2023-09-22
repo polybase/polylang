@@ -92,8 +92,10 @@ pub enum Type {
     #[default]
     String,
     Bytes,
-    CollectionReference {
-        collection: String,
+    #[serde(rename = "CollectionReference")]
+    ContractReference {
+        #[serde(rename = "collection")]
+        contract: String,
     },
     Array(Box<Type>),
     Map(Box<Type>, Box<Type>),
@@ -112,7 +114,7 @@ impl Type {
             Type::PrimitiveType(pt) => pt.miden_width(),
             Type::String => STRING_MIDEN_WIDTH,
             Type::Bytes => BYTES_MIDEN_WIDTH,
-            Type::CollectionReference { .. } => BYTES_MIDEN_WIDTH,
+            Type::ContractReference { .. } => BYTES_MIDEN_WIDTH,
             Type::Array(_) => ARRAY_MIDEN_WIDTH,
             Type::Map(_, _) => MAP_MIDEN_WIDTH,
             Type::Hash => 4,
@@ -134,7 +136,7 @@ impl Type {
             Type::PrimitiveType(PrimitiveType::Float64) => Value::Float64(0.0),
             Type::String => Value::String("".to_owned()),
             Type::Bytes => Value::Bytes(vec![]),
-            Type::CollectionReference { .. } => Value::CollectionReference(Vec::new()),
+            Type::ContractReference { .. } => Value::CollectionReference(Vec::new()),
             Type::Array(_) => Value::Array(Vec::new()),
             Type::Map(_, _) => Value::Map(Vec::new()),
             Type::Hash => Value::Hash([0; 4]),
@@ -464,7 +466,7 @@ impl TypeReader for Type {
 
                 Ok(Value::Bytes(bytes))
             }
-            Type::CollectionReference { .. } => {
+            Type::ContractReference { .. } => {
                 let mut bytes = vec![];
 
                 let length = reader(addr).context(InvalidAddressSnafu {
@@ -735,7 +737,7 @@ impl Parser<str> for Type {
                 }
                 Ok(Value::Bytes(bytes))
             }
-            Type::CollectionReference { .. } => {
+            Type::ContractReference { .. } => {
                 let mut bytes = vec![];
                 if !value.is_empty() {
                     for byte in value.split(',') {
@@ -902,7 +904,7 @@ impl Parser<serde_json::Value> for Type {
                 }
                 Ok(Value::Bytes(bytes))
             }
-            Type::CollectionReference { .. } => {
+            Type::ContractReference { .. } => {
                 let mut bytes = vec![];
                 if !value.is_null() {
                     // let collection_id = value
