@@ -9,16 +9,6 @@ cd js
 yarn build
 ```
 
-### Go
-
-```bash
-cargo build --release
-cp target/release/libpolylang.a go/parser/
-
-cd go
-go run .
-```
-
 ## Compiling Polylang to Miden
 
 You can use the `compile` binary to compile Polylang functions to Miden. Compile outputs the generated Miden assembly to stdout, you can pipe it to `miden-run` to run it.
