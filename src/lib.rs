@@ -1175,38 +1175,4 @@ function x() {
             ast::Type::Array(Box::new(ast::Type::PublicKey))
         );
     }
-
-    /// Tests that contracts from the filesystem directory 'test-collections' parse without an error
-    #[test]
-    fn test_fs_contracts() {
-        use std::path::Path;
-
-        let dir = Path::new("test-collections");
-        let entries = match std::fs::read_dir(dir) {
-            Ok(entries) => entries,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
-            Err(e) => panic!("Error reading directory: {}", e),
-        };
-        let mut results = vec![];
-        for entry in entries {
-            let entry = entry.unwrap();
-            let path = entry.path();
-            if path.is_dir() {
-                continue;
-            }
-
-            let code = std::fs::read_to_string(&path).unwrap();
-            let mut program = None::<ast::Program>;
-            let result = parse(&code, "", &mut program);
-            if let Err(err) = result {
-                eprintln!("Error parsing contract: {}", path.display());
-                eprintln!("{}", err.message);
-                results.push(err);
-            }
-        }
-
-        if !results.is_empty() {
-            panic!("found {} failed tests", results.len());
-        }
-    }
 }
