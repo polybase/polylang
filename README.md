@@ -38,12 +38,6 @@ You can use the `compile` binary to compile Polylang functions to Miden. Compile
 cargo test && (cd parser && cargo test)
 ```
 
-You can download and test that contracts from the testnet still parse by running:
-
-```bash
-./pull-collections && cargo test
-```
-
 ## Contribution
 
 Contributions of all sorts (bug reports, enhancement requests etc.) are welcome. For more information on contribution tips and guidelines, please see the [Contributing](CONTRIBUTING.md) page.
