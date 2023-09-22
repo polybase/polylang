@@ -203,11 +203,11 @@ impl Key {
                 y.copy_from_slice(&bytes[32..]);
             }
             33 => {
-                let pk = secp256k1::PublicKey::from_slice(bytes).with_whatever_context(|e| {
+                let pk = libsecp256k1::PublicKey::parse_compressed(bytes.try_into().unwrap()).map_err(|e| e.to_string()).with_whatever_context(|e| {
                     format!("invalid secp256k1 public key bytes: {e}")
                 })?;
 
-                let uncompressed = pk.serialize_uncompressed();
+                let uncompressed: [u8; 65] = pk.serialize();
                 x.copy_from_slice(&uncompressed[1..33]);
                 y.copy_from_slice(&uncompressed[33..]);
             }

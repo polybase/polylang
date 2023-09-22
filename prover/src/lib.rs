@@ -1,9 +1,29 @@
+use std::collections::HashMap;
+
 use abi::{publickey, Abi, Parser, Type, TypeReader, Value};
 use error::prelude::*;
 use miden::{ExecutionProof, ProofOptions};
 use miden_processor::{math::Felt, utils::Serializable, Program, ProgramInfo, StackInputs};
 use polylang::compiler;
-use std::{collections::HashMap, fmt::Debug};
+
+#[derive(Debug)]
+enum MidenError {
+    Assembly(miden::AssemblyError),
+    Execution(miden::ExecutionError),
+    Input(miden::InputError),
+}
+
+impl std::fmt::Display for MidenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MidenError::Assembly(e) => write!(f, "{}", e),
+            MidenError::Execution(e) => write!(f, "{}", e),
+            MidenError::Input(e) => write!(f, "{}", e),
+        }
+    }
+}
+
+impl std::error::Error for MidenError {}
 
 const fn mont_red_cst(x: u128) -> u64 {
     // See reference above for a description of the following implementation.
@@ -59,9 +79,13 @@ pub fn hash_this(type_: Type, this: &Value, salts: Option<&[u32]>) -> Result<[u6
 
     let assembler = miden::Assembler::default()
         .with_library(&miden_stdlib::StdLibrary::default())
+        .map_err(MidenError::Assembly)
         .wrap_err()?;
 
-    let program = assembler.compile(hasher_program).wrap_err()?;
+    let program = assembler
+        .compile(hasher_program)
+        .map_err(MidenError::Assembly)
+        .wrap_err()?;
 
     let execution_result = miden::execute(
         &program,
@@ -69,9 +93,11 @@ pub fn hash_this(type_: Type, this: &Value, salts: Option<&[u32]>) -> Result<[u6
         miden::MemAdviceProvider::from(
             miden::AdviceInputs::default()
                 .with_stack_values(this.serialize().into_iter())
+                .map_err(MidenError::Input)
                 .wrap_err()?,
         ),
     )
+    .map_err(MidenError::Execution)
     .wrap_err()?;
 
     execution_result.stack_outputs().stack()[0..4]
@@ -89,9 +115,13 @@ pub fn compile_program(abi: &Abi, miden_code: &str) -> Result<Program> {
     };
     let assembler = miden::Assembler::default()
         .with_library(&std_library)
+        .map_err(MidenError::Assembly)
         .wrap_err()?;
 
-    assembler.compile(miden_code).wrap_err()
+    assembler
+        .compile(miden_code)
+        .map_err(MidenError::Assembly)
+        .wrap_err()
 }
 
 pub struct Inputs {
@@ -222,7 +252,9 @@ impl Inputs {
         &self,
         other_records: &HashMap<String, Vec<(Type, Value, Value, Vec<u32>)>>,
     ) -> Result<StackInputs> {
-        StackInputs::try_from_values(self.stack_values(other_records)).wrap_err()
+        StackInputs::try_from_values(self.stack_values(other_records))
+            .map_err(MidenError::Input)
+            .wrap_err()
     }
 
     fn this_value(&self) -> Result<Value> {
@@ -425,6 +457,7 @@ impl Inputs {
         Ok(miden::MemAdviceProvider::from(
             miden::AdviceInputs::default()
                 .with_stack_values(advice_tape)
+                .map_err(MidenError::Input)
                 .wrap_err()?
                 .with_map(advice_map),
         ))
@@ -567,7 +600,7 @@ pub fn run<'a>(
             Err(e) => {
                 // TODO: store vector of errors instead.
                 if err.is_none() {
-                    err = Some(Error::wrapped(Box::new(e)));
+                    err = Some(Error::wrapped(Box::new(MidenError::Execution(e))));
                 }
             }
         }
@@ -644,6 +677,7 @@ pub fn run<'a>(
         move || {
             let (_stack_outputs, proof) =
                 miden_prover::prove(program, input_stack, advice_tape, ProofOptions::default())
+                    .map_err(MidenError::Execution)
                     .wrap_err()?;
 
             Ok(proof)

@@ -16,6 +16,14 @@ pub struct Error {
     pub message: String,
 }
 
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        self.message.fmt(f)
+    }
+}
+
+impl std::error::Error for Error {}
+
 fn parse_error_to_error<T>(input: &str, error: ParseError<usize, T, LexicalError>) -> Error
 where
     T: std::fmt::Display + std::fmt::Debug,
