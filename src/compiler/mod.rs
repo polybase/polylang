@@ -4359,17 +4359,10 @@ fn compile_check_eq_or_ownership(
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
 
     let is_eq = match &field.type_ {
-<<<<<<< HEAD
         Type::PublicKey => compile_eq(compiler, &field, auth_pk)?,
         Type::Nullable(t) if **t == Type::PublicKey => compile_eq(compiler, &field, auth_pk)?,
-        Type::CollectionReference { collection } => {
-            let collection_type = compiler.root_scope.find_collection(&collection).unwrap();
-=======
-        Type::PublicKey => compile_eq(compiler, &field, auth_pk),
-        Type::Nullable(t) if **t == Type::PublicKey => compile_eq(compiler, &field, auth_pk),
         Type::ContractReference { contract } => {
             let collection_type = compiler.root_scope.find_collection(&contract).unwrap();
->>>>>>> 5b6355c (Changes:)
             let collection_record_hashes = compiler.get_record_dependency(collection_type).unwrap();
             let id = struct_field(compiler, &field, "id").unwrap();
 
