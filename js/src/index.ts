@@ -11,21 +11,21 @@ export interface Program {
 }
 
 export interface RootNode {
-  Collection: Collection
+  Contract: Contract
   Function: Function
 }
 
-export type Collection = any
+export type Contract = any
 export type Function = any
 
 export async function parse(code: string, namespace: string): Promise<[Program, any]> {
   return unwrap(JSON.parse((await parser).parse(code, namespace)))
 }
 
-export interface JSCollection {
+export interface JSContract {
   code: string
 }
 
-export async function generateJSCollection(collection: any): Promise<JSCollection> {
-  return unwrap(JSON.parse((await parser).generate_js_collection(JSON.stringify(collection))))
+export async function generateJSContract(contract: any): Promise<JSContract> {
+  return unwrap(JSON.parse((await parser).generate_js_contract(JSON.stringify(contract))))
 }

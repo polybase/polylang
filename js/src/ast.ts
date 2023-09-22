@@ -1,12 +1,12 @@
 export type Root = Node[]
 
-export type Node = Collection | { kind: string }
+export type Node = Contract | { kind: string }
 
-export interface Collection {
-  kind: 'collection'
+export interface Contract {
+  kind: 'contract'
   namespace: Namespace
   name: string
-  attributes: CollectionAttribute[]
+  attributes: ContractAttribute[]
 }
 
 export interface Namespace {
@@ -14,7 +14,7 @@ export interface Namespace {
   value: string
 }
 
-export type CollectionAttribute = Property | Index | Method | Directive
+export type ContractAttribute = Property | Index | Method | Directive
 
 export interface Property {
   kind: 'property',
@@ -83,7 +83,7 @@ export interface ObjectField {
 
 export interface ForeignRecord {
   kind: 'foreignrecord',
-  collection: string
+  contract: string
 }
 
 export interface PublicKey {

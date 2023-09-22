@@ -57,7 +57,7 @@ macro_rules! consistency_checks {
 
 fn run(
     polylang_code: &str,
-    collection: &str,
+    contract: &str,
     function: &str,
     this: serde_json::Value,
     args: Vec<serde_json::Value>,
@@ -66,7 +66,7 @@ fn run(
 ) -> Result<(abi::Abi, polylang_prover::RunOutput), error::Error> {
     let program = polylang::parse_program(polylang_code).unwrap();
 
-    let (miden_code, abi) = polylang::compiler::compile(program, Some(collection), function)?;
+    let (miden_code, abi) = polylang::compiler::compile(program, Some(contract), function)?;
 
     let program = polylang_prover::compile_program(&abi, &miden_code).unwrap();
     let inputs = polylang_prover::Inputs::new(
@@ -80,18 +80,18 @@ fn run(
         args,
         {
             let mut hm = HashMap::new();
-            for (collection, records) in other_records {
+            for (contract, records) in other_records {
                 let col = abi
-                    .other_collection_types
+                    .other_contract_types
                     .iter()
                     .find_map(|t| match t {
-                        abi::Type::Struct(s) if s.name == collection => Some(s),
+                        abi::Type::Struct(s) if s.name == contract => Some(s),
                         _ => None,
                     })
                     .unwrap();
 
                 hm.insert(
-                    collection,
+                    contract,
                     records
                         .into_iter()
                         .map(|record| {
@@ -315,7 +315,7 @@ fn call_any_call_contract() {
 #[test]
 fn call_constructor_no_auth() {
     let code = r#"
-        collection Account {
+        contract Account {
             id: string;
 
             constructor (id: string) {
@@ -362,7 +362,7 @@ fn call_constructor_no_auth() {
 #[test]
 fn call_constructor_with_auth() {
     let code = r#"
-        collection Account {
+        contract Account {
             id: string;
             pk: PublicKey;
 
@@ -425,7 +425,7 @@ fn call_constructor_with_auth() {
 
 fn call_auth_public_key(use_correct_pk: bool) -> Result<(), Box<dyn std::error::Error>> {
     let code = r#"
-        collection Account {
+        contract Account {
             id: string;
             pk: PublicKey;
 
@@ -515,7 +515,7 @@ fn call_auth_public_key_wrong_pk() {
 #[test]
 fn call_auth_public_key_no_pk() {
     let code = r#"
-        collection Account {
+        contract Account {
             id: string;
             pk: PublicKey;
 
@@ -553,7 +553,7 @@ fn call_auth_public_key_no_pk() {
 #[test]
 fn call_auth_public_key_allow_all() {
     let code = r#"
-        collection Account {
+        contract Account {
             id: string;
             pk: PublicKey;
 
@@ -620,7 +620,7 @@ fn call_auth_public_key_allow_all() {
 #[test]
 fn call_auth_no_directive() {
     let code = r#"
-        collection Account {
+        contract Account {
             id: string;
             pk: PublicKey;
 
@@ -655,10 +655,10 @@ fn call_auth_no_directive() {
 }
 
 #[test]
-fn call_collection_auth_any() {
+fn call_contract_auth_any() {
     let code = r#"
         @call
-        collection Account {
+        contract Account {
             id: string;
             pk: PublicKey;
 
@@ -718,13 +718,13 @@ fn call_collection_auth_any() {
 
 fn call_auth_delegate(use_correct_pk: bool) -> Result<(), Box<dyn std::error::Error>> {
     let code = r#"
-        collection User {
+        contract User {
             id: string;
             @delegate
             pk: PublicKey;
         }
 
-        collection Account {
+        contract Account {
             id: string;
             name: string;
             user: User;
@@ -774,7 +774,7 @@ fn call_auth_delegate(use_correct_pk: bool) -> Result<(), Box<dyn std::error::Er
             ("name".to_owned(), abi::Value::String("test2".to_owned())),
             (
                 "user".to_owned(),
-                abi::Value::CollectionReference("user1".bytes().collect()),
+                abi::Value::ContractReference("user1".bytes().collect()),
             ),
         ]),
     );
@@ -826,7 +826,7 @@ fn call_auth_literal_pk(use_correct_pk: bool) -> Result<(), Box<dyn std::error::
     let key = fixtures::pk1_key().to_64_byte_hex();
     let code = format!(
         r#"
-        collection Account {{
+        contract Account {{
             id: string;
             name: string;
 
@@ -897,7 +897,7 @@ fn call_auth_literal_compressed() {
     let key = fixtures::pk1_key().to_compressed_33_byte_hex();
     let code = format!(
         r#"
-        collection Account {{
+        contract Account {{
             id: string;
             name: string;
 
@@ -948,7 +948,7 @@ fn call_auth_literal_compressed() {
 #[test]
 fn read_auth_field_correct_ctx() {
     let code = r#"
-        collection Account {
+        contract Account {
             id: string;
             @read
             pk: PublicKey;
@@ -1000,7 +1000,7 @@ fn read_auth_field_correct_ctx() {
 #[test]
 fn read_auth_field_wrong_ctx() {
     let code = r#"
-        collection Account {
+        contract Account {
             id: string;
             @read
             pk: PublicKey;
@@ -1027,7 +1027,7 @@ fn read_auth_field_wrong_ctx() {
 #[test]
 fn read_auth_field_no_ctx() {
     let code = r#"
-        collection Account {
+        contract Account {
             id: string;
             @read
             pk: PublicKey;
@@ -1077,10 +1077,10 @@ fn read_auth_field_no_ctx() {
 }
 
 #[test]
-fn read_auth_collection_with_pk() {
+fn read_auth_contract_with_pk() {
     let code = r#"
         @read
-        collection Account {
+        contract Account {
             id: string;
             pk: PublicKey;
         }
@@ -1129,10 +1129,10 @@ fn read_auth_collection_with_pk() {
 }
 
 #[test]
-fn read_auth_collection_without_pk() {
+fn read_auth_contract_without_pk() {
     let code = r#"
         @read
-        collection Account {
+        contract Account {
             id: string;
             pk: PublicKey;
         }
@@ -1184,7 +1184,7 @@ fn read_auth_collection_without_pk() {
 fn field_hashes() {
     let code = r#"
         @public
-        collection Account {
+        contract Account {
             id: string;
             balance: u32;
 
@@ -1248,7 +1248,7 @@ fn field_hashes() {
 fn field_dependencies() {
     let code = r#"
         @public
-        collection Account {
+        contract Account {
             id: string;
             name: string;
             balance: u32;
@@ -1320,7 +1320,7 @@ fn index_of() {
     ) -> Result<abi::Value, error::Error> {
         let code = r#"
             @public
-            collection Account {
+            contract Account {
                 id: string;
                 result: i32;
 

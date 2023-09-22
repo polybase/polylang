@@ -30,7 +30,7 @@ pub enum StdVersion {
 /// An array of record hashes.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RecordHashes {
-    pub collection: String,
+    pub contract: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -40,7 +40,7 @@ pub struct Abi {
     pub this_type: Option<Type>,
     pub param_types: Vec<Type>,
     pub other_records: Vec<RecordHashes>,
-    pub other_collection_types: Vec<Type>,
+    pub other_contract_types: Vec<Type>,
     pub dependent_fields: Vec<(String, Type)>,
 }
 
@@ -92,9 +92,7 @@ pub enum Type {
     #[default]
     String,
     Bytes,
-    #[serde(rename = "CollectionReference")]
     ContractReference {
-        #[serde(rename = "collection")]
         contract: String,
     },
     Array(Box<Type>),
@@ -136,7 +134,7 @@ impl Type {
             Type::PrimitiveType(PrimitiveType::Float64) => Value::Float64(0.0),
             Type::String => Value::String("".to_owned()),
             Type::Bytes => Value::Bytes(vec![]),
-            Type::ContractReference { .. } => Value::CollectionReference(Vec::new()),
+            Type::ContractReference { .. } => Value::ContractReference(Vec::new()),
             Type::Array(_) => Value::Array(Vec::new()),
             Type::Map(_, _) => Value::Map(Vec::new()),
             Type::Hash => Value::Hash([0; 4]),
@@ -172,7 +170,7 @@ pub enum Value {
     Hash8([u64; 8]),
     String(String),
     Bytes(Vec<u8>),
-    CollectionReference(Vec<u8>),
+    ContractReference(Vec<u8>),
     Array(Vec<Value>),
     Map(Vec<(Value, Value)>),
     PublicKey(publickey::Key),
@@ -249,15 +247,15 @@ impl TryInto<serde_json::Value> for Value {
                 "\"{}\"",
                 base64::engine::general_purpose::STANDARD.encode(b)
             )),
-            Value::CollectionReference(cr) => {
+            Value::ContractReference(cr) => {
                 let cr = String::from_utf8(cr).wrap_err()?;
                 // let parts = cr.split('|');
-                // let collection_id = parts.clone().next().unwrap();
+                // let contract_id = parts.clone().next().unwrap();
                 // let id = parts.clone().nth(1).unwrap();
                 let id = cr;
 
                 let mut map = serde_json::Map::new();
-                // map.insert("collectionId".to_string(), collection_id.into());
+                // map.insert("contractId".to_string(), contract_id.into());
                 map.insert("id".to_string(), id.into());
 
                 serde_json::Value::Object(map)
@@ -471,21 +469,21 @@ impl TypeReader for Type {
 
                 let length = reader(addr).context(InvalidAddressSnafu {
                     addr,
-                    type_name: "collection reference length",
+                    type_name: "contract reference length",
                 })?[0];
                 let data_ptr = reader(addr + 1).context(InvalidAddressSnafu {
                     addr,
-                    type_name: "collection reference data ptr",
+                    type_name: "contract reference data ptr",
                 })?[0];
                 for i in 0..length {
                     let byte = reader(data_ptr + i).context(InvalidAddressSnafu {
                         addr,
-                        type_name: "collection reference byte",
+                        type_name: "contract reference byte",
                     })?[0];
                     bytes.push(byte as u8);
                 }
 
-                Ok(Value::CollectionReference(bytes))
+                Ok(Value::ContractReference(bytes))
             }
             Type::Array(t) => {
                 let mut values = vec![];
@@ -741,10 +739,10 @@ impl Parser<str> for Type {
                 let mut bytes = vec![];
                 if !value.is_empty() {
                     for byte in value.split(',') {
-                        bytes.push(byte.parse().parse_err("collection reference", value)?);
+                        bytes.push(byte.parse().parse_err("contract reference", value)?);
                     }
                 }
-                Ok(Value::CollectionReference(bytes))
+                Ok(Value::ContractReference(bytes))
             }
             Type::Array(t) => {
                 let mut values = vec![];
@@ -907,21 +905,21 @@ impl Parser<serde_json::Value> for Type {
             Type::ContractReference { .. } => {
                 let mut bytes = vec![];
                 if !value.is_null() {
-                    // let collection_id = value
-                    //     .get("collectionId")
-                    //     .ok_or("invalid collection reference")?
+                    // let contract_id = value
+                    //     .get("contractId")
+                    //     .ok_or("invalid contract reference")?
                     //     .as_str()
-                    //     .ok_or("invalid collection reference")?;
+                    //     .ok_or("invalid contract reference")?;
                     let id = value
                         .get("id")
-                        .parse_err("missing", "collection reference", "json")?
+                        .parse_err("missing", "contract reference", "json")?
                         .as_str()
-                        .parse_err("invalid", "collection reference", "json")?;
-                    // bytes.extend_from_slice(collection_id.as_bytes());
+                        .parse_err("invalid", "contract reference", "json")?;
+                    // bytes.extend_from_slice(contract_id.as_bytes());
                     // bytes.extend_from_slice(b"|");
                     bytes.extend_from_slice(id.as_bytes());
                 }
-                Ok(Value::CollectionReference(bytes))
+                Ok(Value::ContractReference(bytes))
             }
             Type::Array(t) => {
                 let mut values = vec![];
@@ -1035,7 +1033,7 @@ impl Value {
                 .chain([key_values.len() as u64])
                 .chain(key_values.iter().flat_map(|(_, v)| v.serialize()))
                 .collect(),
-            Value::CollectionReference(cr) => [cr.len() as u64]
+            Value::ContractReference(cr) => [cr.len() as u64]
                 .into_iter()
                 .chain(cr.iter().map(|b| *b as u64))
                 .collect(),
@@ -1071,7 +1069,7 @@ impl Value {
             Value::Hash8(_) => None,
             Value::String(s) => Some(s),
             Value::Bytes(_) => None,
-            Value::CollectionReference(_) => None,
+            Value::ContractReference(_) => None,
             Value::Array(_) => None,
             Value::Map(_) => None,
             Value::PublicKey(_) => None,
