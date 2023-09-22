@@ -126,8 +126,8 @@ fn parse_out_json(input: &str, namespace: &str) -> String {
     serde_json::to_string(&parse(input, namespace, &mut None)).unwrap()
 }
 
-fn validate_set(collection_ast_json: &str, data_json: &str) -> Result<(), Error> {
-    let collection_ast: stableast::Collection = match serde_json::from_str(collection_ast_json) {
+fn validate_set(contract_ast_json: &str, data_json: &str) -> Result<(), Error> {
+    let contract_ast: stableast::Contract = match serde_json::from_str(contract_ast_json) {
         Ok(ast) => ast,
         Err(err) => {
             return Err(Error {
@@ -145,26 +145,26 @@ fn validate_set(collection_ast_json: &str, data_json: &str) -> Result<(), Error>
         }
     };
 
-    validation::validate_set(&collection_ast, &data).map_err(|e| Error {
+    validation::validate_set(&contract_ast, &data).map_err(|e| Error {
         message: e.to_string(),
     })
 }
 
-fn validate_set_out_json(collection_ast_json: &str, data_json: &str) -> String {
-    serde_json::to_string(&validate_set(collection_ast_json, data_json)).unwrap()
+fn validate_set_out_json(contract_ast_json: &str, data_json: &str) -> String {
+    serde_json::to_string(&validate_set(contract_ast_json, data_json)).unwrap()
 }
 
-fn generate_collection_function(collection_ast: &str) -> Result<js::JSCollection, Error> {
-    let collection_ast: stableast::Collection =
-        serde_json::from_str(collection_ast).map_err(|e| Error {
+fn generate_contract_function(contract_ast: &str) -> Result<js::JSContract, Error> {
+    let contract_ast: stableast::Contract =
+        serde_json::from_str(contract_ast).map_err(|e| Error {
             message: e.to_string(),
         })?;
 
-    Ok(js::generate_js_collection(&collection_ast))
+    Ok(js::generate_js_contract(&contract_ast))
 }
 
-fn generate_js_collection_out_json(collection_ast: &str) -> String {
-    serde_json::to_string(&generate_collection_function(collection_ast)).unwrap()
+fn generate_js_contract_out_json(contract_ast: &str) -> String {
+    serde_json::to_string(&generate_contract_function(contract_ast)).unwrap()
 }
 
 #[cfg(test)]
@@ -175,9 +175,9 @@ mod tests {
 
     #[test]
     fn test_parse() {
-        let input = "collection Test {}";
+        let input = "contract Test {}";
         let expected_output = expect![[
-            r#"{"Ok":[{"nodes":[{"Collection":{"name":"Test","decorators":[],"items":[]}}]},[{"kind":"collection","namespace":{"kind":"namespace","value":""},"name":"Test","attributes":[]}]]}"#
+            r#"{"Ok":[{"nodes":[{"Contract":{"name":"Test","decorators":[],"items":[]}}]},[{"kind":"contract","namespace":{"kind":"namespace","value":""},"name":"Test","attributes":[]}]]}"#
         ]];
 
         let output = parse_out_json(input, "");
@@ -185,10 +185,21 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_collection_metadata() {
-        let input = "@public collection Collection { id: string; name?: string; lastRecordUpdated?: string; code?: string; ast?: string; publicKey?: PublicKey; @index(publicKey); @index([lastRecordUpdated, desc]); constructor (id: string, code: string) { this.id = id; this.code = code; this.ast = parse(code); if (ctx.publicKey) this.publicKey = ctx.publicKey; } updateCode (code: string) { if (this.publicKey != ctx.publicKey) { throw error('invalid owner'); } this.code = code; this.ast = parse(code); } }";
+    fn test_parse_contract() {
+        let input = "contract Test {}";
         let expected_output = expect![[
-            r#"[{"kind":"collection","namespace":{"kind":"namespace","value":""},"name":"Collection","attributes":[{"kind":"property","name":"id","type":{"kind":"primitive","value":"string"},"directives":[],"required":true},{"kind":"property","name":"name","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"lastRecordUpdated","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"code","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"ast","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"publicKey","type":{"kind":"publickey"},"directives":[],"required":false},{"kind":"index","fields":[{"direction":"asc","fieldPath":["publicKey"]}]},{"kind":"index","fields":[{"direction":"desc","fieldPath":["lastRecordUpdated"]}]},{"kind":"method","name":"constructor","attributes":[{"kind":"parameter","name":"id","type":{"kind":"primitive","value":"string"},"required":true},{"kind":"parameter","name":"code","type":{"kind":"primitive","value":"string"},"required":true}],"code":"this.id = id; this.code = code; this.ast = parse(code); if (ctx.publicKey) this.publicKey = ctx.publicKey;"},{"kind":"method","name":"updateCode","attributes":[{"kind":"parameter","name":"code","type":{"kind":"primitive","value":"string"},"required":true}],"code":"if (this.publicKey != ctx.publicKey) { throw error('invalid owner'); } this.code = code; this.ast = parse(code);"},{"kind":"directive","name":"public","arguments":[]}]}]"#
+            r#"{"Ok":[{"nodes":[{"Contract":{"name":"Test","decorators":[],"items":[]}}]},[{"kind":"contract","namespace":{"kind":"namespace","value":""},"name":"Test","attributes":[]}]]}"#
+        ]];
+
+        let output = parse_out_json(input, "");
+        expected_output.assert_eq(&output);
+    }
+
+    #[test]
+    fn test_parse_contract_metadata() {
+        let input = "@public contract Contract { id: string; name?: string; lastRecordUpdated?: string; code?: string; ast?: string; publicKey?: PublicKey; @index(publicKey); @index([lastRecordUpdated, desc]); constructor (id: string, code: string) { this.id = id; this.code = code; this.ast = parse(code); if (ctx.publicKey) this.publicKey = ctx.publicKey; } updateCode (code: string) { if (this.publicKey != ctx.publicKey) { throw error('invalid owner'); } this.code = code; this.ast = parse(code); } }";
+        let expected_output = expect![[
+            r#"[{"kind":"contract","namespace":{"kind":"namespace","value":""},"name":"Contract","attributes":[{"kind":"property","name":"id","type":{"kind":"primitive","value":"string"},"directives":[],"required":true},{"kind":"property","name":"name","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"lastRecordUpdated","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"code","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"ast","type":{"kind":"primitive","value":"string"},"directives":[],"required":false},{"kind":"property","name":"publicKey","type":{"kind":"publickey"},"directives":[],"required":false},{"kind":"index","fields":[{"direction":"asc","fieldPath":["publicKey"]}]},{"kind":"index","fields":[{"direction":"desc","fieldPath":["lastRecordUpdated"]}]},{"kind":"method","name":"constructor","attributes":[{"kind":"parameter","name":"id","type":{"kind":"primitive","value":"string"},"required":true},{"kind":"parameter","name":"code","type":{"kind":"primitive","value":"string"},"required":true}],"code":"this.id = id; this.code = code; this.ast = parse(code); if (ctx.publicKey) this.publicKey = ctx.publicKey;"},{"kind":"method","name":"updateCode","attributes":[{"kind":"parameter","name":"code","type":{"kind":"primitive","value":"string"},"required":true}],"code":"if (this.publicKey != ctx.publicKey) { throw error('invalid owner'); } this.code = code; this.ast = parse(code);"},{"kind":"directive","name":"public","arguments":[]}]}]"#
         ]];
 
         let mut program = None::<ast::Program>;
@@ -199,22 +210,22 @@ mod tests {
     }
 
     #[test]
-    fn test_collection() {
+    fn test_contract() {
         let mut program = None::<ast::Program>;
-        let (program, _) = parse("collection Test {}", "", &mut program).unwrap();
+        let (program, _) = parse("contract Test {}", "", &mut program).unwrap();
 
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.is_empty())
+            matches!(&program.nodes[0], ast::RootNode::Contract(ast::Contract { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.is_empty())
         );
     }
 
     #[test]
-    fn test_collection_with_fields() {
+    fn test_contract_with_fields() {
         let mut program = None::<ast::Program>;
         let (program, _) = parse(
             "
-            collection Test {
+            contract Test {
                 name: string;
                 age: number;
             }
@@ -226,28 +237,28 @@ mod tests {
 
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 2)
+            matches!(&program.nodes[0], ast::RootNode::Contract(ast::Contract { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 2)
         );
 
-        let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(collection) => collection,
-            _ => panic!("Expected collection"),
+        let contract = match &program.nodes[0] {
+            ast::RootNode::Contract(contract) => contract,
+            _ => panic!("Expected contract"),
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "name" && *type_ == ast::Type::String && decorators.is_empty())
+            matches!(&contract.items[0], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "name" && *type_ == ast::Type::String && decorators.is_empty())
         );
         assert!(
-            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "age" && *type_ == ast::Type::Number && decorators.is_empty())
+            matches!(&contract.items[1], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "age" && *type_ == ast::Type::Number && decorators.is_empty())
         );
     }
 
     #[test]
-    fn test_collection_with_asc_desc_fields() {
+    fn test_contract_with_asc_desc_fields() {
         let mut program = None::<ast::Program>;
         let (program, _) = parse(
             "
-            collection Test {
+            contract Test {
                 asc: string;
                 desc: string;
             }
@@ -259,28 +270,28 @@ mod tests {
 
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 2)
+            matches!(&program.nodes[0], ast::RootNode::Contract(ast::Contract { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 2)
         );
 
-        let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(collection) => collection,
-            _ => panic!("Expected collection"),
+        let contract = match &program.nodes[0] {
+            ast::RootNode::Contract(contract) => contract,
+            _ => panic!("Expected contract"),
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "asc" && *type_ == ast::Type::String && decorators.is_empty()),
+            matches!(&contract.items[0], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "asc" && *type_ == ast::Type::String && decorators.is_empty()),
         );
         assert!(
-            matches!(&collection.items[1], ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "desc" && *type_ == ast::Type::String && decorators.is_empty()),
+            matches!(&contract.items[1], ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators }) if name == "desc" && *type_ == ast::Type::String && decorators.is_empty()),
         );
     }
 
     #[test]
-    fn test_collection_with_functions() {
+    fn test_contract_with_functions() {
         let mut program = None::<ast::Program>;
         let (program, _) = parse(
             "
-            collection Test {
+            contract Test {
                 function get_age(a: number, b?: string) {
                     return 42;
                 }
@@ -293,16 +304,16 @@ mod tests {
 
         assert_eq!(program.nodes.len(), 1);
         assert!(
-            matches!(&program.nodes[0], ast::RootNode::Collection(ast::Collection { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 1)
+            matches!(&program.nodes[0], ast::RootNode::Contract(ast::Contract { name, decorators, items }) if name == "Test" && decorators.is_empty() && items.len() == 1)
         );
 
-        let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(collection) => collection,
-            _ => panic!("Expected collection"),
+        let contract = match &program.nodes[0] {
+            ast::RootNode::Contract(contract) => contract,
+            _ => panic!("Expected contract"),
         };
 
         assert!(
-            matches!(&collection.items[0], ast::CollectionItem::Function(ast::Function {
+            matches!(&contract.items[0], ast::ContractItem::Function(ast::Function {
                 name,
                 decorators,
                 parameters,
@@ -312,8 +323,8 @@ mod tests {
             }) if name == "get_age" && decorators.is_empty() && parameters.len() == 2 && statements.len() == 1 && statements_code == "return 42;" && return_type.is_none())
         );
 
-        let function = match &collection.items[0] {
-            ast::CollectionItem::Function(function) => function,
+        let function = match &contract.items[0] {
+            ast::ContractItem::Function(function) => function,
             _ => panic!("Expected function"),
         };
 
@@ -474,7 +485,7 @@ mod tests {
     #[test]
     fn test_code_from_issue() {
         let code = "
-            collection Account {
+            contract Account {
                 name: string;
                 age?: number;
                 balance: number;
@@ -496,48 +507,48 @@ mod tests {
 
         assert_eq!(program.nodes.len(), 1);
 
-        let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(collection) => collection,
-            _ => panic!("Expected collection"),
+        let contract = match &program.nodes[0] {
+            ast::RootNode::Contract(contract) => contract,
+            _ => panic!("Expected contract"),
         };
 
-        assert_eq!(collection.name, "Account");
-        assert_eq!(collection.items.len(), 6);
+        assert_eq!(contract.name, "Account");
+        assert_eq!(contract.items.len(), 6);
 
         assert!(matches!(
-            &collection.items[0],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators })
+            &contract.items[0],
+            ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators })
             if name == "name" && *type_ == ast::Type::String && decorators.is_empty()
         ));
 
         assert!(matches!(
-            &collection.items[1],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: false, decorators })
+            &contract.items[1],
+            ast::ContractItem::Field(ast::Field { name, type_, required: false, decorators })
             if name == "age" && *type_ == ast::Type::Number && decorators.is_empty()
         ));
 
         assert!(matches!(
-            &collection.items[2],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators })
+            &contract.items[2],
+            ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators })
             if name == "balance" && *type_ == ast::Type::Number && decorators.is_empty()
         ));
 
         assert!(matches!(
-            &collection.items[3],
-            ast::CollectionItem::Field(ast::Field { name, type_, required: true, decorators })
+            &contract.items[3],
+            ast::ContractItem::Field(ast::Field { name, type_, required: true, decorators })
             if name == "publicKey" && *type_ == ast::Type::String && decorators.is_empty()
         ));
 
         assert!(matches!(
-            &collection.items[4],
-            ast::CollectionItem::Index(ast::Index {
+            &contract.items[4],
+            ast::ContractItem::Index(ast::Index {
                 fields,
             }) if fields[0].path == ["field"] && fields[0].order == ast::Order::Asc
                 && fields[1].path == ["field2"] && fields[1].order == ast::Order::Asc
         ));
 
-        let function = match &collection.items[5] {
-            ast::CollectionItem::Function(f) => f,
+        let function = match &contract.items[5] {
+            ast::ContractItem::Function(f) => f,
             _ => panic!("expected function"),
         };
         dbg!(&function.statements);
@@ -624,7 +635,7 @@ mod tests {
     #[test]
     fn test_error_unrecognized_token() {
         let code = "
-            collection test-cities {}
+            contract test-cities {}
         ";
 
         let mut program = None::<ast::Program>;
@@ -633,16 +644,16 @@ mod tests {
         eprintln!("{}", result.as_ref().unwrap_err().message);
         assert_eq!(
             result.unwrap_err().message,
-            r#"Error found at line 2, column 27: Unrecognized token "-". Expected one of: "{"
-collection test-cities {}
-               ^"#,
+            r#"Error found at line 2, column 25: Unrecognized token "-". Expected one of: "{"
+contract test-cities {}
+             ^"#,
         );
     }
 
     #[test]
     fn test_error_invalid_token() {
         let code = "
-            collection ą {}
+            contract ą {}
         ";
 
         let mut program = None::<ast::Program>;
@@ -651,9 +662,9 @@ collection test-cities {}
         eprintln!("{}", result.as_ref().unwrap_err().message);
         assert_eq!(
             result.unwrap_err().message,
-            r#"Error found at line 2, column 23: Invalid token
-collection ą {}
-           ^"#,
+            r#"Error found at line 2, column 21: Invalid token
+contract ą {}
+         ^"#,
         );
     }
 
@@ -678,7 +689,7 @@ function x() {
     #[test]
     fn test_foreign_record_field() {
         let code = "
-            collection test {
+            contract test {
                 account: Account;
             }
         ";
@@ -686,15 +697,15 @@ function x() {
         let mut program = None::<ast::Program>;
         let (program, _) = parse(code, "", &mut program).unwrap();
 
-        let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(c) => c,
-            _ => panic!("expected collection"),
+        let contract = match &program.nodes[0] {
+            ast::RootNode::Contract(c) => c,
+            _ => panic!("expected contract"),
         };
 
-        assert_eq!(collection.items.len(), 1);
+        assert_eq!(contract.items.len(), 1);
 
-        let field = match &collection.items[0] {
-            ast::CollectionItem::Field(f) => f,
+        let field = match &contract.items[0] {
+            ast::ContractItem::Field(f) => f,
             _ => panic!("expected field"),
         };
 
@@ -702,7 +713,7 @@ function x() {
         assert_eq!(
             field.type_,
             ast::Type::ForeignRecord {
-                collection: "Account".to_string(),
+                contract: "Account".to_string(),
             }
         );
     }
@@ -711,7 +722,7 @@ function x() {
     fn test_array_map_field() {
         let cases = [
             (
-                "collection test { numbers: number[]; }",
+                "contract test { numbers: number[]; }",
                 vec![ast::Field {
                     name: "numbers".to_string(),
                     type_: ast::Type::Array(Box::new(ast::Type::Number)),
@@ -720,7 +731,7 @@ function x() {
                 }],
             ),
             (
-                "collection test { strings: string[]; }",
+                "contract test { strings: string[]; }",
                 vec![ast::Field {
                     name: "strings".to_string(),
                     type_: ast::Type::Array(Box::new(ast::Type::String)),
@@ -729,7 +740,7 @@ function x() {
                 }],
             ),
             (
-                "collection test { numToStr: map<number, string>; }",
+                "contract test { numToStr: map<number, string>; }",
                 vec![ast::Field {
                     name: "numToStr".to_string(),
                     type_: ast::Type::Map(Box::new(ast::Type::Number), Box::new(ast::Type::String)),
@@ -738,7 +749,7 @@ function x() {
                 }],
             ),
             (
-                "collection test { strToNum: map<string, number>; }",
+                "contract test { strToNum: map<string, number>; }",
                 vec![ast::Field {
                     name: "strToNum".to_string(),
                     type_: ast::Type::Map(Box::new(ast::Type::String), Box::new(ast::Type::Number)),
@@ -752,17 +763,17 @@ function x() {
             let mut program = None::<ast::Program>;
             let (program, _) = parse(code, "", &mut program).unwrap();
             assert_eq!(program.nodes.len(), 1);
-            let collection = match &program.nodes[0] {
-                ast::RootNode::Collection(c) => c,
-                _ => panic!("expected collection"),
+            let contract = match &program.nodes[0] {
+                ast::RootNode::Contract(c) => c,
+                _ => panic!("expected contract"),
             };
-            assert_eq!(collection.items.len(), expected.len());
+            assert_eq!(contract.items.len(), expected.len());
 
             for (i, item) in expected.iter().enumerate() {
                 assert!(
                     matches!(
-                        &collection.items[i],
-                        ast::CollectionItem::Field(ast::Field {
+                        &contract.items[i],
+                        ast::ContractItem::Field(ast::Field {
                             name,
                             type_,
                             required,
@@ -771,7 +782,7 @@ function x() {
                     ),
                     "expected: {:?}, got: {:?}",
                     item,
-                    collection.items[i]
+                    contract.items[i]
                 );
             }
         }
@@ -781,7 +792,7 @@ function x() {
     fn test_object_field() {
         let cases = [
             (
-                "collection test { person: { name: string; age: number; }; }",
+                "contract test { person: { name: string; age: number; }; }",
                 vec![ast::Field {
                     name: "person".to_string(),
                     type_: ast::Type::Object(vec![
@@ -803,7 +814,7 @@ function x() {
                 }],
             ),
             (
-                "collection test { person: { name?: string; }; }",
+                "contract test { person: { name?: string; }; }",
                 vec![ast::Field {
                     name: "person".to_string(),
                     type_: ast::Type::Object(vec![ast::Field {
@@ -817,7 +828,7 @@ function x() {
                 }],
             ),
             (
-                "collection test { person: { info: { name: string; }; }; }",
+                "contract test { person: { info: { name: string; }; }; }",
                 vec![ast::Field {
                     name: "person".to_string(),
                     type_: ast::Type::Object(vec![ast::Field {
@@ -841,17 +852,17 @@ function x() {
             let mut program = None::<ast::Program>;
             let (program, _) = parse(code, "", &mut program).unwrap();
             assert_eq!(program.nodes.len(), 1);
-            let collection = match &program.nodes[0] {
-                ast::RootNode::Collection(c) => c,
-                _ => panic!("expected collection"),
+            let contract = match &program.nodes[0] {
+                ast::RootNode::Contract(c) => c,
+                _ => panic!("expected contract"),
             };
-            assert_eq!(collection.items.len(), expected.len());
+            assert_eq!(contract.items.len(), expected.len());
 
             for (i, item) in expected.iter().enumerate() {
                 assert!(
                     matches!(
-                        &collection.items[i],
-                        ast::CollectionItem::Field(ast::Field {
+                        &contract.items[i],
+                        ast::ContractItem::Field(ast::Field {
                             name,
                             type_,
                             required,
@@ -860,7 +871,7 @@ function x() {
                     ),
                     "expected: {:?}, got: {:?}",
                     item,
-                    collection.items[i]
+                    contract.items[i]
                 );
             }
         }
@@ -869,7 +880,7 @@ function x() {
     #[test]
     fn test_comments() {
         let code = "
-            collection test {
+            contract test {
                 // This is a comment
                 name: string;
 
@@ -888,7 +899,7 @@ function x() {
     #[test]
     fn test_index_subfield() {
         let code = "
-            collection test {
+            contract test {
                 person: {
                     name: string;
                 };
@@ -901,22 +912,22 @@ function x() {
         let (program, _) = parse(code, "", &mut program).unwrap();
         assert_eq!(program.nodes.len(), 1);
 
-        let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(c) => c,
-            _ => panic!("expected collection"),
+        let contract = match &program.nodes[0] {
+            ast::RootNode::Contract(c) => c,
+            _ => panic!("expected contract"),
         };
-        assert_eq!(collection.items.len(), 2);
+        assert_eq!(contract.items.len(), 2);
 
         assert!(
             matches!(
-                &collection.items[1],
-                ast::CollectionItem::Index(ast::Index {
+                &contract.items[1],
+                ast::ContractItem::Index(ast::Index {
                     fields,
                 }) if fields == &[ast::IndexField { path: vec!["person".to_string(), "name".to_string()], order: ast::Order::Asc }]
             ),
             "expected: {:?}, got: {:?}",
-            &collection.items[1],
-            &collection.items[1]
+            &contract.items[1],
+            &contract.items[1]
         );
     }
 
@@ -924,7 +935,7 @@ function x() {
     fn test_decorators() {
         let code = "
             @public
-            collection Account {
+            contract Account {
                 @read
                 owner: PublicKey;
 
@@ -937,26 +948,26 @@ function x() {
         let (program, _) = parse(code, "", &mut program).unwrap();
         assert_eq!(program.nodes.len(), 1);
 
-        let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(c) => c,
-            _ => panic!("expected collection"),
+        let contract = match &program.nodes[0] {
+            ast::RootNode::Contract(c) => c,
+            _ => panic!("expected contract"),
         };
 
-        assert_eq!(collection.decorators.len(), 1);
-        assert_eq!(collection.decorators[0].name, "public");
+        assert_eq!(contract.decorators.len(), 1);
+        assert_eq!(contract.decorators[0].name, "public");
 
-        assert_eq!(collection.items.len(), 2);
+        assert_eq!(contract.items.len(), 2);
 
-        let field = match &collection.items[0] {
-            ast::CollectionItem::Field(f) => f,
+        let field = match &contract.items[0] {
+            ast::ContractItem::Field(f) => f,
             _ => panic!("expected field"),
         };
 
         assert_eq!(field.decorators.len(), 1);
         assert_eq!(field.decorators[0].name, "read");
 
-        let function = match &collection.items[1] {
-            ast::CollectionItem::Function(f) => f,
+        let function = match &contract.items[1] {
+            ast::ContractItem::Function(f) => f,
             _ => panic!("expected function"),
         };
 
@@ -972,7 +983,7 @@ function x() {
     #[test]
     fn test_foreign_record_array() {
         let code = "
-            collection test {
+            contract test {
                 people: Person[];
             }
         ";
@@ -981,15 +992,15 @@ function x() {
         let (program, _) = parse(code, "", &mut program).unwrap();
         assert_eq!(program.nodes.len(), 1);
 
-        let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(c) => c,
-            _ => panic!("expected collection"),
+        let contract = match &program.nodes[0] {
+            ast::RootNode::Contract(c) => c,
+            _ => panic!("expected contract"),
         };
 
-        assert_eq!(collection.items.len(), 1);
+        assert_eq!(contract.items.len(), 1);
 
-        let field = match &collection.items[0] {
-            ast::CollectionItem::Field(f) => f,
+        let field = match &contract.items[0] {
+            ast::ContractItem::Field(f) => f,
             _ => panic!("expected field"),
         };
 
@@ -997,7 +1008,7 @@ function x() {
         assert_eq!(
             field.type_,
             ast::Type::Array(Box::new(ast::Type::ForeignRecord {
-                collection: "Person".to_string()
+                contract: "Person".to_string()
             }))
         );
     }
@@ -1070,7 +1081,7 @@ function x() {
     #[test]
     fn test_object() {
         let code = r#"
-            collection Test {
+            contract Test {
                 field: { a?: number; };
 
                 constructor () {
@@ -1083,15 +1094,15 @@ function x() {
         let (program, _) = parse(code, "", &mut program).unwrap();
         assert_eq!(program.nodes.len(), 1);
 
-        let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(c) => c,
-            _ => panic!("expected collection"),
+        let contract = match &program.nodes[0] {
+            ast::RootNode::Contract(c) => c,
+            _ => panic!("expected contract"),
         };
 
-        assert_eq!(collection.items.len(), 2);
+        assert_eq!(contract.items.len(), 2);
 
-        let field = match &collection.items[0] {
-            ast::CollectionItem::Field(f) => f,
+        let field = match &contract.items[0] {
+            ast::ContractItem::Field(f) => f,
             _ => panic!("expected field"),
         };
 
@@ -1106,8 +1117,8 @@ function x() {
             }])
         );
 
-        let function = match &collection.items[1] {
-            ast::CollectionItem::Function(f) => f,
+        let function = match &contract.items[1] {
+            ast::ContractItem::Function(f) => f,
             _ => panic!("expected function"),
         };
 
@@ -1131,7 +1142,7 @@ function x() {
     #[test]
     fn test_public_key_array_decl() {
         let code = r#"
-            collection PublicKeyArrayDemo {
+            contract PublicKeyArrayDemo {
               publicKeys: PublicKey[];
 
               constructor () {
@@ -1146,15 +1157,15 @@ function x() {
         let (program, _) = parse(code, "", &mut program).unwrap();
         assert_eq!(program.nodes.len(), 1);
 
-        let collection = match &program.nodes[0] {
-            ast::RootNode::Collection(c) => c,
-            _ => panic!("expected collection"),
+        let contract = match &program.nodes[0] {
+            ast::RootNode::Contract(c) => c,
+            _ => panic!("expected contract"),
         };
 
-        assert_eq!(collection.items.len(), 2);
+        assert_eq!(contract.items.len(), 2);
 
-        let field = match &collection.items[0] {
-            ast::CollectionItem::Field(f) => f,
+        let field = match &contract.items[0] {
+            ast::ContractItem::Field(f) => f,
             _ => panic!("expected publicKeys"),
         };
 
@@ -1165,9 +1176,9 @@ function x() {
         );
     }
 
-    /// Tests that collections from the filesystem directory 'test-collections' parse without an error
+    /// Tests that contracts from the filesystem directory 'test-collections' parse without an error
     #[test]
-    fn test_fs_collections() {
+    fn test_fs_contracts() {
         use std::path::Path;
 
         let dir = Path::new("test-collections");
@@ -1188,7 +1199,7 @@ function x() {
             let mut program = None::<ast::Program>;
             let result = parse(&code, "", &mut program);
             if let Err(err) = result {
-                eprintln!("Error parsing collection: {}", path.display());
+                eprintln!("Error parsing contract: {}", path.display());
                 eprintln!("{}", err.message);
                 results.push(err);
             }

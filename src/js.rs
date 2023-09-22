@@ -2,16 +2,16 @@ use crate::stableast;
 use serde::Serialize;
 
 #[derive(Debug, Serialize, PartialEq)]
-pub struct JSCollection {
+pub struct JSContract {
     pub code: String,
 }
 
-pub fn generate_js_collection(collection_ast: &stableast::Collection) -> JSCollection {
-    let fns = collection_ast
+pub fn generate_js_contract(contract_ast: &stableast::Contract) -> JSContract {
+    let fns = contract_ast
         .attributes
         .iter()
         .filter_map(|item| {
-            if let stableast::CollectionAttribute::Method(m) = item {
+            if let stableast::ContractAttribute::Method(m) = item {
                 let JSFunc { name, code } = generate_js_function(m);
                 Some(format!("instance.{} = {}", &name, &code))
             } else {
@@ -21,7 +21,7 @@ pub fn generate_js_collection(collection_ast: &stableast::Collection) -> JSColle
         .collect::<Vec<String>>()
         .join(";");
 
-    JSCollection {
+    JSContract {
         code: format!(
             "function error(str) {{
                 return new Error(str);
@@ -107,12 +107,12 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_collection_function() {
-        let collection_ast = stableast::Collection {
+    fn test_generate_contract_function() {
+        let contract_ast = stableast::Contract {
             namespace: stableast::Namespace { value: "".into() },
-            name: "CollectionName".into(),
+            name: "ContractName".into(),
             attributes: vec![
-                stableast::CollectionAttribute::Property(stableast::Property {
+                stableast::ContractAttribute::Property(stableast::Property {
                     name: "abc".into(),
                     type_: stableast::Type::Primitive(stableast::Primitive {
                         value: stableast::PrimitiveType::String,
@@ -120,7 +120,7 @@ mod tests {
                     directives: vec![],
                     required: true,
                 }),
-                stableast::CollectionAttribute::Method(stableast::Method {
+                stableast::ContractAttribute::Method(stableast::Method {
                     name: "Hello".into(),
                     attributes: vec![
                         stableast::MethodAttribute::Parameter(stableast::Parameter {
@@ -146,7 +146,7 @@ mod tests {
                     ],
                     code: "return a".into(),
                 }),
-                stableast::CollectionAttribute::Method(stableast::Method {
+                stableast::ContractAttribute::Method(stableast::Method {
                     name: "World".into(),
                     attributes: vec![
                         stableast::MethodAttribute::Parameter(stableast::Parameter {
@@ -176,8 +176,8 @@ mod tests {
         };
 
         assert_eq!(
-            generate_js_collection(&collection_ast),
-            JSCollection{
+            generate_js_contract(&contract_ast),
+            JSContract{
                 code: "function error(str) {
                 return new Error(str);
             }

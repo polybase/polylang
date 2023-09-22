@@ -44,6 +44,7 @@ extern {
         "function" => lexer::Tok::Function,
         "@index" => lexer::Tok::Index,
         "collection" => lexer::Tok::Collection,
+        "contract" => lexer::Tok::Contract,
         "eth#" => lexer::Tok::EthLiteralStart,
         "falcon#" => lexer::Tok::FalconLiteralStart,
         "{" => lexer::Tok::LBrace,
@@ -106,7 +107,7 @@ BasicType: Type = {
 ArrayInnerType: Type = {
     <t:BasicType> => t,
     <i:Ident> => Type::ForeignRecord {
-        collection: i,
+        contract: i,
     },
 }
 
@@ -116,7 +117,7 @@ Type: Type = {
     "map" "<" <kt:BasicType> "," <vt:Type> ">" => Type::Map(Box::new(kt), Box::new(vt)),
     "{" <fields:(Field ";")*> "}" => Type::Object(fields.into_iter().map(|(f, _)| f).collect()),
     <i:Ident> => Type::ForeignRecord {
-        collection: i,
+        contract: i,
     },
 };
 
@@ -142,7 +143,7 @@ ParameterType: ParameterType = {
             }
         }),
         Type::PublicKey => Ok(ParameterType::PublicKey),
-        Type::ForeignRecord { collection } => Ok(ParameterType::ForeignRecord { collection }),
+        Type::ForeignRecord { contract } => Ok(ParameterType::ForeignRecord { contract }),
     },
     "record" => ParameterType::Record,
 };
@@ -524,14 +525,19 @@ IndexFields: Vec<IndexField> = {
     => vec![],
 };
 
-CollectionItem: CollectionItem = {
-    <f:Field> ";" => CollectionItem::Field(f),
-    <i:Index> ";" => CollectionItem::Index(i),
-    <f:Function> => CollectionItem::Function(f),
+ContractItem: ContractItem = {
+    <f:Field> ";" => ContractItem::Field(f),
+    <i:Index> ";" => ContractItem::Index(i),
+    <f:Function> => ContractItem::Function(f),
 };
 
-Collection: Collection = {
-    <decorators:Decorator*> "collection" <name:Ident> "{" <items:CollectionItem*> "}" => Collection {
+Contract: Contract = {
+    <decorators:Decorator*>  "contract" <name:Ident> "{" <items:ContractItem*> "}" => Contract {
+        name: name,
+        decorators: decorators,
+        items: items,
+    },
+    <decorators:Decorator*>  "collection" <name:Ident> "{" <items:ContractItem*> "}" => Contract {
         name: name,
         decorators: decorators,
         items: items,
@@ -539,7 +545,7 @@ Collection: Collection = {
 };
 
 RootNode: RootNode = {
-    <c:Collection> => RootNode::Collection(c),
+    <c:Contract> => RootNode::Contract(c),
     <f:RootFunction> => RootNode::Function(f),
 };
 

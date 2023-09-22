@@ -3,7 +3,7 @@ use super::*;
 fn run_fn(f: &str, result: &str, s1: &str, s2: &str) -> Result<abi::Value, error::Error> {
     let code = r#"
         @public
-        collection Account {
+        contract Account {
             result_bool: boolean;
             result_i32: i32;
 

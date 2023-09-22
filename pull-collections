@@ -37,6 +37,9 @@ while True:
         id = collection.get('id', '')
         code = collection.get('code', '')
 
+        # replace `contract`(exact match) with `_contract`
+        code = re.sub(r'\bcontract\b', '_contract', code)
+
         # Keep only alphanumeric characters and replace others with '-'
         filename = re.sub(r'[^a-zA-Z0-9]', '-', id)
 

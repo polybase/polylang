@@ -131,7 +131,7 @@ pub struct Inputs {
     pub this_field_hashes: Vec<[u64; 4]>,
     pub this_salts: Vec<u32>,
     pub args: Vec<serde_json::Value>,
-    /// Map from collection name to a vector of record value and field salts
+    /// Map from contract name to a vector of record value and field salts
     pub other_records: HashMap<String, Vec<(serde_json::Value, Vec<u32>)>>,
 }
 
@@ -192,13 +192,13 @@ impl Inputs {
     ) -> Vec<u64> {
         let mut other_record_hashes = vec![];
         for or in &self.abi.other_records {
-            let records = other_records.get(&or.collection).unwrap();
+            let records = other_records.get(&or.contract).unwrap();
             let struct_ = self
                 .abi
-                .other_collection_types
+                .other_contract_types
                 .iter()
                 .find_map(|t| match t {
-                    Type::Struct(s) if s.name == or.collection => Some(s),
+                    Type::Struct(s) if s.name == or.contract => Some(s),
                     _ => None,
                 })
                 .unwrap();
@@ -265,27 +265,27 @@ impl Inputs {
         json_to_this_value(&self.this, this_type)
     }
 
-    /// Returns a map from collection name to a vector of record id type, record id and record value.
+    /// Returns a map from contract name to a vector of record id type, record id and record value.
     fn other_records(&self) -> Result<HashMap<String, Vec<(Type, Value, Value, Vec<u32>)>>> {
         let mut result = HashMap::new();
 
         for x in &self.abi.other_records {
-            let records = self.other_records.get(&x.collection);
+            let records = self.other_records.get(&x.contract);
             let struct_ = self
                 .abi
-                .other_collection_types
+                .other_contract_types
                 .iter()
                 .find_map(|t| match t {
-                    Type::Struct(s) if s.name == x.collection => Some(s),
+                    Type::Struct(s) if s.name == x.contract => Some(s),
                     _ => None,
                 })
                 .unwrap();
 
-            let mut collection_records = Vec::new();
+            let mut contract_records = Vec::new();
             for (record, salts) in records.iter().map(|r| r.iter()).flatten() {
                 let record = json_to_this_value(record, &Type::Struct(struct_.clone()))?;
 
-                collection_records.push((
+                contract_records.push((
                     struct_
                         .fields
                         .iter()
@@ -304,7 +304,7 @@ impl Inputs {
                 ));
             }
 
-            result.insert(x.collection.clone(), collection_records);
+            result.insert(x.contract.clone(), contract_records);
         }
 
         Ok(result)
@@ -327,7 +327,7 @@ impl Inputs {
         for known_record in known_records {
             known_record
                 .visit(&mut |value| {
-                    if let Value::CollectionReference(id) = value {
+                    if let Value::ContractReference(id) = value {
                         result.push((Type::String, Value::String(String::from_utf8(id.clone())?)));
                     }
 
@@ -393,7 +393,7 @@ impl Inputs {
             ));
         }
 
-        for (_collection, records) in other_records {
+        for (_contract, records) in other_records {
             for (position, (id_type, id, record, salts)) in records.iter().enumerate() {
                 let id_hash = hash_this(id_type.clone(), id, None)?;
 
@@ -624,7 +624,8 @@ pub fn run<'a>(
                         .map(|(_, x)| x.map(|x| mont_red_cst(x.inner() as u128)))
                 },
                 1,
-            )? else {
+            )?
+            else {
                 return Err(e);
             };
 

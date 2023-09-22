@@ -13,12 +13,12 @@ yarn build
 
 You can use the `compile` binary to compile Polylang functions to Miden. Compile outputs the generated Miden assembly to stdout, you can pipe it to `miden-run` to run it.
 
-### Example of compiling and running a collection function
+### Example of compiling and running a contract function
 
 ```bash
- $ cargo run --bin compile -- collection:Account function:setName <<<'@public collection Account { id: string; name: string; function setName(newName: string) { this.name = newName; } }'
+ $ cargo run --bin compile -- contract:Account function:setName <<<'@public contract Account { id: string; name: string; function setName(newName: string) { this.name = newName; } }'
 
- $ cargo run --bin compile -- collection:Account function:setName <<<'@public collection Account { id: string; name: string; function setName(newName: string) { this.name = newName; } }' \
+ $ cargo run --bin compile -- contract:Account function:setName <<<'@public contract Account { id: string; name: string; function setName(newName: string) { this.name = newName; } }' \
   | cargo run -p miden-run -- \
     --this-json '{ "id": "id1", "name": "John" }' \
     --advice-tape-json '["Tom"]'
@@ -38,7 +38,7 @@ You can use the `compile` binary to compile Polylang functions to Miden. Compile
 cargo test && (cd parser && cargo test)
 ```
 
-You can download and test that collections from the testnet still parse by running:
+You can download and test that contracts from the testnet still parse by running:
 
 ```bash
 ./pull-collections && cargo test

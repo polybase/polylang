@@ -9,7 +9,7 @@ struct Args {
     advice_tape_json: Option<String>,
     this_values: HashMap<String, String>,
     this_json: Option<serde_json::Value>,
-    /// Map of collection name to a list of records and field salts
+    /// Map of contract name to a list of records and field salts
     other_records: HashMap<String, Vec<(serde_json::Value, Vec<u32>)>>,
     abi: Abi,
     ctx: Ctx,
@@ -63,7 +63,7 @@ impl Args {
                     this_json = Some(this_value);
                 }
                 "--other-record" => {
-                    let collection_name = args
+                    let contract_name = args
                         .next()
                         .ok_or_else(|| format!("missing value for argument {}", arg))?;
 
@@ -77,7 +77,7 @@ impl Args {
                         })?;
 
                     other_records
-                        .entry(collection_name)
+                        .entry(contract_name)
                         .or_insert_with(Vec::new)
                         .push((record_json, vec![]));
                 }
@@ -131,9 +131,9 @@ impl Args {
             Some(abi) => abi,
         };
 
-        for (collection, records) in other_records.iter_mut() {
-            let col_struct = abi.other_collection_types.iter().find_map(|t| match t {
-                abi::Type::Struct(s) if s.name == *collection => Some(s),
+        for (contract, records) in other_records.iter_mut() {
+            let col_struct = abi.other_contract_types.iter().find_map(|t| match t {
+                abi::Type::Struct(s) if s.name == *contract => Some(s),
                 _ => None,
             });
 

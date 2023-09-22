@@ -18,11 +18,11 @@ function justMain() {
   return output;
 }
 
-function withCollection() {
+function withContracts() {
   let program = pkg.compile(
     // If the log was absent, we wouldn't get `id` in the output,
     // because the compiler optimizes it away for performance
-    "@public collection Account { id: string; function main() { log(this.id); } }",
+    "@public contract Account { id: string; function main() { log(this.id); } }",
     "Account",
     "main"
   );
@@ -48,4 +48,4 @@ function report(output, hasThis) {
 }
 
 console.log(report(justMain(), false));
-console.log(report(withCollection(), true));
+console.log(report(withContract(), true));

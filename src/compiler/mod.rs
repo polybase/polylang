@@ -373,10 +373,10 @@ lazy_static::lazy_static! {
 
         builtins.push(("hashString".to_string(), None, Function::Builtin(|compiler, scope, args| string::hash(compiler, scope, args))));
 
-        // bytes and collection reference have the same layout as strings,
+        // bytes and contract reference have the same layout as strings,
         // so we can reuse the hashing function
         builtins.push(("hashBytes".to_owned(), None, Function::Builtin(|compiler, scope, args| string::hash(compiler, scope, args))));
-        builtins.push(("hashCollectionReference".to_owned(), None, Function::Builtin(|compiler, scope, args| string::hash(compiler, scope, args))));
+        builtins.push(("hashContractReference".to_owned(), None, Function::Builtin(|compiler, scope, args| string::hash(compiler, scope, args))));
 
         builtins.push(("hashArray".to_owned(), None, Function::Builtin(array::hash)));
 
@@ -557,7 +557,7 @@ lazy_static::lazy_static! {
         ));
 
         builtins.push((
-            "readAdviceCollectionReference".to_string(),
+            "readAdviceContractReference".to_string(),
             None,
             Function::Builtin(|compiler, _, _args| {
                 let old_root_scope = compiler.root_scope;
@@ -572,7 +572,7 @@ lazy_static::lazy_static! {
                 compiler.root_scope = old_root_scope;
 
                 Ok(Symbol {
-                    type_: Type::CollectionReference { collection: "".to_owned() },
+                    type_: Type::ContractReference { contract: "".to_owned() },
                     ..result
                 })
             }),
@@ -960,7 +960,7 @@ fn struct_field(
 ) -> Result<Symbol> {
     let struct_ = match &struct_symbol.type_ {
         Type::Struct(struct_) => struct_,
-        Type::CollectionReference { collection: _ } if field_name == "id" => {
+        Type::ContractReference { contract: _ } if field_name == "id" => {
             return Ok(Symbol {
                 type_: Type::String,
                 memory_addr: struct_symbol.memory_addr,
@@ -1007,7 +1007,7 @@ pub(crate) struct Symbol {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct CollectionField {
+pub(crate) struct ContractField {
     name: String,
     type_: Type,
     delegate: bool,
@@ -1015,23 +1015,23 @@ pub(crate) struct CollectionField {
 }
 
 #[derive(Debug, Clone)]
-struct Collection<'ast> {
+struct Contract<'ast> {
     name: String,
-    fields: Vec<CollectionField>,
+    fields: Vec<ContractField>,
     functions: Vec<(String, &'ast ast::Function)>,
     call_directive: bool,
     read_directive: bool,
 }
 
-impl From<Collection<'_>> for Struct {
-    fn from(collection: Collection<'_>) -> Self {
+impl From<Contract<'_>> for Struct {
+    fn from(contract: Contract<'_>) -> Self {
         let mut fields = Vec::new();
-        for field in collection.fields {
+        for field in contract.fields {
             fields.push((field.name, field.type_));
         }
 
         Struct {
-            name: collection.name,
+            name: contract.name,
             fields,
         }
     }
@@ -1061,7 +1061,7 @@ pub(crate) struct Scope<'ast, 'b> {
     non_null_symbol_addrs: Vec<u32>,
     functions: Vec<(String, Function<'ast>)>,
     methods: Vec<(TypeConstraint, String, Function<'ast>)>,
-    collections: Vec<(String, Collection<'ast>)>,
+    contracts: Vec<(String, Contract<'ast>)>,
 }
 
 impl<'ast> Scope<'ast, '_> {
@@ -1072,7 +1072,7 @@ impl<'ast> Scope<'ast, '_> {
             non_null_symbol_addrs: vec![],
             functions: vec![],
             methods: vec![],
-            collections: vec![],
+            contracts: vec![],
         }
     }
 
@@ -1083,7 +1083,7 @@ impl<'ast> Scope<'ast, '_> {
             non_null_symbol_addrs: vec![],
             functions: vec![],
             methods: vec![],
-            collections: vec![],
+            contracts: vec![],
         }
     }
 
@@ -1153,26 +1153,26 @@ impl<'ast> Scope<'ast, '_> {
         None
     }
 
-    fn add_collection(&mut self, name: String, collection: Collection<'ast>) {
-        if self.find_collection(&name).is_some() {
-            panic!("Collection {} already exists", name);
+    fn add_contract(&mut self, name: String, contract: Contract<'ast>) {
+        if self.find_contract(&name).is_some() {
+            panic!("Contract {} already exists", name);
         }
 
-        self.collections.push((name, collection));
+        self.contracts.push((name, contract));
     }
 
-    fn find_collection(&self, name: &str) -> Option<&Collection<'ast>> {
-        if let Some(collection) = self
-            .collections
+    fn find_contract(&self, name: &str) -> Option<&Contract<'ast>> {
+        if let Some(contract) = self
+            .contracts
             .iter()
             .rev()
             .find(|(n, _)| n == name)
             .map(|(_, c)| c)
         {
-            return Some(collection);
+            return Some(contract);
         }
 
-        self.parent.and_then(|p| p.find_collection(name))
+        self.parent.and_then(|p| p.find_contract(name))
     }
 }
 
@@ -1279,10 +1279,10 @@ impl<'ast, 'c, 's> Compiler<'ast, 'c, 's> {
             .push(encoder::Instruction::Comment(comment));
     }
 
-    fn get_record_dependency(&mut self, col: &Collection) -> Option<Symbol> {
+    fn get_record_dependency(&mut self, col: &Contract) -> Option<Symbol> {
         self.record_depenencies
             .iter()
-            .find(|(hashes, _)| hashes.collection == col.name)
+            .find(|(hashes, _)| hashes.contract == col.name)
             .map(|(_, symbol)| symbol.clone())
     }
 }
@@ -2194,8 +2194,8 @@ fn compile_ast_function_call(
             Some(ast::Type::String) => Type::String,
             Some(ast::Type::PublicKey) => Type::PublicKey,
             Some(ast::Type::Bytes) => Type::Bytes,
-            Some(ast::Type::ForeignRecord { collection }) => Type::CollectionReference {
-                collection: collection.clone(),
+            Some(ast::Type::ForeignRecord { contract }) => Type::ContractReference {
+                contract: contract.clone(),
             },
             Some(ast::Type::Boolean) => {
                 return Err(Error::simple("unexpected function call of boolean"))
@@ -2823,18 +2823,18 @@ fn log(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Result<Sy
     })
 }
 
-fn read_advice_collection_reference(compiler: &mut Compiler, collection: String) -> Result<Symbol> {
+fn read_advice_contract_reference(compiler: &mut Compiler, contract: String) -> Result<Symbol> {
     let r = compile_function_call(
         compiler,
         BUILTINS_SCOPE
-            .find_function("readAdviceCollectionReference")
+            .find_function("readAdviceContractReference")
             .unwrap(),
         &[],
         None,
     )?;
 
     Ok(Symbol {
-        type_: Type::CollectionReference { collection },
+        type_: Type::ContractReference { contract },
         ..r
     })
 }
@@ -3328,10 +3328,10 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Result<Symbol> {
             &[value],
             None,
         )?,
-        Type::CollectionReference { .. } => compile_function_call(
+        Type::ContractReference { .. } => compile_function_call(
             compiler,
             BUILTINS_SCOPE
-                .find_function("hashCollectionReference")
+                .find_function("hashContractReference")
                 .unwrap(),
             &[value],
             None,
@@ -3543,8 +3543,8 @@ fn read_advice_generic(compiler: &mut Compiler, type_: &Type) -> Result<Symbol> 
             &[],
             None,
         ),
-        Type::CollectionReference { collection } => {
-            read_advice_collection_reference(compiler, collection.clone())
+        Type::ContractReference { contract } => {
+            read_advice_contract_reference(compiler, contract.clone())
         }
         Type::Array(t) => read_advice_array(compiler, t),
         Type::Struct(s) => {
@@ -3620,7 +3620,7 @@ fn read_struct_from_advice_tape(
 }
 
 /// Returns (Option<(salts, this)>, args)
-fn read_collection_inputs(
+fn read_contract_inputs(
     compiler: &mut Compiler,
     this_struct: Option<Struct>,
     args: &[Type],
@@ -3664,8 +3664,8 @@ fn prepare_scope(program: &ast::Program) -> Scope {
 
     for node in &program.nodes {
         match node {
-            ast::RootNode::Collection(c) => {
-                let mut collection = Collection {
+            ast::RootNode::Contract(c) => {
+                let mut contract = Contract {
                     name: c.name.clone(),
                     functions: vec![],
                     fields: vec![],
@@ -3695,22 +3695,22 @@ fn prepare_scope(program: &ast::Program) -> Scope {
 
                 for item in &c.items {
                     match item {
-                        ast::CollectionItem::Field(f) => {
-                            collection.fields.push(CollectionField {
+                        ast::ContractItem::Field(f) => {
+                            contract.fields.push(ContractField {
                                 name: f.name.clone(),
                                 type_: ast_type_to_type(f.required, &f.type_),
                                 delegate: f.decorators.iter().any(|d| d.name == "delegate"),
                                 read: f.decorators.iter().any(|d| d.name == "read"),
                             });
                         }
-                        ast::CollectionItem::Function(f) => {
-                            collection.functions.push((f.name.clone(), f));
+                        ast::ContractItem::Function(f) => {
+                            contract.functions.push((f.name.clone(), f));
                         }
-                        ast::CollectionItem::Index(_) => {}
+                        ast::ContractItem::Index(_) => {}
                     }
                 }
 
-                scope.add_collection(collection.name.clone(), collection);
+                scope.add_contract(contract.name.clone(), contract);
             }
             ast::RootNode::Function(function) => scope
                 .functions
@@ -3723,18 +3723,18 @@ fn prepare_scope(program: &ast::Program) -> Scope {
 
 pub fn compile(
     program: ast::Program,
-    collection_name: Option<&str>,
+    contract_name: Option<&str>,
     function_name: &str,
 ) -> Result<(String, Abi)> {
     let mut scope = prepare_scope(&program);
-    let collection = collection_name.map(|name| scope.find_collection(name).cloned().unwrap());
-    let collection = collection.as_ref();
-    let collection_struct = collection.map(|c| Struct::from(c.clone()));
+    let contract = contract_name.map(|name| scope.find_contract(name).cloned().unwrap());
+    let contract = contract.as_ref();
+    let contract_struct = contract.map(|c| Struct::from(c.clone()));
 
     let (function, param_types) = match function_name {
         ".readAuth" => (None, vec![]),
         _ => {
-            let function = collection
+            let function = contract
                 .and_then(|c| {
                     c.functions
                         .iter()
@@ -3751,7 +3751,7 @@ pub fn compile(
             let param_types = function
                 .parameters
                 .iter()
-                .map(|p| ast_param_type_to_type(p.required, &p.type_, collection_struct.as_ref()))
+                .map(|p| ast_param_type_to_type(p.required, &p.type_, contract_struct.as_ref()))
                 .collect::<Result<Vec<_>>>()?;
 
             (Some(function), param_types)
@@ -3779,12 +3779,12 @@ pub fn compile(
     scope.add_symbol("ctx".to_string(), ctx.clone());
 
     let all_possible_record_dependencies = scope
-        .collections
+        .contracts
         .iter()
         .map(|c| {
             (
                 abi::RecordHashes {
-                    collection: c.0.clone(),
+                    contract: c.0.clone(),
                 },
                 memory.allocate_symbol(Type::Array(Box::new(Type::Hash))),
             )
@@ -3795,7 +3795,7 @@ pub fn compile(
         let mut compiler = Compiler::new(&mut instructions, &mut memory, &scope);
         compiler.record_depenencies = all_possible_record_dependencies.clone();
 
-        let fields_in_use = collection_struct
+        let fields_in_use = contract_struct
             .as_ref()
             .iter()
             .flat_map(|s| &s.fields)
@@ -3808,7 +3808,7 @@ pub fn compile(
             })
             .collect::<Vec<_>>();
 
-        let expected_hashes = collection_struct
+        let expected_hashes = contract_struct
             .as_ref()
             .iter()
             .flat_map(|s| &s.fields)
@@ -3919,9 +3919,9 @@ pub fn compile(
 
         read_struct_from_advice_tape(&mut compiler, &ctx, &ctx_struct, None)?;
 
-        let (salts_this_symbol, arg_symbols) = read_collection_inputs(
+        let (salts_this_symbol, arg_symbols) = read_contract_inputs(
             &mut compiler,
-            collection_struct.clone(),
+            contract_struct.clone(),
             &param_types,
             Some(&fields_in_use),
         )?;
@@ -3932,7 +3932,7 @@ pub fn compile(
                 &mut compiler,
                 &ctx_pk,
                 &salts_this_symbol.as_ref().unwrap().1,
-                collection_name.unwrap(),
+                contract_name.unwrap(),
                 function_name,
             )?;
 
@@ -3947,13 +3947,7 @@ pub fn compile(
         this_addr = salts_this_symbol.as_ref().map(|(_, ts)| ts.memory_addr);
 
         if let Some((salts, this_symbol)) = &salts_this_symbol {
-            for (i, field) in collection_struct
-                .as_ref()
-                .unwrap()
-                .fields
-                .iter()
-                .enumerate()
-            {
+            for (i, field) in contract_struct.as_ref().unwrap().fields.iter().enumerate() {
                 let field_used_instructions = {
                     let mut insts = vec![];
                     std::mem::swap(compiler.instructions, &mut insts);
@@ -3991,7 +3985,7 @@ pub fn compile(
             None => compile_read_authorization_proof(
                 &mut compiler,
                 &salts_this_symbol.as_ref().unwrap().1,
-                collection.as_ref().unwrap(),
+                contract.as_ref().unwrap(),
                 &ctx_pk,
             )?,
             Some(function) => compile_ast_function_call(
@@ -4010,12 +4004,7 @@ pub fn compile(
         );
 
         if let Some((salts, this_symbol)) = &salts_this_symbol {
-            for (i, (field_name, _)) in collection_struct
-                .as_ref()
-                .unwrap()
-                .fields
-                .iter()
-                .enumerate()
+            for (i, (field_name, _)) in contract_struct.as_ref().unwrap().fields.iter().enumerate()
             {
                 let if_in_use_then_insts = {
                     let mut insts = vec![];
@@ -4054,7 +4043,7 @@ pub fn compile(
         );
 
         used_fields_count = vec![HashMap::new(); fields_in_use.len()];
-        let field_addr_ranges = collection_struct
+        let field_addr_ranges = contract_struct
             .as_ref()
             .map(|s| {
                 s.fields
@@ -4119,7 +4108,7 @@ pub fn compile(
                 );
 
                 dependent_fields.push(
-                    collection_struct
+                    contract_struct
                         .as_ref()
                         .unwrap()
                         .fields
@@ -4152,10 +4141,10 @@ pub fn compile(
     let abi = Abi {
         dependent_fields,
         this_addr,
-        this_type: collection_struct.map(Type::Struct),
+        this_type: contract_struct.map(Type::Struct),
         param_types,
-        other_collection_types: scope
-            .collections
+        other_contract_types: scope
+            .contracts
             .iter()
             .map(|c| Type::Struct(Struct::from(c.1.clone())))
             .collect(),
@@ -4205,14 +4194,14 @@ pub fn compile(
 fn compile_read_authorization_proof(
     compiler: &mut Compiler,
     struct_symbol: &Symbol,
-    collection: &Collection,
+    contract: &Contract,
     auth_pk: &Symbol,
 ) -> Result<Symbol> {
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
 
-    if collection.read_directive {
+    if contract.read_directive {
         compiler.instructions.push(encoder::Instruction::Push(1));
         compiler
             .instructions
@@ -4220,7 +4209,7 @@ fn compile_read_authorization_proof(
         return Ok(result);
     }
 
-    for field in collection.fields.iter().filter(|f| f.read) {
+    for field in contract.fields.iter().filter(|f| f.read) {
         let field_symbol = struct_field(compiler, &struct_symbol, &field.name)?;
         compiler.memory.read(
             &mut compiler.instructions,
@@ -4246,8 +4235,8 @@ fn compile_call_authorization_proof(
     compiler: &mut Compiler,
     // Symbol of type Type::Nullable(Type::PublicKey)
     auth_pk: &Symbol,
-    collection_symbol: &Symbol,
-    collection_name: &str,
+    contract_symbol: &Symbol,
+    contract_name: &str,
     function_name: &str,
 ) -> Result<Symbol> {
     let result = compiler
@@ -4263,14 +4252,14 @@ fn compile_call_authorization_proof(
     }
 
     let scope = compiler.root_scope;
-    let Some(collection) = scope.find_collection(collection_name) else {
+    let Some(contract) = scope.find_contract(contract_name) else {
         return Err(Error::simple(format!(
-            "Collection not found: {}",
-            collection_name
+            "Contract not found: {}",
+            contract_name
         )));
     };
-    // let collection_struct = Struct::from(collection.clone());
-    let Some((_, function)) = collection
+    // let contract_struct = Struct::from(contract.clone());
+    let Some((_, function)) = contract
         .functions
         .iter()
         .find(|(name, _)| name == function_name)
@@ -4285,10 +4274,10 @@ fn compile_call_authorization_proof(
         .peekable();
 
     let function_has_call_directive = call_decorators.peek().is_some();
-    match (collection.call_directive, function_has_call_directive) {
-        // Function call directive overrides the collection call directive.
+    match (contract.call_directive, function_has_call_directive) {
+        // Function call directive overrides the contract call directive.
         (_, true) => {}
-        // The collection has a @call directive, but the function does not,
+        // The contract has a @call directive, but the function does not,
         // anyone can call it.
         (true, false) => {
             compiler.instructions.push(encoder::Instruction::Push(1));
@@ -4297,7 +4286,7 @@ fn compile_call_authorization_proof(
                 .push(encoder::Instruction::MemStore(Some(result.memory_addr)));
             return Ok(result);
         }
-        // Neither the collection nor the function have a @call directive,
+        // Neither the contract nor the function have a @call directive,
         // no calls are allowed.
         (false, false) => return Ok(result),
     }
@@ -4320,7 +4309,7 @@ fn compile_call_authorization_proof(
 
         let arg_value = match call_arg {
             ast::DecoratorArgument::Identifier(id) => {
-                let mut current_field = collection_symbol.clone();
+                let mut current_field = contract_symbol.clone();
                 for field in &[id] {
                     current_field = struct_field(compiler, &current_field, field)?;
                 }
@@ -4361,9 +4350,9 @@ fn compile_check_eq_or_ownership(
     let is_eq = match &field.type_ {
         Type::PublicKey => compile_eq(compiler, &field, auth_pk)?,
         Type::Nullable(t) if **t == Type::PublicKey => compile_eq(compiler, &field, auth_pk)?,
-        Type::CollectionReference { collection } => {
-            let collection_type = compiler.root_scope.find_collection(&collection).unwrap();
-            let collection_record_hashes = compiler.get_record_dependency(collection_type).unwrap();
+        Type::ContractReference { contract } => {
+            let contract_type = compiler.root_scope.find_contract(&contract).unwrap();
+            let contract_record_hashes = compiler.get_record_dependency(contract_type).unwrap();
             let id = struct_field(compiler, &field, "id").unwrap();
 
             let hash_id = hash(compiler, id.clone())?;
@@ -4392,15 +4381,15 @@ fn compile_check_eq_or_ownership(
                 let public_hash_position = nullable::value(public_hash_position.clone());
 
                 let record_public_hash =
-                    array::get(compiler, &collection_record_hashes, &public_hash_position);
+                    array::get(compiler, &contract_record_hashes, &public_hash_position);
 
                 let record = compiler
                     .memory
-                    .allocate_symbol(Type::Struct(Struct::from(collection_type.clone())));
+                    .allocate_symbol(Type::Struct(Struct::from(contract_type.clone())));
                 compiler.instructions.push(encoder::Instruction::AdvPush(
-                    collection_type.fields.len() as u32,
+                    contract_type.fields.len() as u32,
                 ));
-                let salts = collection_type
+                let salts = contract_type
                     .fields
                     .iter()
                     .map(|_| {
@@ -4418,7 +4407,7 @@ fn compile_check_eq_or_ownership(
                 read_struct_from_advice_tape(
                     compiler,
                     &record,
-                    &Struct::from(collection_type.clone()),
+                    &Struct::from(contract_type.clone()),
                     None,
                 )?;
                 let actual_record_hash = hash_record_with_salts(compiler, &record, &salts)?;
@@ -4439,7 +4428,7 @@ fn compile_check_eq_or_ownership(
                 let (error_str, _) = string::new(compiler, "Record id does not match");
                 compile_function_call(compiler, assert, &[is_id_eq, error_str], None)?;
 
-                let result = compile_check_ownership(compiler, &record, collection_type, auth_pk)?;
+                let result = compile_check_ownership(compiler, &record, contract_type, auth_pk)?;
 
                 std::mem::swap(compiler.instructions, &mut insts);
                 (insts, result)
@@ -4539,14 +4528,14 @@ fn compile_check_eq_or_ownership(
 fn compile_check_ownership(
     compiler: &mut Compiler,
     struct_symbol: &Symbol,
-    collection: &Collection,
+    contract: &Contract,
     auth_pk: &Symbol,
 ) -> Result<Symbol> {
     let result = compiler
         .memory
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
 
-    for delegate_field in collection.fields.iter().filter(|f| f.delegate) {
+    for delegate_field in contract.fields.iter().filter(|f| f.delegate) {
         let delegate_symbol = struct_field(compiler, struct_symbol, &delegate_field.name)?;
         let is_eq = compile_check_eq_or_ownership(compiler, delegate_symbol, auth_pk)?;
 
@@ -4563,11 +4552,11 @@ fn compile_check_ownership(
     Ok(result)
 }
 
-/// collection_struct is the type used for `record` types
+/// contract_struct is the type used for `record` types
 fn ast_param_type_to_type(
     required: bool,
     type_: &ast::ParameterType,
-    collection_struct: Option<&Struct>,
+    contract_struct: Option<&Struct>,
 ) -> Result<Type> {
     let t = match type_ {
         ast::ParameterType::String => Type::String,
@@ -4578,11 +4567,11 @@ fn ast_param_type_to_type(
         ast::ParameterType::U64 => Type::PrimitiveType(PrimitiveType::UInt64),
         ast::ParameterType::I32 => Type::PrimitiveType(PrimitiveType::Int32),
         ast::ParameterType::I64 => Type::PrimitiveType(PrimitiveType::Int64),
-        ast::ParameterType::Record => Type::Struct(collection_struct.unwrap().clone()),
+        ast::ParameterType::Record => Type::Struct(contract_struct.unwrap().clone()),
         ast::ParameterType::PublicKey => Type::PublicKey,
         ast::ParameterType::Bytes => Type::Bytes,
-        ast::ParameterType::ForeignRecord { collection } => Type::CollectionReference {
-            collection: collection.clone(),
+        ast::ParameterType::ForeignRecord { contract } => Type::ContractReference {
+            contract: contract.clone(),
         },
         ast::ParameterType::Array(t) => Type::Array(Box::new(ast_type_to_type(true, t))),
         ast::ParameterType::Boolean => {
@@ -4620,8 +4609,8 @@ fn ast_type_to_type(required: bool, type_: &ast::Type) -> Type {
         ast::Type::I64 => Type::PrimitiveType(PrimitiveType::Int64),
         ast::Type::PublicKey => Type::PublicKey,
         ast::Type::Bytes => Type::Bytes,
-        ast::Type::ForeignRecord { collection } => Type::CollectionReference {
-            collection: collection.clone(),
+        ast::Type::ForeignRecord { contract } => Type::ContractReference {
+            contract: contract.clone(),
         },
         ast::Type::Array(t) => Type::Array(Box::new(ast_type_to_type(true, t))),
         ast::Type::Boolean => Type::PrimitiveType(PrimitiveType::Boolean),

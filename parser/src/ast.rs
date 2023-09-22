@@ -7,19 +7,19 @@ pub struct Program {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum RootNode {
-    Collection(Collection),
+    Contract(Contract),
     Function(Function),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Collection {
+pub struct Contract {
     pub name: String,
     pub decorators: Vec<Decorator>,
-    pub items: Vec<CollectionItem>,
+    pub items: Vec<ContractItem>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum CollectionItem {
+pub enum ContractItem {
     Field(Field),
     Function(Function),
     Index(Index),
@@ -63,7 +63,7 @@ pub enum Type {
     Map(Box<Type>, Box<Type>),
     Object(Vec<Field>),
     PublicKey,
-    ForeignRecord { collection: String },
+    ForeignRecord { contract: String },
     Bytes,
 }
 
@@ -83,7 +83,7 @@ pub enum ParameterType {
     Map(Type, Type),
     Object(Vec<(String, Type)>),
     Record,
-    ForeignRecord { collection: String },
+    ForeignRecord { contract: String },
     PublicKey,
     Bytes,
 }
@@ -159,7 +159,9 @@ impl<T> MaybeSpanned<T> {
     }
 
     pub fn span(&self) -> Option<Span> {
-        let Self::Spanned(spanned) = self else { return None };
+        let Self::Spanned(spanned) = self else {
+            return None;
+        };
         Some(spanned.span)
     }
 

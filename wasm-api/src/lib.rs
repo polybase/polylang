@@ -14,14 +14,14 @@ pub struct Program {
 #[wasm_bindgen]
 pub fn compile(
     code: String,
-    collection_name: Option<String>,
+    contract_name: Option<String>,
     fn_name: &str,
 ) -> Result<Program, JsError> {
     let program = polylang::parse_program(&code)?;
     let (miden_code, mut abi) =
-        polylang::compiler::compile(program, collection_name.as_deref(), fn_name)?;
+        polylang::compiler::compile(program, contract_name.as_deref(), fn_name)?;
 
-    if collection_name.is_none() {
+    if contract_name.is_none() {
         abi.this_type = Some(abi::Type::Struct(abi::Struct {
             name: "Empty".to_string(),
             fields: Vec::new(),

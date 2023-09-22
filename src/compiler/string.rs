@@ -789,7 +789,7 @@ pub(crate) fn hash(compiler: &mut Compiler, _scope: &Scope, args: &[Symbol]) -> 
     let string = &args[0];
     ensure_eq_type!(
         string,
-        Type::String | Type::Bytes | Type::CollectionReference { .. }
+        Type::String | Type::Bytes | Type::ContractReference { .. }
     );
 
     let result = compiler.memory.allocate_symbol(Type::Hash);

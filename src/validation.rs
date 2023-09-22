@@ -517,7 +517,7 @@ pub(crate) fn validate_value<'a>(
                 })
             }
         }
-        stableast::Type::ForeignRecord(stableast::ForeignRecord { collection: _ }) => {
+        stableast::Type::ForeignRecord(stableast::ForeignRecord { contract: _ }) => {
             if let Value::Map(map) = value {
                 if let Some(extra_field) = map.keys().find(|k| *k != "id") {
                     let mut path = path.clone();
@@ -562,14 +562,14 @@ pub(crate) fn validate_value<'a>(
 }
 
 pub(crate) fn validate_set<'a>(
-    collection: &'a stableast::Collection,
+    contract: &'a stableast::Contract,
     data: &'a HashMap<String, Value>,
 ) -> Result<(), ValidationError<'a>> {
-    let fields = collection
+    let fields = contract
         .attributes
         .iter()
         .filter_map(|item| {
-            if let stableast::CollectionAttribute::Property(prop) = item {
+            if let stableast::ContractAttribute::Property(prop) = item {
                 Some(prop)
             } else {
                 None
@@ -611,11 +611,11 @@ mod tests {
 
     #[test]
     fn test_validate_set() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
             name: "users".into(),
             attributes: vec![
-                stableast::CollectionAttribute::Property(stableast::Property {
+                stableast::ContractAttribute::Property(stableast::Property {
                     name: "name".into(),
                     type_: stableast::Type::Primitive(stableast::Primitive {
                         value: stableast::PrimitiveType::String,
@@ -623,7 +623,7 @@ mod tests {
                     directives: vec![],
                     required: true,
                 }),
-                stableast::CollectionAttribute::Property(stableast::Property {
+                stableast::ContractAttribute::Property(stableast::Property {
                     name: "age".into(),
                     type_: stableast::Type::Primitive(stableast::Primitive {
                         value: stableast::PrimitiveType::Number,
@@ -639,15 +639,15 @@ mod tests {
             ("age".to_string(), Value::Number(30.0)),
         ]);
 
-        assert!(validate_set(&collection, &data).is_ok());
+        assert!(validate_set(&contract, &data).is_ok());
     }
 
     #[test]
     fn test_validate_set_array() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
             name: "users".into(),
-            attributes: vec![stableast::CollectionAttribute::Property(
+            attributes: vec![stableast::ContractAttribute::Property(
                 stableast::Property {
                     name: "tags".into(),
                     type_: stableast::Type::Array(stableast::Array {
@@ -669,15 +669,15 @@ mod tests {
             ]),
         )]);
 
-        assert!(validate_set(&collection, &data).is_ok());
+        assert!(validate_set(&contract, &data).is_ok());
     }
 
     #[test]
     fn test_validate_set_array_invalid_array_value() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
             name: "users".into(),
-            attributes: vec![stableast::CollectionAttribute::Property(
+            attributes: vec![stableast::ContractAttribute::Property(
                 stableast::Property {
                     name: "tags".into(),
                     type_: stableast::Type::Array(stableast::Array {
@@ -696,7 +696,7 @@ mod tests {
             Value::Array(vec![Value::String("tag1".to_string()), Value::Number(2.0)]),
         )]);
 
-        let result = validate_set(&collection, &data);
+        let result = validate_set(&contract, &data);
         assert!(result.is_err());
 
         assert_eq!(
@@ -712,10 +712,10 @@ mod tests {
 
     #[test]
     fn test_validate_map() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
             name: "users".into(),
-            attributes: vec![stableast::CollectionAttribute::Property(
+            attributes: vec![stableast::ContractAttribute::Property(
                 stableast::Property {
                     name: "tags".into(),
                     type_: stableast::Type::Map(stableast::Map {
@@ -740,15 +740,15 @@ mod tests {
             ])),
         )]);
 
-        assert!(validate_set(&collection, &data).is_ok());
+        assert!(validate_set(&contract, &data).is_ok());
     }
 
     #[test]
     fn test_validate_nested_map() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
             name: "users".into(),
-            attributes: vec![stableast::CollectionAttribute::Property(
+            attributes: vec![stableast::ContractAttribute::Property(
                 stableast::Property {
                     name: "tags".into(),
                     type_: stableast::Type::Map(stableast::Map {
@@ -790,15 +790,15 @@ mod tests {
             ])),
         )]);
 
-        assert!(validate_set(&collection, &data).is_ok());
+        assert!(validate_set(&contract, &data).is_ok());
     }
 
     #[test]
     fn test_validate_map_number_key() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
             name: "users".into(),
-            attributes: vec![stableast::CollectionAttribute::Property(
+            attributes: vec![stableast::ContractAttribute::Property(
                 stableast::Property {
                     name: "tags".into(),
                     type_: stableast::Type::Map(stableast::Map {
@@ -823,15 +823,15 @@ mod tests {
             ])),
         )]);
 
-        assert!(validate_set(&collection, &data).is_ok());
+        assert!(validate_set(&contract, &data).is_ok());
     }
 
     #[test]
     fn test_validate_map_number_key_invalid() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
             name: "users".into(),
-            attributes: vec![stableast::CollectionAttribute::Property(
+            attributes: vec![stableast::ContractAttribute::Property(
                 stableast::Property {
                     name: "tags".into(),
                     type_: stableast::Type::Map(stableast::Map {
@@ -856,7 +856,7 @@ mod tests {
             ])),
         )]);
 
-        let result = validate_set(&collection, &data);
+        let result = validate_set(&contract, &data);
         assert!(result.is_err());
 
         assert_eq!(
@@ -872,10 +872,10 @@ mod tests {
 
     #[test]
     fn test_validate_map_invalid_key() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
             name: "users".into(),
-            attributes: vec![stableast::CollectionAttribute::Property(
+            attributes: vec![stableast::ContractAttribute::Property(
                 stableast::Property {
                     name: "tags".into(),
                     type_: stableast::Type::Map(stableast::Map {
@@ -900,7 +900,7 @@ mod tests {
             ])),
         )]);
 
-        let result = validate_set(&collection, &data);
+        let result = validate_set(&contract, &data);
         assert!(result.is_err());
 
         assert_eq!(
@@ -918,10 +918,10 @@ mod tests {
     fn test_validate_object() {
         let cases = [
             (
-                stableast::Collection {
+                stableast::Contract {
                     namespace: stableast::Namespace { value: "ns".into() },
                     name: "users".into(),
-                    attributes: vec![stableast::CollectionAttribute::Property(
+                    attributes: vec![stableast::ContractAttribute::Property(
                         stableast::Property {
                             name: "info".into(),
                             type_: stableast::Type::Object(stableast::Object {
@@ -947,10 +947,10 @@ mod tests {
                 )]),
             ),
             (
-                stableast::Collection {
+                stableast::Contract {
                     namespace: stableast::Namespace { value: "ns".into() },
                     name: "users".into(),
-                    attributes: vec![stableast::CollectionAttribute::Property(
+                    attributes: vec![stableast::ContractAttribute::Property(
                         stableast::Property {
                             name: "info".into(),
                             type_: stableast::Type::Object(stableast::Object {
@@ -970,10 +970,10 @@ mod tests {
                 HashMap::from([("info".to_string(), Value::Map(HashMap::from([])))]),
             ),
             (
-                stableast::Collection {
+                stableast::Contract {
                     namespace: stableast::Namespace { value: "ns".into() },
                     name: "users".into(),
-                    attributes: vec![stableast::CollectionAttribute::Property(
+                    attributes: vec![stableast::ContractAttribute::Property(
                         stableast::Property {
                             name: "info".into(),
                             type_: stableast::Type::Object(stableast::Object {
@@ -994,9 +994,9 @@ mod tests {
             ),
         ];
 
-        for (collection, data) in cases.into_iter() {
+        for (contract, data) in cases.into_iter() {
             assert!(
-                validate_set(&collection, &data).is_ok(),
+                validate_set(&contract, &data).is_ok(),
                 "failed to validate: {:?}",
                 data
             );
@@ -1005,10 +1005,10 @@ mod tests {
 
     #[test]
     fn test_validate_object_missing_field() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
             name: "users".into(),
-            attributes: vec![stableast::CollectionAttribute::Property(
+            attributes: vec![stableast::ContractAttribute::Property(
                 stableast::Property {
                     name: "info".into(),
                     type_: stableast::Type::Object(stableast::Object {
@@ -1028,7 +1028,7 @@ mod tests {
 
         let data = HashMap::from([("info".to_string(), Value::Map(HashMap::from([])))]);
 
-        let result = validate_set(&collection, &data);
+        let result = validate_set(&contract, &data);
         assert!(result.is_err());
 
         assert_eq!(
@@ -1041,10 +1041,10 @@ mod tests {
 
     #[test]
     fn test_validate_object_extra_field() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
             name: "users".into(),
-            attributes: vec![stableast::CollectionAttribute::Property(
+            attributes: vec![stableast::ContractAttribute::Property(
                 stableast::Property {
                     name: "info".into(),
                     type_: stableast::Type::Object(stableast::Object {
@@ -1070,7 +1070,7 @@ mod tests {
             ])),
         )]);
 
-        let result = validate_set(&collection, &data);
+        let result = validate_set(&contract, &data);
         assert!(result.is_err());
 
         let error = result.unwrap_err();
@@ -1084,11 +1084,11 @@ mod tests {
 
     #[test]
     fn test_validate_set_missing_required_field() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
             name: "users".into(),
             attributes: vec![
-                stableast::CollectionAttribute::Property(stableast::Property {
+                stableast::ContractAttribute::Property(stableast::Property {
                     name: "name".into(),
                     type_: stableast::Type::Primitive(stableast::Primitive {
                         value: stableast::PrimitiveType::String,
@@ -1096,7 +1096,7 @@ mod tests {
                     required: true,
                     directives: vec![],
                 }),
-                stableast::CollectionAttribute::Property(stableast::Property {
+                stableast::ContractAttribute::Property(stableast::Property {
                     name: "age".into(),
                     type_: stableast::Type::Primitive(stableast::Primitive {
                         value: stableast::PrimitiveType::Number,
@@ -1109,7 +1109,7 @@ mod tests {
 
         let data = HashMap::from([("age".to_string(), Value::Number(30.0))]);
 
-        let result = validate_set(&collection, &data);
+        let result = validate_set(&contract, &data);
         assert!(result.is_err());
 
         let error = result.unwrap_err();
@@ -1123,11 +1123,11 @@ mod tests {
 
     #[test]
     fn test_validate_set_invalid_type() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
             name: "users".into(),
             attributes: vec![
-                stableast::CollectionAttribute::Property(stableast::Property {
+                stableast::ContractAttribute::Property(stableast::Property {
                     name: "name".into(),
                     type_: stableast::Type::Primitive(stableast::Primitive {
                         value: stableast::PrimitiveType::String,
@@ -1135,7 +1135,7 @@ mod tests {
                     required: true,
                     directives: vec![],
                 }),
-                stableast::CollectionAttribute::Property(stableast::Property {
+                stableast::ContractAttribute::Property(stableast::Property {
                     name: "age".into(),
                     type_: stableast::Type::Primitive(stableast::Primitive {
                         value: stableast::PrimitiveType::Number,
@@ -1151,7 +1151,7 @@ mod tests {
             ("age".to_string(), Value::String("30".to_string())),
         ]);
 
-        let result = validate_set(&collection, &data);
+        let result = validate_set(&contract, &data);
         assert!(result.is_err());
 
         let error = result.unwrap_err();
@@ -1168,11 +1168,11 @@ mod tests {
 
     #[test]
     fn test_validate_set_extra_field() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
             name: "users".into(),
             attributes: vec![
-                stableast::CollectionAttribute::Property(stableast::Property {
+                stableast::ContractAttribute::Property(stableast::Property {
                     name: "name".into(),
                     type_: stableast::Type::Primitive(stableast::Primitive {
                         value: stableast::PrimitiveType::String,
@@ -1180,7 +1180,7 @@ mod tests {
                     required: true,
                     directives: vec![],
                 }),
-                stableast::CollectionAttribute::Property(stableast::Property {
+                stableast::ContractAttribute::Property(stableast::Property {
                     name: "age".into(),
                     type_: stableast::Type::Primitive(stableast::Primitive {
                         value: stableast::PrimitiveType::Number,
@@ -1197,7 +1197,7 @@ mod tests {
             ("extra".to_string(), Value::String("extra".to_string())),
         ]);
 
-        let result = validate_set(&collection, &data);
+        let result = validate_set(&contract, &data);
         assert!(result.is_err());
 
         let error = result.unwrap_err();
@@ -1211,10 +1211,10 @@ mod tests {
 
     #[test]
     fn test_validate_boolean() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
             name: "users".into(),
-            attributes: vec![stableast::CollectionAttribute::Property(
+            attributes: vec![stableast::ContractAttribute::Property(
                 stableast::Property {
                     name: "is_admin".into(),
                     type_: stableast::Type::Primitive(stableast::Primitive {
@@ -1227,20 +1227,20 @@ mod tests {
         };
 
         assert!(validate_set(
-            &collection,
+            &contract,
             &HashMap::from([("is_admin".to_string(), Value::Boolean(true))])
         )
         .is_ok());
 
         assert!(validate_set(
-            &collection,
+            &contract,
             &HashMap::from([("is_admin".to_string(), Value::Boolean(false))])
         )
         .is_ok());
 
         assert_eq!(
             validate_set(
-                &collection,
+                &contract,
                 &HashMap::from([("is_admin".to_string(), Value::Number(1.0))])
             ),
             Err(ValidationError::InvalidType {
@@ -1256,10 +1256,10 @@ mod tests {
         ($name:ident, $data:expr, $expected:expr) => {
             #[test]
             fn $name() {
-                let collection = stableast::Collection {
+                let contract = stableast::Contract {
                     namespace: stableast::Namespace { value: "ns".into() },
                     name: "users".into(),
-                    attributes: vec![stableast::CollectionAttribute::Property(
+                    attributes: vec![stableast::ContractAttribute::Property(
                         stableast::Property {
                             name: "public_key".into(),
                             type_: stableast::Type::PublicKey(stableast::PublicKey {}),
@@ -1269,7 +1269,7 @@ mod tests {
                     )],
                 };
                 let data = $data;
-                let result = validate_set(&collection, &data);
+                let result = validate_set(&contract, &data);
 
                 assert_eq!(result, $expected, "{:?}", result);
             }
@@ -1492,10 +1492,10 @@ mod tests {
 
     #[test]
     fn test_validate_public_key_optional() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
-            name: "Collection".into(),
-            attributes: vec![stableast::CollectionAttribute::Property(
+            name: "Contract".into(),
+            attributes: vec![stableast::ContractAttribute::Property(
                 stableast::Property {
                     name: "public_key".into(),
                     type_: stableast::Type::PublicKey(stableast::PublicKey {}),
@@ -1507,7 +1507,7 @@ mod tests {
 
         let data = HashMap::new();
 
-        let result = validate_set(&collection, &data);
+        let result = validate_set(&contract, &data);
         assert_eq!(result, Ok(()));
     }
 
@@ -1515,14 +1515,14 @@ mod tests {
         ($name:ident, $data:expr, $expected:expr) => {
             #[test]
             fn $name() {
-                let collection = stableast::Collection {
+                let contract = stableast::Contract {
                     namespace: stableast::Namespace { value: "ns".into() },
-                    name: "Collection".into(),
-                    attributes: vec![stableast::CollectionAttribute::Property(
+                    name: "Contract".into(),
+                    attributes: vec![stableast::ContractAttribute::Property(
                         stableast::Property {
                             name: "foreign_record".into(),
                             type_: stableast::Type::ForeignRecord(stableast::ForeignRecord {
-                                collection: "ForeignCollection".into(),
+                                contract: "ForeignContract".into(),
                             }),
                             required: true,
                             directives: vec![],
@@ -1531,7 +1531,7 @@ mod tests {
                 };
 
                 let data = $data;
-                let result = validate_set(&collection, &data);
+                let result = validate_set(&contract, &data);
                 assert_eq!(result, $expected);
             }
         };
@@ -1579,14 +1579,14 @@ mod tests {
 
     #[test]
     fn test_validate_foreign_record_optional() {
-        let collection = stableast::Collection {
+        let contract = stableast::Contract {
             namespace: stableast::Namespace { value: "ns".into() },
-            name: "Collection".into(),
-            attributes: vec![stableast::CollectionAttribute::Property(
+            name: "Contract".into(),
+            attributes: vec![stableast::ContractAttribute::Property(
                 stableast::Property {
                     name: "foreign_record".into(),
                     type_: stableast::Type::ForeignRecord(stableast::ForeignRecord {
-                        collection: "ForeignCollection".into(),
+                        contract: "ForeignContract".into(),
                     }),
                     required: false,
                     directives: vec![],
@@ -1596,17 +1596,17 @@ mod tests {
 
         let data = HashMap::new();
 
-        let result = validate_set(&collection, &data);
+        let result = validate_set(&contract, &data);
         assert_eq!(result, Ok(()));
     }
     macro_rules! test_validate_bytes {
         ($name:ident, $data:expr, $expected:expr) => {
             #[test]
             fn $name() {
-                let collection = stableast::Collection {
+                let contract = stableast::Contract {
                     namespace: stableast::Namespace { value: "ns".into() },
-                    name: "Collection".into(),
-                    attributes: vec![stableast::CollectionAttribute::Property(
+                    name: "Contract".into(),
+                    attributes: vec![stableast::ContractAttribute::Property(
                         stableast::Property {
                             name: "bytes".into(),
                             type_: stableast::Type::Primitive(stableast::Primitive {
@@ -1619,7 +1619,7 @@ mod tests {
                 };
 
                 let data = $data;
-                let result = validate_set(&collection, &data);
+                let result = validate_set(&contract, &data);
                 assert_eq!(result, $expected);
             }
         };

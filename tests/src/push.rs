@@ -6,7 +6,7 @@ fn run_push(
 ) -> Result<(abi::Value, abi::Value), error::Error> {
     let code = r#"
         @public
-        collection Account {
+        contract Account {
             id: string;
             arr: number[];
             result: number;
@@ -53,7 +53,7 @@ fn run_push17(
 ) -> Result<(abi::Value, abi::Value), error::Error> {
     let code = r#"
         @public
-        collection Account {
+        contract Account {
             id: string;
             arr: number[];
             result: number;

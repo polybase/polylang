@@ -8,7 +8,7 @@ fn run_splice(
 ) -> Result<(abi::Value, abi::Value), error::Error> {
     let code = r#"
         @public
-        collection Account {
+        contract Account {
             id: string;
             arr: number[];
             ret: number[];
