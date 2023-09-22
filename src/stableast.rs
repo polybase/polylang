@@ -13,18 +13,18 @@ pub struct Root<'a>(#[serde(borrow)] pub Vec<RootNode<'a>>);
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind")]
 pub enum RootNode<'a> {
-    #[serde(borrow, rename = "collection")]
-    Collection(Collection<'a>),
+    #[serde(borrow, rename = "contract")]
+    Contract(Contract<'a>),
     #[serde(other)]
     Unknown,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct Collection<'a> {
+pub struct Contract<'a> {
     pub namespace: Namespace<'a>,
     pub name: Cow<'a, str>,
     #[serde(borrow)]
-    pub attributes: Vec<CollectionAttribute<'a>>,
+    pub attributes: Vec<ContractAttribute<'a>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -35,7 +35,7 @@ pub struct Namespace<'a> {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind")]
-pub enum CollectionAttribute<'a> {
+pub enum ContractAttribute<'a> {
     #[serde(borrow, rename = "property")]
     Property(Property<'a>),
     #[serde(borrow, rename = "method")]
@@ -177,7 +177,7 @@ impl Display for Type<'_> {
                 write!(f, "}}")
             }
             Type::Record(_) => write!(f, "record"),
-            Type::ForeignRecord(fr) => write!(f, "{}", fr.collection),
+            Type::ForeignRecord(fr) => write!(f, "{}", fr.contract),
             Type::PublicKey(_) => write!(f, "PublicKey"),
             Type::Unknown => write!(f, "UNKNOWN"),
         }
@@ -267,7 +267,7 @@ pub struct PublicKey {}
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct ForeignRecord<'a> {
-    pub collection: Cow<'a, str>,
+    pub contract: Cow<'a, str>,
 }
 
 impl<'a> Root<'a> {
@@ -275,7 +275,7 @@ impl<'a> Root<'a> {
         let mut root = Root(vec![]);
         for node in &program.nodes {
             root.0.push(match node {
-                ast::RootNode::Contract(c) => RootNode::Collection(Collection {
+                ast::RootNode::Contract(c) => RootNode::Contract(Contract {
                     namespace: Namespace {
                         value: Cow::Borrowed(namespace),
                     },
@@ -284,19 +284,17 @@ impl<'a> Root<'a> {
                         .items
                         .iter()
                         .map(|item| match item {
-                            ast::ContractItem::Field(f) => {
-                                CollectionAttribute::Property(Property {
-                                    name: Cow::Borrowed(&f.name),
-                                    type_: Type::from_ast_type(&f.type_),
-                                    directives: f
-                                        .decorators
-                                        .iter()
-                                        .map(Directive::from_decorator_ast)
-                                        .collect(),
-                                    required: f.required,
-                                })
-                            }
-                            ast::ContractItem::Function(f) => CollectionAttribute::Method(Method {
+                            ast::ContractItem::Field(f) => ContractAttribute::Property(Property {
+                                name: Cow::Borrowed(&f.name),
+                                type_: Type::from_ast_type(&f.type_),
+                                directives: f
+                                    .decorators
+                                    .iter()
+                                    .map(Directive::from_decorator_ast)
+                                    .collect(),
+                                required: f.required,
+                            }),
+                            ast::ContractItem::Function(f) => ContractAttribute::Method(Method {
                                 name: Cow::Borrowed(&f.name),
                                 code: Cow::Borrowed(&f.statements_code),
                                 attributes: {
@@ -328,7 +326,7 @@ impl<'a> Root<'a> {
                                     attributes
                                 },
                             }),
-                            ast::ContractItem::Index(i) => CollectionAttribute::Index(Index {
+                            ast::ContractItem::Index(i) => ContractAttribute::Index(Index {
                                 fields: i
                                     .fields
                                     .iter()
@@ -347,7 +345,7 @@ impl<'a> Root<'a> {
                             }),
                         })
                         .chain(c.decorators.iter().map(|d| {
-                            CollectionAttribute::Directive(Directive::from_decorator_ast(d))
+                            ContractAttribute::Directive(Directive::from_decorator_ast(d))
                         }))
                         .collect(),
                 }),
@@ -407,7 +405,7 @@ impl<'a> Type<'a> {
                     .collect(),
             }),
             ast::Type::ForeignRecord { contract } => Type::ForeignRecord(ForeignRecord {
-                collection: Cow::Borrowed(contract),
+                contract: Cow::Borrowed(contract),
             }),
             ast::Type::PublicKey => Type::PublicKey(PublicKey {}),
             ast::Type::Bytes => Type::Primitive(Primitive {
@@ -464,7 +462,7 @@ impl<'a> Type<'a> {
             }),
             ast::ParameterType::Record => Type::Record(Record {}),
             ast::ParameterType::ForeignRecord { contract } => Type::ForeignRecord(ForeignRecord {
-                collection: Cow::Borrowed(contract.as_str()),
+                contract: Cow::Borrowed(contract.as_str()),
             }),
             ast::ParameterType::PublicKey => Type::PublicKey(PublicKey {}),
             ast::ParameterType::Bytes => Type::Primitive(Primitive {
@@ -507,7 +505,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let root = Root(vec![RootNode::Collection(Collection {
+        let root = Root(vec![RootNode::Contract(Contract {
             namespace: Namespace {
                 value: "foo".into(),
             },
@@ -520,12 +518,12 @@ mod tests {
 
     #[test]
     fn test_serialize() {
-        let root = Root(vec![RootNode::Collection(Collection {
+        let root = Root(vec![RootNode::Contract(Contract {
             namespace: Namespace {
                 value: "abc/xyz".into(),
             },
             name: "Account".into(),
-            attributes: vec![CollectionAttribute::Property(Property {
+            attributes: vec![ContractAttribute::Property(Property {
                 name: "id".into(),
                 type_: Type::Primitive(Primitive {
                     value: PrimitiveType::String,
@@ -539,7 +537,7 @@ mod tests {
         let expected = expect![[r#"
             [
               {
-                "kind": "collection",
+                "kind": "contract",
                 "namespace": {
                   "kind": "namespace",
                   "value": "abc/xyz"
@@ -588,13 +586,13 @@ mod tests {
 
     test_serialize_json!(
         test_serialize_json_root,
-        Root(vec![RootNode::Collection(Collection {
+        Root(vec![RootNode::Contract(Contract {
             namespace: Namespace {
                 value: "abc/xyz".into()
             },
             name: "Account".into(),
             attributes: vec![
-                CollectionAttribute::Property(Property {
+                ContractAttribute::Property(Property {
                     name: "id".into(),
                     type_: Type::Primitive(Primitive {
                         value: PrimitiveType::String
@@ -602,7 +600,7 @@ mod tests {
                     directives: vec![],
                     required: true,
                 }),
-                CollectionAttribute::Property(Property {
+                ContractAttribute::Property(Property {
                     name: "balance".into(),
                     type_: Type::Primitive(Primitive {
                         value: PrimitiveType::Number
@@ -615,7 +613,7 @@ mod tests {
         expect![[r#"
             [
               {
-                "kind": "collection",
+                "kind": "contract",
                 "namespace": {
                   "kind": "namespace",
                   "value": "abc/xyz"
@@ -649,7 +647,7 @@ mod tests {
 
     test_serialize_json!(
         test_serialize_json_attribute_property,
-        CollectionAttribute::Property(Property {
+        ContractAttribute::Property(Property {
             name: "id".into(),
             type_: Type::Primitive(Primitive {
                 value: PrimitiveType::String
@@ -672,12 +670,12 @@ mod tests {
 
     test_serialize_json!(
         test_serialize_json_with_unknown_root_node,
-        Root(vec![RootNode::Collection(Collection {
+        Root(vec![RootNode::Contract(Contract {
             namespace: Namespace {
                 value: "abc/xyz".into()
             },
             name: "Account".into(),
-            attributes: vec![CollectionAttribute::Property(Property {
+            attributes: vec![ContractAttribute::Property(Property {
                 name: "id".into(),
                 type_: Type::Primitive(Primitive {
                     value: PrimitiveType::String
@@ -689,7 +687,7 @@ mod tests {
         expect![[r#"
             [
               {
-                "kind": "collection",
+                "kind": "contract",
                 "namespace": {
                   "kind": "namespace",
                   "value": "abc/xyz"
@@ -712,12 +710,12 @@ mod tests {
     );
 
     test_deserialize_json!(
-        test_deserialize_collection,
+        test_deserialize_contract,
         Root,
         r#"
             [
               {
-                "kind": "collection",
+                "kind": "contract",
                 "namespace": {
                   "kind": "namespace",
                   "value": "abc/xyz"
@@ -741,8 +739,8 @@ mod tests {
         expect![[r#"
             Root(
                 [
-                    Collection(
-                        Collection {
+                    Contract(
+                        Contract {
                             namespace: Namespace {
                                 value: "abc/xyz",
                             },
@@ -790,7 +788,7 @@ mod tests {
 
     test_deserialize_json!(
         test_deserialize_unknown_attribute,
-        CollectionAttribute,
+        ContractAttribute,
         r#"
             {
               "kind": "some_new_kind",
@@ -961,7 +959,7 @@ mod tests {
                 ObjectField {
                     name: Cow::Borrowed("col"),
                     type_: Type::ForeignRecord(ForeignRecord {
-                        collection: Cow::Borrowed("Col"),
+                        contract: Cow::Borrowed("Col"),
                     }),
                     required: true,
                 },
