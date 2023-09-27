@@ -14,11 +14,6 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Pull testnet collections
-        continue-on-error: true
-        run: |
-          ./pull-collections
-
       - name: Run Tests
         uses: actions-rs/cargo@v1
         timeout-minutes: 10
