@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+mod col_refs;
 mod push;
 mod slice;
 mod splice;
