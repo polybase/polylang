@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use abi::Abi;
 use error::prelude::*;
-use polylang_prover::{Inputs, RunOutput};
+use miden::{verify, ProgramInfo, StackInputs, StackOutputs};
+use polylang_prover::{Inputs, ProgramExt, RunOutput};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -46,44 +47,50 @@ impl Program {
         let args = serde_json::from_str(&args_json)?;
 
         let program = polylang_prover::compile_program(&self.abi, &self.miden_code)?;
-
-        let (output, prove) = polylang_prover::run(
-            &program,
-            &Inputs::new(
-                self.abi.clone(),
-                None,
-                self.abi
-                    .this_type
-                    .as_ref()
-                    .map(|ty| match ty {
-                        abi::Type::Struct(st) => Ok(st.fields.iter().map(|_| 0).collect()),
-                        _ => Err(Error::simple("this type must be a struct")),
-                    })
-                    .transpose()?
-                    .unwrap_or(vec![]),
-                this,
-                args,
-                HashMap::new(),
-            )?,
+        let inputs = Inputs::new(
+            self.abi.clone(),
+            None,
+            self.abi
+                .this_type
+                .as_ref()
+                .map(|ty| match ty {
+                    abi::Type::Struct(st) => Ok(st.fields.iter().map(|_| 0).collect()),
+                    _ => Err(Error::simple("this type must be a struct")),
+                })
+                .transpose()?
+                .unwrap_or(vec![]),
+            this,
+            args,
+            HashMap::new(),
         )?;
 
+        let (output, prove) = polylang_prover::run(&program, &inputs)?;
+
+        let hash = program.hash();
+        let kernal = program.kernel();
+        let info = ProgramInfo::new(hash, kernal.clone());
+
+        let maybe_proof = if generate_proof { Some(prove()?) } else { None };
+        let proof = maybe_proof.as_ref().map(|(p, _)| p.to_bytes());
+        let output_stack = maybe_proof.map(|(_, os)| os);
+
         Ok(Output {
+            info,
             abi: self.abi.clone(),
             output,
-            proof: if generate_proof {
-                Some(prove()?.to_bytes())
-            } else {
-                None
-            },
+            proof,
+            output_stack,
         })
     }
 }
 
 #[wasm_bindgen]
 pub struct Output {
+    info: ProgramInfo,
     abi: Abi,
     output: RunOutput,
     proof: Option<Vec<u8>>,
+    output_stack: Option<StackOutputs>,
 }
 
 #[wasm_bindgen]
@@ -94,6 +101,18 @@ impl Output {
 
     pub fn proof(&self) -> Option<Vec<u8>> {
         self.proof.clone()
+    }
+
+    pub fn verify(&self) -> Result<u32, JsError> {
+        verify(
+            self.info.clone(),
+            StackInputs::try_from_values(self.output.stack.clone().into_iter())
+                .map_err(|e| JsError::new(&e.to_string()))?,
+            self.output_stack.clone().unwrap(),
+            miden::ExecutionProof::from_bytes(&self.proof.clone().unwrap().to_vec())
+                .map_err(|err| JsError::new(&format!("failed to parse proof: {}", err)))?,
+        )
+        .map_err(|e| JsError::new(&e.to_string()))
     }
 
     pub fn this(&self) -> Result<JsValue, JsError> {

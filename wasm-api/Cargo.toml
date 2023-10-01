@@ -12,6 +12,7 @@ crate-type = ["cdylib", "rlib"]
 abi = { path = "../abi" }
 polylang-prover = { path = "../prover" }
 polylang = { path = "../" }
+miden-vm = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.6.1", default-features = false }
 error = { path = "../error" }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }

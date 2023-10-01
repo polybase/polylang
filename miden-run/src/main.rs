@@ -306,7 +306,7 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(out) = args.proof_output {
         let proof = prove()?;
         let mut file = std::fs::File::create(&out).context(IoSnafu)?;
-        file.write_all(&proof.to_bytes()).context(IoSnafu)?;
+        file.write_all(&proof.0.to_bytes()).context(IoSnafu)?;
 
         println!("Proof saved to {out}");
     }

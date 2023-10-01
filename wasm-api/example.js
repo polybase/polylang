@@ -37,6 +37,7 @@ function withContracts() {
 
 function report(output, hasThis) {
   return {
+    proof: output.proof(),
     proofLength: output.proof().length,
     cycleCount: output.cycle_count(),
     this: hasThis ? output.this() : null,
@@ -47,5 +48,8 @@ function report(output, hasThis) {
   };
 }
 
-console.log(report(justMain(), false));
+const mainOutput = justMain();
+console.log(report(mainOutput, false));
+console.log("Proof is valid?", mainOutput.verify());
 console.log(report(withContract(), true));
+consel
