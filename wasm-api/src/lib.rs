@@ -106,7 +106,7 @@ impl Output {
     pub fn verify(&self) -> Result<u32, JsError> {
         verify(
             self.info.clone(),
-            StackInputs::try_from_values(self.output.stack.clone().into_iter())
+            StackInputs::try_from_values(self.output.input_stack.clone().into_iter())
                 .map_err(|e| JsError::new(&e.to_string()))?,
             self.output_stack.clone().unwrap(),
             miden::ExecutionProof::from_bytes(&self.proof.clone().unwrap().to_vec())
