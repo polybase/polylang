@@ -51,5 +51,4 @@ function report(output, hasThis) {
 const mainOutput = justMain();
 console.log(report(mainOutput, false));
 console.log("Proof is valid?", mainOutput.verify());
-console.log(report(withContract(), true));
-consel
+console.log(report(withContracts(), true));
