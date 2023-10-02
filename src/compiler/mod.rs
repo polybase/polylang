@@ -4055,10 +4055,10 @@ pub fn compile(
                     else_: vec![],
                 });
             }
-
-            comment!(compiler, "Reading selfdestruct flag");
-            compiler.memory.read(compiler.instructions, 6, 1);
         }
+
+        comment!(compiler, "Reading selfdestruct flag");
+        compiler.memory.read(compiler.instructions, 6, 1);
 
         assert_eq!(
             compiler.record_depenencies.len(),

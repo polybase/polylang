@@ -4,7 +4,7 @@ pkg.init();
 
 function justMain() {
   let program = pkg.compile(
-    "function main(x: string) { log(x); }",
+    "function main(x: string): string { log(x); return 'x: ' + x; }",
     null,
     "main"
   );
@@ -40,6 +40,8 @@ function report(output, hasThis) {
     proofLength: output.proof().length,
     cycleCount: output.cycle_count(),
     this: hasThis ? output.this() : null,
+    result: output.result(),
+    resultHash: output.result_hash(),
     logs: output.logs(),
     hashes: output.hashes(),
     selfDestructed: output.self_destructed(),
