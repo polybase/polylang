@@ -485,6 +485,7 @@ Index: Index = {
 DecoratorName: String = {
     <l:@L> <name:Ident> =>? match name.as_str() {
         "public" => Ok(name),
+        "private" => Ok(name),
         "read" => Ok(name),
         "call" => Ok(name),
         "delegate" => Ok(name),

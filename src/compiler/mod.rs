@@ -3669,27 +3669,38 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                     name: c.name.clone(),
                     functions: vec![],
                     fields: vec![],
-                    call_directive: match c
-                        .decorators
-                        .iter()
-                        .find(|d| d.name == "call" || d.name == "public")
-                    {
-                        Some(d) if d.arguments.len() == 0 => true,
-                        Some(d) => {
-                            panic!("Invalid {} directive, call() takes no arguments", &d.name)
+                    call_directive: match c.decorators.iter().find(|d| {
+                        d.name == "call"
+                            || d.name == "public"
+                            || d.name == "read"
+                            || d.name == "private"
+                    }) {
+                        Some(d) if d.arguments.len() > 0 => {
+                            panic!(
+                                "Invalid {name} directive, {name}() takes no arguments",
+                                name = &d.name
+                            )
                         }
-                        None => false,
+                        Some(d) if d.name == "private" => false,
+                        Some(_) => true,
+                        // collections are public by default
+                        None => true,
                     },
                     read_directive: match c
                         .decorators
                         .iter()
-                        .find(|d| d.name == "read" || d.name == "public")
+                        .find(|d| d.name == "read" || d.name == "public" || d.name == "private")
                     {
-                        Some(d) if d.arguments.len() == 0 => true,
-                        Some(d) => {
-                            panic!("Invalid {} directive, read() takes no arguments", &d.name)
+                        Some(d) if d.arguments.len() > 0 => {
+                            panic!(
+                                "Invalid {name} directive, {name}() takes no arguments",
+                                name = &d.name
+                            )
                         }
-                        None => false,
+                        Some(d) if d.name == "private" => false,
+                        Some(_) => true,
+                        // collections are public by default
+                        None => true,
                     },
                 };
 

@@ -6,7 +6,6 @@ fn run_unshift(
     elems: Vec<serde_json::Value>,
 ) -> Result<(abi::Value, abi::Value), error::Error> {
     let code = r#"
-        @public
         contract Account {
             id: string;
             arr: number[];

@@ -7,7 +7,6 @@ fn run_slice(
     end: Option<u32>,
 ) -> Result<abi::Value, error::Error> {
     let code = r#"
-        @public
         contract Account {
             id: string;
             arr: number[];

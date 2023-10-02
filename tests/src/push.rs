@@ -5,7 +5,6 @@ fn run_push(
     element: serde_json::Value,
 ) -> Result<(abi::Value, abi::Value), error::Error> {
     let code = r#"
-        @public
         contract Account {
             id: string;
             arr: number[];
@@ -52,7 +51,6 @@ fn run_push17(
     elements: [serde_json::Value; 17],
 ) -> Result<(abi::Value, abi::Value), error::Error> {
     let code = r#"
-        @public
         contract Account {
             id: string;
             arr: number[];
