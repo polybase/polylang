@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use actix_web::{middleware, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use base64::Engine;
 use error::prelude::*;
 use polylang_prover::{compile_program, Inputs, ProgramExt};
@@ -83,14 +83,14 @@ async fn prove(
 
 #[tokio::main]
 async fn main() {
-    let app = || {
-        App::new()
-            .wrap(middleware::Compress::default())
-            .service(web::resource("/prove").route(web::post().to(prove)))
-    };
+    let listen_addr = std::env::var("PROVER_LADDR").unwrap_or("0.0.0.0:8090".to_string());
+
+    let app = || App::new().service(web::resource("/prove").route(web::post().to(prove)));
+
+    eprintln!("Listening on {}", listen_addr);
 
     HttpServer::new(move || app())
-        .bind(("127.0.0.1", 3000))
+        .bind(listen_addr)
         .unwrap()
         .run()
         .await
