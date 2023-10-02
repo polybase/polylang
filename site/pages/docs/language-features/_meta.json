@@ -1,0 +1,13 @@
+{
+    "lexical-structure": "Lexical Structure",
+    "context": "Context",
+    "fields": "Fields",
+    "fieldtypes": "Field Types",
+    "errors": "Errors and Error Handling",
+    "bindings": "Local Variable Bindings",
+    "constructors": "Constructors",
+    "functions": "Functions",
+    "control-flow": "Control Flow",
+    "permissions": "Declarative Permissions",
+    "general-structure": "Structure of Programs"
+}

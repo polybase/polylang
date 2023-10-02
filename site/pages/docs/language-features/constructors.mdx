@@ -1,0 +1,51 @@
+---
+title: Constructors
+---
+
+# Constructors
+
+import { Callout } from 'nextra/components'
+
+A constructor is a special `Polylang` function which is used to create a new record of a contract. For the specific signature of the constructor, 
+refer to the [simplified grammar](general-structure).
+
+For example, suppose we have the following contract:
+
+```typescript
+@public 
+contract Person {
+    id: string;
+    name: string;
+    age: number;
+
+    constructor (id: string, name; string, age: number) {
+        this.id = id;
+        this.name = name;
+        this.age = age;
+    }
+}
+```
+
+The constructor in this case has the following fields: `id`, `name`, and `age`, which map to the fields of the contract. When a new record of the `Person` contract is created,
+the constructor is invoked, passed these values, and the fields for this record are updated with these values.
+
+<Callout type="info" emoji="ℹ️">
+  Note that the constructor arguments are not required to match the field names.
+</Callout>
+
+The constructor can take fewer arguments than the number of fields in the contract:
+
+```typescript
+@public 
+contract Person {
+    id: string;
+    name: string;
+    age: number;
+
+    constructor (id: string, name; string) {
+        this.id = id;
+        this.name = name;
+        this.age = 0; // initialize explicitly
+    }
+}
+```

@@ -1,0 +1,201 @@
+---
+title: Polylang and Zero-Knowledge
+---
+
+# Polylang and Zero-Knowledge
+
+import { Callout } from 'nextra/components';
+
+To run `Polylang` programs on the Miden VM, we follow a two step process:
+    1. Compile the program into Miden assembly.
+    2. Run the program by invoking `miden-run` and passing in:
+        * the output of the compilation step (produced in step 1)
+        * the input contract (if applicable) using the `--this-json` flag 
+        * the inputs for the code (if applicable) using the `--advice-tape-json` flag
+
+A number of showcase examples follow.
+
+<Callout type="info" emoji="ℹ️">
+    The `Polylang` CLI is being actively worked on, and ergonomics should improve in future iterations.
+</Callout>
+
+## Minimal example
+
+Consider a minimal `Polylang` program:
+
+```typescript
+function main() {
+}
+```
+
+This program simply has a function, `main` that does nothing. 
+
+Compile and extract the ABI string:
+
+```bash
+$ cargo run --bin compile -- function:main <<<'function main() {}' | cargo run -p miden-run
+```
+
+Output:
+
+```bash
+<no output>
+```
+
+## Adding numbers
+
+The use case is that we wish to add two numbers which are supplied to our program, and calculate the sum.
+
+Define the contract:
+
+```typescript
+@public
+contract AddNums {
+    sum: number; // this will store the sum
+
+    addNums(a: number, b: number) {
+        this.sum = a + b;
+    }
+}
+```
+
+Compile and run the program passing the numbers `1` and `2` as inputs:
+
+```bash
+$ cargo run --bin compile -- contract:AddNums function:addNums <<< '@public contract AddNums { sum: number; addNums(a: number, b: number) { this.sum = a + b; }}' | \
+cargo run -p miden-run -- --this-json '{ "sum": 0 }' \
+  --advice-tape-json '[1, 2]'
+```
+
+The output:
+
+```bash
+<elided>
+this_json: {"sum":3}
+```
+
+## A full contract example
+
+Consider the contract:
+
+```typescript
+@public
+contract Person {
+    id: string;
+    name: string;
+    age: number;
+  
+    constructor (id: string, name: string, age: number) {
+      this.id = id;
+      this.name = name;
+      this.age = age;
+    }
+  
+    setName(newName: string) {
+      this.name = newName;
+    }
+  
+    setAge(newAge: number) {
+      this.age = newAge;
+    }
+  
+    del () {
+      selfdestruct();
+    }
+}
+```
+
+Suppose we have a record with the following data:
+
+```json
+{
+    "id": "id1",
+    "name": "Bob",
+    "age": 19
+}
+```
+
+and we wish to update the `age` to 20. So we have to invoke the `setAge` function/method on the `Person` contract for this record.
+
+Compile and run the program and pass in 20 for the new `age`:
+
+```bash
+  $ cargo run --bin compile -- contract:Person function:setAge <<< \
+'
+@public
+contract Person {
+    id: string;
+    name: string;
+    age: number;
+  
+    constructor (id: string, name: string, age: number) {
+      this.id = id;
+      this.name = name;
+      this.age = age;
+    }
+  
+    setName(newName: string) {
+      this.name = newName;
+    }
+  
+    setAge(newAge: number) {
+      this.age = newAge;
+    }
+  
+    del () {
+      selfdestruct();
+    }
+}
+' | \
+  cargo run -p miden-run -- --this-json '{ "id": "id1", "name": "Bob", "age": 19 }' \
+--advice-tape-json '[20]'
+```
+
+The output:
+
+```bash
+<elided>
+this_json: {"age":20,"id":"id1","name":"Bob"}
+```
+
+## So where is the proof?
+
+If a `Polylang` program runs to completion, then the code is provably correct. If we still wish to generate an explicit proof output, we can pass the `--proof-output` flag to the
+`miden-run` executable. 
+
+The syntax is:
+
+```bash
+$ cargo run -p miden-run -- --proof-output <proof-file>
+```
+
+Here is how we could generate the proof for the [first example](#minimal-example):
+
+```bash
+$ cargo run --bin compile -- function:main <<<'function main() {}' | cargo run -p miden-run -- --proof-output minimal.proof
+```
+
+Output:
+
+```bash
+$ file minimal.proof
+minimal.proof: data
+
+$ xxd minimal.proof | head
+00000000: 0048 0910 0a00 0008 0100 0000 ffff ffff  .H..............
+00000010: 1b08 1002 08ff 7800 8e5c d6e1 b263 696d  ......x..\...cim
+00000020: 168a c6b8 fefb 1b5d c315 4663 9d24 c477  .......]..Fc.$.w
+00000030: c829 cf37 23f8 bf7a 7a94 21fd f47c fada  .).7#..zz.!..|..
+00000040: 48b0 9bd6 6520 4a57 1e5d 7c2f 9a56 c5a0  H...e JW.]|/.V..
+00000050: 56f6 3d96 9e89 8a47 b4f7 c72b c9da b9fa  V.=....G...+....
+00000060: 473c 90f5 faa0 bda1 e61f 09d4 3875 4a20  G<..........8uJ
+00000070: 07a5 b83c 989e 9bc7 56bf 08a2 80fa b2e1  ...<....V.......
+00000080: 439b 18a8 1ab6 b453 8596 df8b d458 4865  C......S.....XHe
+00000090: c03c 0000 7364 28c6 c965 2965 6816 bcda  .<..sd(..e)eh...
+```
+
+The proof is stored as a sequence of bytes in the `minimal.proof` file.
+
+<Callout>
+  `Polylang` does not provide an option for verification via the CLI, but an external library such as [Miden Verifier](https://crates.io/crates/miden-verifier) may be used to explicitly verify the proof.
+</Callout>
