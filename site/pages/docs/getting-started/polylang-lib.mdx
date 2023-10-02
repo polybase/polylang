@@ -161,7 +161,6 @@ use std::{collections::HashMap, io::Write};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // the `Account` contract
     let contract = r#"
-      @public
       contract Account {
           id: string;
           name: string;
