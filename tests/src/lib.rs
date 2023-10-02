@@ -1395,3 +1395,74 @@ fn index_of() {
         abi::Value::Int32(1),
     );
 }
+
+#[test]
+fn returning() {
+    let code = r#"
+        @public
+        contract Account {
+            id: string;
+            name: string;
+
+
+            @call
+            getName(): string {
+                return this.name;
+            }
+        }
+    "#;
+
+    let (abi, output) = run(
+        code,
+        "Account",
+        "getName",
+        serde_json::json!({
+            "id": "",
+            "name": "John",
+        }),
+        vec![],
+        None,
+        HashMap::new(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        output.result(&abi).unwrap(),
+        abi::Value::String("John".to_owned())
+    );
+
+    consistency_checks!(
+        output,
+        abi,
+        hashes:
+            expect![[r#"
+                [
+                    [
+                        13624894021325080686,
+                        17508316994659426056,
+                        2620902411312551361,
+                        8347809021004383550,
+                    ],
+                ]
+            "#]],
+        dependencies:
+            expect![[r#"
+                [
+                    (
+                        "name",
+                        String,
+                    ),
+                ]
+            "#]]
+    );
+
+    let expected_return_hash = expect![[r#"
+        [
+            3850899504691128854,
+            5609950875147406075,
+            16200726738043745980,
+            18156263845020900466,
+        ]
+    "#]];
+    expected_return_hash.assert_debug_eq(&output.result_hash(&abi).unwrap());
+}
