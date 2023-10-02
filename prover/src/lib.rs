@@ -124,6 +124,7 @@ pub fn compile_program(abi: &Abi, miden_code: &str) -> Result<Program> {
         .wrap_err()
 }
 
+#[derive(Clone)]
 pub struct Inputs {
     pub abi: Abi,
     pub ctx_public_key: Option<publickey::Key>,
