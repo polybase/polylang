@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useColorMode } from "@chakra-ui/react"
+import { useColorMode } from '@chakra-ui/react'
 import { useTheme } from 'nextra-theme-docs'
 
 export function ColorModeSync() {

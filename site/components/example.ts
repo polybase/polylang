@@ -19,7 +19,7 @@ export const EXAMPLES = [{
   "params": [10, 20],
   "contract_name": "",
   "fn": "main"
-}`
+}`,
 }, {
   name: 'Fibonacci',
   code: `function main(p: u32, a: u32, b: u32) {
@@ -34,6 +34,7 @@ export const EXAMPLES = [{
   "params": [8, 1, 1],
   "contract_name": "",
   "fn": "main"
+<<<<<<< HEAD
 }`
 }, {
   name: 'Hello, Contracts!',
@@ -150,4 +151,7 @@ contract Country {
   "contract_name": "City",
   "fn": "constructor"
 }`
+=======
+}`,
+>>>>>>> 05ae6ff (Changes:)
 }]

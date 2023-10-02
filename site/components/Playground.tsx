@@ -4,7 +4,7 @@ import { Logo } from './Logo'
 import { useState } from 'react'
 import { EXAMPLES } from './example'
 import Link from 'next/link'
-import { useAsyncCallback } from "./useAsyncCallback"
+import { useAsyncCallback } from './useAsyncCallback'
 import { run, Output } from './polylang'
 import { encodeBase64 } from 'tweetnacl-util'
 
