@@ -1,0 +1,13 @@
+[package]
+name = "common"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+polylang= { git = "https://github.com/polybase/polylang" }
+polylang_parser = { git = "https://github.com/polybase/polylang" }
+polylang-prover = { git = "https://github.com/polybase/polylang" }
+abi = { git = "https://github.com/polybase/polylang" }
+serde_json =  { version = "1.0.107", features = ["arbitrary_precision" ]}
+serde = { version = "1.0.188", features = ["derive"] }
+

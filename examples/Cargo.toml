@@ -1,0 +1,4 @@
+[workspace]
+
+members = ["common", "hello-world", "reverse-array"]
+resolver = "2"

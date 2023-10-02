@@ -1,3 +1,5 @@
 target
 .DS_Store
 node_modules
+examples/**/*.proof
+examples/**/Cargo.lock
