@@ -1786,8 +1786,16 @@ dependencies = [
 name = "server"
 version = "0.1.0"
 dependencies = [
- "abi",
  "actix-web",
+ "server-routes",
+ "tokio",
+]
+
+[[package]]
+name = "server-routes"
+version = "0.1.0"
+dependencies = [
+ "abi",
  "base64 0.21.4",
  "error",
  "polylang-prover",
