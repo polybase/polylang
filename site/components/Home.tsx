@@ -17,7 +17,7 @@ const Home = ({ children }) => {
                 </Box>
                 <Stack spacing='10em'>
                     <Stack spacing={6}>
-                        <Heading as='h1' fontSize='4em'>
+                        <Heading as='h1' fontSize={['3em', '4em']}>
                             TypeScript for<br /> Zero Knowledge
                         </Heading>
                         <Heading as='h2' fontSize='xl'>Provable computation and zero knowledge language.</Heading>
