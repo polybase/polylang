@@ -12,6 +12,14 @@ const config: DocsThemeConfig = {
     link: 'https://discord.com/invite/DrXkRpCFDX',
   },
   docsRepositoryBase: 'https://github.com/polybase/polylang-site/',
+  banner: {
+    key: '2.0-release',
+    text: (
+      <a href="https://polybase.notion.site/Halo2-Engineer-Rust-ccea568bbfd64afa81d548d5c6fc429e" target="_blank">
+        🎉 We're hiring ZK (Halo2) developers. Read more →
+      </a>
+    )
+  },
   useNextSeoProps() {
     return {
       titleTemplate: '%s – Polylang by Polybase Labs'
