@@ -43,7 +43,7 @@ function report(output, hasThis) {
     this: hasThis ? output.this() : null,
     logs: output.logs(),
     hashes: output.hashes(),
-    selfDestructed: output.self_destructed(),
+    // selfDestructed: output.self_destructed(),
     readAuth: output.read_auth(),
   };
 }

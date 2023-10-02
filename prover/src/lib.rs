@@ -250,7 +250,7 @@ impl Inputs {
         .collect::<Vec<_>>()
     }
 
-    fn stack(
+    pub fn stack(
         &self,
         other_records: &HashMap<String, Vec<(Type, Value, Value, Vec<u32>)>>,
     ) -> Result<StackInputs> {

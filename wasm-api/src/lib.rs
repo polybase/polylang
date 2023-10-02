@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use abi::Abi;
 use error::prelude::*;
 use miden::{verify, ProgramInfo, StackInputs, StackOutputs};
-use polylang_prover::{Inputs, ProgramExt, RunOutput};
+use polylang_prover::{Inputs, RunOutput};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -74,9 +74,18 @@ impl Program {
         let proof = maybe_proof.as_ref().map(|(p, _)| p.to_bytes());
         let output_stack = maybe_proof.map(|(_, os)| os);
 
+        // let _ = verify(
+        //     info.clone(),
+        //     inputs.stack(&HashMap::new()).unwrap(),
+        //     output_stack.clone().unwrap(),
+        //     miden::ExecutionProof::from_bytes(&proof.clone().unwrap().to_vec())
+        //         .map_err(|err| JsError::new(&format!("failed to parse proof: {}", err)))?,
+        // );
+
         Ok(Output {
             info,
             abi: self.abi.clone(),
+            // inputs,
             output,
             proof,
             output_stack,
@@ -88,6 +97,7 @@ impl Program {
 pub struct Output {
     info: ProgramInfo,
     abi: Abi,
+    // inputs: StackInputs,
     output: RunOutput,
     proof: Option<Vec<u8>>,
     output_stack: Option<StackOutputs>,
@@ -103,7 +113,7 @@ impl Output {
         self.proof.clone()
     }
 
-    pub fn verify(&self) -> Result<u32, JsError> {
+    pub fn verify(&self) -> Result<bool, JsError> {
         verify(
             self.info.clone(),
             StackInputs::try_from_values(self.output.input_stack.clone().into_iter())
@@ -113,6 +123,7 @@ impl Output {
                 .map_err(|err| JsError::new(&format!("failed to parse proof: {}", err)))?,
         )
         .map_err(|e| JsError::new(&e.to_string()))
+        .map(|_| true)
     }
 
     pub fn this(&self) -> Result<JsValue, JsError> {
