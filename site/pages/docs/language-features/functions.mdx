@@ -1,0 +1,153 @@
+---
+title: Functions
+---
+
+# Functions
+
+import { Callout } from 'nextra/components'
+
+In addition to defining fields, types, and constructors for contracts, `Polylang` also allows developers to define custom functions within a contract.
+
+These functions can be used for various purposes - modifying/updating field values, adding additional logic and validation, access control, deleting the record itself,
+interacting with other contracts and records et al.
+
+## Modifying or Updating records
+
+Field values of records can only be updated via functions. Consider the following contract, for instance:
+
+```typescript
+@public
+contract Person {
+    id: string;
+    name: string;
+    age: number;
+
+    constructor (id: string, name: string, age: number) {
+      this.id = id;
+      this.name = name;
+      this.age = age;
+    }
+
+    setName(newName: string) {
+      this.name = newName;
+    }
+
+    setAge(newAge: number) {
+      this.age = newAge;
+    }
+}
+```
+
+The `setName` and `setAge` functions can be used to update the values for the `name` and `age` fields respectively.
+
+## Validation
+
+You can have custom validation logic inside functions. In the following example, we check that account we're transferring money from has sufficient funds to carry out that operation:
+
+```typescript
+@public
+contract Account {
+    id; string;
+    balance: number;
+
+    constructor (id: string) {
+      this.id = id;
+      this.balance = 0;
+    }
+
+    transfer (to: Account, amount: number) {
+      // ensure we have enough money in our account
+      if (this.balance < amount) {
+        error('Insufficient funds for transfer');
+      }
+
+      this.balance -= amount;
+      to.balance += amount;
+    }
+}
+```
+
+## Access Control
+
+We can also provide tighter checks on *who* can modify the record. Taking the same `Account` contract as above, we modify like so:
+
+```typescript
+@public
+contract Account {
+    id; string;
+    balance: number;
+    publicKey: PublicKey;
+
+    constructor (id: string) {
+      this.id = id;
+      this.publicKey = ctx.publicKey;
+      this.balance = 0;
+    }
+
+    transfer (to: Account, amount: number) {
+      // first check that we are authorized to attempt this transaction
+      if (this.publicKey != ctx.publicKey) {
+        error('User is not authorized to transfer funds from this account');
+      }
+
+      // ensure we have enough money in our account
+      if (this.balance < amount) {
+        error('Insufficient funds for transfer');
+      }
+
+      this.balance -= amount;
+      to.balance += amount;
+    }
+}
+```
+
+In the example above, we initialize the `publicKey` field with the public key of the user who created the `Account`, and when the `transfer` function is invoked to transfer funds 
+out of this account, we check whether the public key of the user attempting this transactions matches that of the user who created this account.
+
+
+## Deleting a record
+
+`Polylang` allows deletion of records using the `selfdestruct` **built-in** function. This built-in function must be, of course, called from within a `Polylang` function. This function
+can be named anything, but by convention, such a deletion function is called `del`.
+
+For example (building on the same contract):
+
+```typescript
+@public
+contract Account {
+    id; string;
+    balance: number;
+    publicKey: PublicKey;
+
+    constructor (id: string) {
+      this.id = id;
+      this.publicKey = ctx.publicKey;
+      this.balance = 0;
+    }
+
+    transfer (to: Account, amount: number) {
+      // first check that we are authorized to attempt this transaction
+      if (this.publicKey != ctx.publicKey) {
+        error('User is not authorized to transfer funds from this account');
+      }
+
+      // ensure we have enough money in our account
+      if (this.balance < amount) {
+        error('Insufficient funds for transfer');
+      }
+
+      this.balance -= amount;
+      to.balance += amount;
+    }
+
+    // the deletion function for this contract
+    del() {
+      if (this. publicKey != ctx.publicKey) {
+        error('User is not authorized to delete this account');
+      }
+
+      // call the built-in function
+      selfdestruct();
+    }
+}
+```

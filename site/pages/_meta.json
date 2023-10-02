@@ -1,0 +1,35 @@
+{
+  "index": {
+    "title": "Polylang",
+    "type": "page",
+    "display": "hidden",
+    "theme": {
+      "footer": false,
+      "navbar": false,
+      "layout": "full"
+    }
+  },
+  "docs": {
+    "type": "page",
+    "title": "Documentation"
+  },
+  "playground": {
+    "title": "Playground",
+    "type": "page",
+    "theme": {
+      "footer": false,
+      "navbar": false,
+      "layout": "full"
+    }
+  },
+  "about": {
+    "title": "About",
+    "type": "page"
+  },
+  "contact": {
+    "title": "Contact ↗",
+    "type": "page",
+    "href": "https://twitter.com/polybase_xyz",
+    "newWindow": true
+  }
+}

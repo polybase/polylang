@@ -1,0 +1,57 @@
+---
+title: Errors and Error Handling
+---
+
+# Errors and Error Handling
+
+`Polylang` provides error-handling support via the `error` **built-in** function.
+
+The syntax for `error` is:
+
+```typescript
+error('error message goes here');
+```
+
+We can also prepend the `error` built-in with a `throw`. So the following is identical:
+
+```typescript
+throw error('error message goes here');
+```
+
+The semantics is to abort the function call immediately with the given error message.
+
+Example:
+
+```typescript
+@public
+contract Person {
+    id: string;
+    name: string;
+    age: number;
+    hasVoted: boolean;
+
+    constructor (id: string, name: string, age: number) {
+        this.id = id;
+        this.name = name;
+        this.age = age;
+        this.canVote = false;
+    }
+
+    setName(newName: string) {
+        this.name = newName;
+    }
+
+    setAge(newAge: number) {
+        this.age = newAge;
+    }
+
+    vote() {
+        if (this.age < 18) {
+            // fail this call immediately
+            error('Cannot vote till 18');
+        }
+
+        this.hasVoted = true;
+    }
+}
+```

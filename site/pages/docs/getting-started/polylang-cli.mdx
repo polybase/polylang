@@ -1,0 +1,66 @@
+---
+title: Polylang CLI
+---
+
+import { Callout } from 'nextra/components'
+
+# `Polylang` CLI
+
+This assumes that you have cloned the repository locally, and built it as described in the [Building Polylang](/docs/getting-started/building-from-source) section.
+
+Suppose we have a contract representing an account: 
+
+```typescript
+@public
+contract Account {
+    id: string;
+    name: string;
+
+    setName(newName: string) {
+        this.name = newName;
+    }
+}
+```
+
+Suppose we have a sample record like so:
+
+```json
+{
+    "id": "id1",
+    "name": "John"
+}
+```
+
+We wish to change the value of the `name` field from "John" to "Tom" by invoking the `setName` function defined in the contract.
+
+We can compile and run this contract using the `Polylang` CLI as explained next:
+
+```bash
+ $ cargo run --bin compile -- contract:Account function:setName <<< '@public contract Account { id: string; name: string; function setName(newName: string) { this.name = newName; } }' \
+  | cargo run -p miden-run -- \
+    --this-json '{ "id": "id1", "name": "John" }' \
+    --advice-tape-json '["Tom"]'
+```
+
+A brief explanation of the command:
+    * We compile the contract passing in the contract name (using the `contract:` marker) and the function of interest (using the `function:` marker) as well as the body of the contract itself.
+    * The compilation step produces bytecode for the Miden VM as well as a `Polylang` specific ABI JSON text representing the processed contract.
+    * We then pipe the output from the compilation step to the `miden-run` executable by passing in:
+      1. the record input using the `--this-json` flag. In this case, it's a contract record containing two fields: `id` and `name`.
+      2. the new value for the `name` field using the `--advice-json` flag.
+
+This produces:
+
+```bash
+<extraneous output redacted>
+this_json: {"id":"id1","name":"Tom"}
+```
+
+As we can see, the record has been updated, reflecting the name change:
+
+```json
+{
+    "id": "id1",
+    "name": "Tom"
+}
+```

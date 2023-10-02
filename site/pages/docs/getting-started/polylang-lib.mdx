@@ -1,0 +1,285 @@
+---
+title: Polylang library
+---
+
+# `Polylang` Library
+
+We can also use `Polylang` as a library. Let's create a basic client and attempt to run the same contract as in the CLI example.
+
+Create a new binary crate:
+
+```bash
+$ cargo new polylang-demo
+     Created binary (application) `polylang-demo` package
+$ cd polylang-demo/
+```
+
+Also create `lib.rs` in `src` - this will hold the code that interacts with the `Polylang` APIs:
+
+```bash
+$ touch src/lib.rs
+```
+
+Add `Polylang` dependencies to `Cargo.toml`:
+
+```toml
+[package]
+name = "polylang-demo"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+polylang = { git = "https://github.com/polybase/polylang", branch = "main"}
+polylang_parser = { git = "https://github.com/polybase/polylang", branch = "main"}
+polylang-prover = { git = "https://github.com/polybase/polylang", branch = "main"}
+abi = { git = "https://github.com/polybase/polylang", branch = "main" }
+serde_json = "1.0.107"
+serde = { version = "1.0.188", features = ["derive"] }
+```
+
+We have also added `serde` and `serde_json` as dependencies since we'll be working with `JSON`.
+
+`Polylang` is structured in a modular fashion as seen from the dependencies:
+  * `polylang` - the main dependency which provides compilation APIs.
+  * `polylang_parser` - the parser component.
+  * `polylang-prover` - the prover component (which generates the proofs).
+  * `abi` - the `Polylang` specific ABI which represents the internal `Polylang` interface.
+
+Now add this code to `src/lib.rs`:
+
+```rust filename="src/lib.rs"
+use abi::Abi;
+use std::collections::HashMap;
+
+#[derive(Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ctx {
+    pub public_key: Option<abi::publickey::Key>,
+}
+
+/// The arguments that we need to process and run the `Polylang` program.
+/// Contrast these with the arguments provided to the `Polylang` CLI.
+pub struct Args {
+    // the input to the program
+    pub advice_tape_json: Option<String>,
+    pub this_values: HashMap<String, String>,
+    // the structure of the `Polylang` contract record
+    pub this_json: Option<serde_json::Value>,
+    pub other_records: HashMap<String, Vec<(serde_json::Value, Vec<u32>)>>,
+    pub abi: Abi,
+    // the context object - see the "Context" section under "Language Featues".
+    pub ctx: Ctx,
+    pub proof_output: Option<String>,
+}
+
+impl Args {
+    pub fn inputs(
+        &self,
+        hasher: impl Fn(
+            abi::Type,
+            &abi::Value,
+            Option<&[u32]>,
+        ) -> Result<[u64; 4], Box<dyn std::error::Error>>,
+    ) -> Result<polylang_prover::Inputs, Box<dyn std::error::Error>> {
+        let this = self.this_value()?;
+        let abi::Value::StructValue(sv) = &this else {
+            return Err("This value is not a struct".into());
+        };
+        let this_fields = match self.abi.this_type.as_ref().unwrap() {
+            abi::Type::Struct(s) => &s.fields,
+            _ => unreachable!(),
+        };
+        let this_field_hashes = sv
+            .iter()
+            .enumerate()
+            .map(|(i, (_, v))| hasher(this_fields[i].1.clone(), &v, Some(&[0])))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(polylang_prover::Inputs {
+            abi: self.abi.clone(),
+            ctx_public_key: self.ctx.public_key.clone(),
+            this_salts: sv.iter().map(|_| 0).collect(),
+            this: this.try_into()?,
+            this_field_hashes,
+            args: serde_json::from_str(
+                &self
+                    .advice_tape_json
+                    .as_ref()
+                    .map(|x| x.as_str())
+                    .unwrap_or("[]"),
+            )?,
+            other_records: self.other_records.clone(),
+        })
+    }
+
+    fn this_value(&self) -> Result<abi::Value, Box<dyn std::error::Error>> {
+        self.this_value_json()
+    }
+
+    fn this_value_json(&self) -> Result<abi::Value, Box<dyn std::error::Error>> {
+        let Some(this_json) = &self.this_json else {
+            return Err("No JSON value for `this`".into());
+        };
+
+        let this_type = self
+            .abi
+            .this_type
+            .as_ref()
+            .ok_or_else(|| "ABI does not specify a `this` type")?;
+
+        let abi::Type::Struct(struct_) = this_type else {
+            return Err("This type is not a struct".into());
+        };
+
+        let use_defaults = this_json.as_object().map(|o| o.is_empty()).unwrap_or(false);
+
+        let mut struct_values = Vec::new();
+        for (field_name, field_type) in &struct_.fields {
+            let field_value = match this_json.get(field_name) {
+                Some(value) => abi::Parser::parse(field_type, value)?,
+                None if use_defaults => field_type.default_value(),
+                None if matches!(field_type, abi::Type::Nullable(_)) => field_type.default_value(),
+                None => return Err(format!("missing value for field `{}`", field_name).into()),
+            };
+
+            struct_values.push((field_name.clone(), field_value));
+        }
+
+        Ok(abi::Value::StructValue(struct_values))
+    }
+}
+```
+
+Replace the contents of `src/main.rs` with:
+
+```rust filename="src/main.rs"
+use polylang_demo::{Args, Ctx};
+use serde_json::json;
+use std::{collections::HashMap, io::Write};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // the `Account` contract
+    let contract = r#"
+      @public
+      contract Account {
+          id: string;
+          name: string;
+
+          setName(newName: string) {
+              this.name = newName;
+          }
+      }
+    "#;
+
+    // equivalent to the `--contract:` marker in the CLI
+    let contract_name = Some("Account");
+    // equivalent to the `--function:` marker in the CLI
+    let function_name = "setName".to_string();
+
+    let (miden_code, abi) = compile_contract(contract, contract_name, &function_name)?;
+
+    // construct the inputs to the program
+    let args = Args {
+        /// The input is the same as in the CLI example:
+        /// ```json
+        ///  {
+        ///    "id": "id1",
+        ///    "name": "John"
+        ///  }
+        /// ```
+        advice_tape_json: Some("[\"Tom\"]".into()),
+        this_values: HashMap::new(),
+        this_json: Some(json!({ "id": "id1", "name": "John" })),
+        other_records: HashMap::new(),
+        abi,
+        ctx: Ctx::default(),
+        // note that we're generating a proof to be stored in the given file
+        proof_output: Some("account_setname.proof".into()),
+    };
+
+    run_contract(miden_code, args)?;
+
+    Ok(())
+}
+
+/// Compiles the contract and the program and generates Miden VM assembly as well as the `Polylang` ABI.
+fn compile_contract(
+    contract: &'static str,
+    contract_name: Option<&str>,
+    function_name: &str,
+) -> Result<(String, abi::Abi), Box<dyn std::error::Error>> {
+    let program = polylang_parser::parse(&contract)?;
+
+    Ok(
+        polylang::compiler::compile(program, contract_name, &function_name)
+            .map_err(|e| e.add_source(contract))
+            .unwrap_or_else(|e| panic!("{e}")),
+    )
+}
+
+/// Runs the Miden VM assembly with the given inputs on the Miden VM and generates the output (if applicable)
+/// as well as proof (if applicable).
+fn run_contract(miden_code: String, mut args: Args) -> Result<(), Box<dyn std::error::Error>> {
+    let has_this_type = if args.abi.this_type.is_none() {
+        args.abi.this_type = Some(abi::Type::Struct(abi::Struct {
+            name: "Empty".to_string(),
+            fields: Vec::new(),
+        }));
+
+        false
+    } else {
+        true
+    };
+
+    let inputs = args.inputs(|t, v, s| Ok(polylang_prover::hash_this(t, v, s)?))?;
+
+    let program = polylang_prover::compile_program(&args.abi, &miden_code)
+        .map_err(|e| e.add_source(miden_code))?;
+
+    let (output, prove) = polylang_prover::run(&program, &inputs)?;
+
+    if has_this_type {
+        println!(
+            "this_json: {}",
+            TryInto::<serde_json::Value>::try_into(output.this(&args.abi)?)?
+        );
+    }
+
+    if let Some(out) = args.proof_output {
+        let proof = prove()?;
+        let mut file = std::fs::File::create(&out)?;
+        file.write_all(&proof.to_bytes())?;
+
+        println!("Proof saved to {out}");
+    }
+
+    Ok(())
+}
+```
+
+Running it:
+
+```bash
+$ cargo run --release
+    Finished release [optimized] target(s) in 0.49s
+     Running `target/release/polylang-demo`
+this_json: {"id":"","name":"Tom"}
+Proof saved to account_setname.proof
+```
+
+We have the same output as in the CLI example:
+
+```json
+    {
+        "id": "id1",
+        "name": "Tom",
+    }
+```
+
+## Proving `Polylang`
+
+We can write Zero-Knowledge programs in `Polylang` which are then proved (and verified) using zk-STARKS via the [Miden](https://github.com/0xPolygonMiden/miden-vm) VM support in `Polylang`. 
+
+As part of running the program above, we also got a file, `account_setname.proof` file. This is the generated proof file that is a proof of the correct execution of the `Polylang` program. 
+Refer to the section on [Zero-Knowledge Proofs](/docs/zk-proofs/what-is-zk) for more details.
