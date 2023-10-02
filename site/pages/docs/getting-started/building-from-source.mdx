@@ -1,0 +1,32 @@
+---
+title: Building from Source
+---
+
+# Building `Polylang` from Source
+
+`Polylang` can be built as a Rust (library) crate, and used via a client written in Rust.
+
+First, clone the `Polylang` repo:
+
+```bash
+$ git clone https://github.com/polybase/polylang
+```
+
+Then build the project (use `--release` to generate a release build):
+
+```bash
+$ cd polylang/
+$ cargo build
+```
+
+`Polylang` generates both static and dynamic libraries, as can be seen from its `Cargo.toml`:
+
+```toml
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+```
+
+## Sample Usage 
+
+We can use `Polylang` via its CLI interface, or using it as a library dependency. Each is demonstrated in the following sections.
+

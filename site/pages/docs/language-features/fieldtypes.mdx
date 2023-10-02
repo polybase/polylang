@@ -1,0 +1,204 @@
+---
+title: Field Types
+--- 
+
+# Field Types
+
+import { Callout } from 'nextra/components'
+
+`Polylang` provides support for the following types.
+
+## Primitive types
+
+    - `string`: a string of UTF-8 characters.
+    - `number`: a numerical floating-point value (this type is used for both integral and floating-point values).
+    -  sized numeric types:
+        * i32 - 32-bit signed integer
+        * u32 - 32-bit unsigned integer
+        * i64 - 64-bit signed integer
+        * u64 - 64-bit unsigned integer
+        * f32 - IEEE-754 [single-precision floating-point format](https://en.wikipedia.org/wiki/Single-precision_floating-point_format)
+        * f32 - IEEE-754 [double-precision floating-point format](https://en.wikipedia.org/wiki/Double-precision_floating-point_format)
+    - `boolean`: a boolean value (`true` and `false`).
+    - `bytes`: arbitrary bytes.
+
+Example:
+
+```typescript
+@public 
+contract Person {
+    id: string;
+    name: string;
+    age: number;
+    salary: u32;
+    qualified: boolean;
+    profileImage: bytes;
+ }
+```
+
+## PublicKey
+
+This is a special type used to represent a public key. Currently, only `secp256k1` (Ethereum) public keys are supported. However, support for [Falcon](https://eprint.iacr.org/2022/1041.pdf)
+public keys is in progress.
+
+This key is used in contracts to enforce a means of [Access Control](https://en.wikipedia.org/wiki/Access_control) in `Polybase`.
+
+Example:
+
+```typescript
+@public
+contract User {
+    id: string;
+    name: string;
+    publicKey: PublicKey;
+
+    constructor (id: string, name: string) {
+        this.id = id;
+        this.name = name;
+        this.publicKey = ctx.publicKey;
+    }
+
+    function setName(newName: string) {
+        if (ctx.publicKey != this.publicKey) {
+            error('Unauthorized access!)
+        }
+    }
+ }
+```
+
+For the `ctx.publicKey` part, please refer to the page on [Context](context).
+
+Later, in the `setName` function (also note the use of the optional `function` keyword), we can check the public key of the user invoking the function against the public key which was used 
+at record creation time, and allow the operation only if they match. 
+
+Note all that this check overrides the loose controls afforded by the `@public` directive by providing fine-grained checks over data updates. See the section on [permissions](permissions) for more
+details on both permissions and the various available directives.
+
+## Contract Types
+
+A contract type is simply a reference to a `Polybase` contract. Consider the following example:
+
+```typescript
+@public
+contract Employee {
+    id: string;
+    name: string;
+    empId: number;
+    company: Company;
+
+    constructor (id: string, name: string, empId: number, company: Company) {
+        this.id = id;
+        this.name = name;
+        this.empid = empId;
+        this.company = company;
+    }
+}
+```
+
+The `company` field if of type `Company`, which is a contract declared as follows:
+
+```typescript
+@public
+contract Company {
+    id: string;
+    name: string;
+    code: string;
+
+    constructor (id: string, name: string, code: string) {
+        this.id = id;
+        this.name = name;
+        this.code = code;
+    }
+}
+```
+
+## Array Types
+
+An array in `Polylang` represents an ordered sequence of values of the same type (homogenous arrays). However, there are some restrictions on which types are allowed
+in array declarations. Only the following `Polylang` types are permitted:
+
+    * [Primitive Types](#primitive-types) 
+    * [PublicKey](#publickey), and
+    * [Contracts](#contract-types)
+
+Example:
+
+```typescript
+@public
+contract Bank {
+    id: string;
+    accId: string;
+    accounts: Account[];
+
+    ...
+  }
+
+@public
+contract Account {
+    id: string;
+    name: string;
+    balance: number;
+
+    ...
+ }
+```
+
+
+## Map Types
+
+A map in `Polylang` represents, as expected, a mapping from the key type to the value type. However, the key can only be either a `string` or a `number` while the value can be any
+valid `Polylang` type.
+
+Example:
+
+```typescript
+@public
+contract Bank {
+    id: string;
+    accId: string;
+    accounts: map<string, Account>;
+
+    ...
+  }
+
+@public
+contract Account {
+    id: string;
+    name: string;
+    balance: number;
+
+    ...
+}
+
+```
+
+## Object Types
+
+As in the case of [nested fields](fields/#nested-fields), an object type represents a composite contract of key-value pairs.
+
+Example:
+
+```typescript
+contract Product {
+    id: string;
+    name: string;
+    price: number;
+    tags: string[];
+    details: {
+        description: string;
+        manufacturer: string;
+    }
+
+    constructor (id: string, name: string, price: number, description: string, manufacturer: string) {
+        this.id = id;
+        this.name = name;
+        this.price = price;
+        this.details = {
+            description: description,
+            manufacturer: manufacturer
+        }
+    }
+}
+```
+
+In the example above, the `details` field is of object type, and in the constructor, we populate this field by populating its nested fields with the values from the constructor arguments.

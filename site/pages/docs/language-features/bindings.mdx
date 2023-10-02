@@ -1,0 +1,50 @@
+---
+title: Local Variable Bindings
+---
+
+# Local Variable Bindings
+
+import { Callout } from 'nextra/components'
+
+`Polylang` allows bindings for variables inside functions using the `let` construct.
+The syntax is similar to that of `TypeScript` (or `Rust`):
+
+```typescript
+`let` <variable name> `=` <initial value>
+```
+
+Each binding must have an initial value assigned to it. Unitialized bindings are not allowed in `Polylang`. Types are automatically inferred using Type Inference.
+
+<Callout>
+    You cannot currently provide explicit types. This will be possible soon.
+</Callout>
+
+Example:
+
+```typescript
+@public
+contract Person {
+    id: string;
+    name: string;
+    age: number;
+
+    constructor (id: string, name: string, age: number) {
+        this.id = id;
+        this.name = name;
+        this.age = age;
+    }
+
+    // increment the age by the given value
+    incrementAgeBy(inc: number) {
+      // bind the variable `oldAge` to the current value of `age` for this record
+      let oldAge = this.age;
+      // bind `newAge` to the old age increment by `inc`
+      let newAge = oldAge + inc;
+      // update the `age` field
+      this.age = newAge;
+   }
+}
+```
+
+Here we have a function `incrementAgeBy` which takes an increment value `inc`, and updates the `age` field of the record by that increment value. To be able to reference the old value of `age`, we create a couple of 
+local binding called `oldAge` and `newAge`. 

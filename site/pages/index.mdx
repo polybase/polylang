@@ -1,0 +1,52 @@
+---
+title: Polylang
+---
+
+import Home from '../components/Home'
+
+<Home>
+
+## What is zero knowledge (ZK)?
+
+ZK (zero knowledge) is a type of cryptography that allows a proof (a kind of certificate) to be generated that allows one party to prove to another that they know a value (or that some condition holds true), without revealing any information about the value itself. 
+
+There are two main components to ZK:
+
+1. **Zero Knowledge** - the ability to run computation without revealing all of the inputs, but having the output be trusted
+
+2. **Provable computation** -  proves the code ran as designed, and therefore the output can be trusted
+
+Here's a simple example to demonstrate the idea of provable computation. Below the code checks if the input provided is over 18. 
+If we ran this in zero knowledge, we could generate a proof that the input value was > 18 without revealing the actual number/age:
+
+```js
+function isOver18(age: number): boolean {
+  return age > 18;
+}
+```
+
+Of course, this is much more useful if we have some kind commitment scheme where we can verify the age also belongs to a given user. For example, a digital credential provided by the government.
+
+
+## Why is it useful?
+
+There are two main use cases for zero knowledge:
+
+ 1. **Privacy** - when combined with a commitment scheme, you can enforce a set of rules for "valid state" without having to see what the underlying state is. This can be useful in preserving privacy.
+
+ 1. **Scalability** - if you have many parties that need to agree on the outcome of some computation, it may be more efficient for one computer to compute the outcome, and then every other node can be sure of the outcome.
+
+As you can imagine these properties are very useful in decentralised compute and blockchains.
+
+
+## What is a commitment scheme?
+
+A commitment scheme is a way to commit to some state, without revealing what that state is. This is often achieved using [hashes](https://www.sentinelone.com/cybersecurity-101/hashing/) (that represent the state of a specific record or value) and merkle trees (combining multiple hash commitments into a single hash commitment). When combined with zero knowledge, commitment schemes allow developers to define the rules of a system in zero knowledge and then use a commitment scheme to enforce valid state transitions (i.e. you cannot just increase your balance).
+
+Polylang automatically hashes the inputs, verifies that the input data matches an existing hash, outputs the value, along with its corresponding hash. This makes it simple to store a commitment to the values to be used in the next state transition.
+
+
+## How performant is it?
+
+We also made [ZK Bench](https://zkbench.dev) while developing Polylang benchmarking site to compare the performance of various ZK frameworks and tools - and of course we included Polylang in that! Keep in mind that Polylang is doing a bunch of extra steps to hash and validate the commitments for you.
+</Home>
