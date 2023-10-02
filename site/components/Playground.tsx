@@ -54,11 +54,13 @@ export function Playground() {
         duration: 9000,
       })
     }
+    const time = Date.now()
     output?.verify()
+    const diff = Date.now() - time
     toast({
       status: 'success',
-      title: 'Proof Verified',
-      description: 'The proof is valid',
+      title: 'Valid Proof',
+      description: `Proof was verified in ${diff}ms`,
       duration: 9000,
     })
   })
