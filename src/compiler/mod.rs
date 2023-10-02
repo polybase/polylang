@@ -388,8 +388,8 @@ lazy_static::lazy_static! {
 
            let (_, _, hash_array_fn) = HIDDEN_BUILTINS.iter().find(|(name, _, _)| name == "hashArray").unwrap();
 
-           let keys_hash = compile_function_call(compiler, hash_array_fn, &[keys], None)?;
-           let values_hash = compile_function_call(compiler, hash_array_fn, &[values], None)?;
+           let keys_hash = compile_function_call(compiler, hash_array_fn, &[keys], None)?.unwrap();
+           let values_hash = compile_function_call(compiler, hash_array_fn, &[values], None)?.unwrap();
 
            let result = compiler
                .memory
@@ -684,9 +684,9 @@ lazy_static::lazy_static! {
         builtins.push(("uint32ToString".to_string(), None, Function::Builtin(|compiler, _, args| {
             let old_root_scope = compiler.root_scope;
             compiler.root_scope = &BUILTINS_SCOPE;
-            let result = compile_ast_function_call(&UINT32_TO_STRING, compiler, args, None);
+            let result = compile_ast_function_call(&UINT32_TO_STRING, compiler, args, None)?.unwrap();
             compiler.root_scope = old_root_scope;
-            result
+            Ok(result)
         })));
 
         builtins.push(("wrappingAdd".to_string(), Some(TypeConstraint::Exact(Type::PrimitiveType(PrimitiveType::UInt32))), Function::Builtin(|compiler, _, args| {
@@ -1453,7 +1453,10 @@ fn compile_expression(expr: &Expression, compiler: &mut Compiler, scope: &Scope)
                 }
             };
 
-            compile_function_call(compiler, func, &args_symbols, None)?
+            compile_function_call(compiler, func, &args_symbols, None)?.unwrap_or(Symbol {
+                type_: Type::Nullable(Box::new(Type::PrimitiveType(PrimitiveType::Boolean))),
+                memory_addr: 0,
+            })
         }
         ExpressionKind::Assign(a, b) => {
             if let (ExpressionKind::Index(a, index), b) = (&***a, b) {
@@ -1786,7 +1789,7 @@ fn compile_statement(
     statement: &Statement,
     compiler: &mut Compiler,
     scope: &mut Scope,
-    return_result: &mut Symbol,
+    return_result: &Option<&mut Symbol>,
 ) -> Result<()> {
     maybe_start!(statement.span());
     match &**statement {
@@ -1799,7 +1802,10 @@ fn compile_statement(
             );
             compiler.memory.write(
                 compiler.instructions,
-                return_result.memory_addr,
+                return_result
+                    .as_ref()
+                    .ok_or_else(|| Error::simple("return in a function with no return type"))?
+                    .memory_addr,
                 &vec![ValueSource::Stack; symbol.type_.miden_width() as usize],
             );
             compiler.instructions.push(encoder::Instruction::Abstract(
@@ -2165,7 +2171,7 @@ fn compile_ast_function_call(
     compiler: &mut Compiler,
     args: &[Symbol],
     this: Option<Symbol>,
-) -> Result<Symbol> {
+) -> Result<Option<Symbol>> {
     let mut function_instructions = vec![];
     let mut function_compiler = Compiler::new(
         &mut function_instructions,
@@ -2180,36 +2186,11 @@ fn compile_ast_function_call(
         scope.add_symbol("this".to_string(), this);
     }
 
-    let mut return_result = function_compiler
-        .memory
-        .allocate_symbol(match &function.return_type {
-            None => Type::PrimitiveType(PrimitiveType::Boolean),
-            Some(ast::Type::Number) => Type::PrimitiveType(PrimitiveType::Float32),
-            Some(ast::Type::F32) => Type::PrimitiveType(PrimitiveType::Float32),
-            Some(ast::Type::F64) => Type::PrimitiveType(PrimitiveType::Float64),
-            Some(ast::Type::U32) => Type::PrimitiveType(PrimitiveType::UInt32),
-            Some(ast::Type::U64) => Type::PrimitiveType(PrimitiveType::UInt64),
-            Some(ast::Type::I32) => Type::PrimitiveType(PrimitiveType::Int32),
-            Some(ast::Type::I64) => Type::PrimitiveType(PrimitiveType::Int64),
-            Some(ast::Type::String) => Type::String,
-            Some(ast::Type::PublicKey) => Type::PublicKey,
-            Some(ast::Type::Bytes) => Type::Bytes,
-            Some(ast::Type::ForeignRecord { contract }) => Type::ContractReference {
-                contract: contract.clone(),
-            },
-            Some(ast::Type::Boolean) => {
-                return Err(Error::simple("unexpected function call of boolean"))
-            }
-            Some(ast::Type::Array(_)) => {
-                return Err(Error::simple("unexpected function call of array"))
-            }
-            Some(ast::Type::Map(_, _)) => {
-                return Err(Error::simple("unexpected function call of map"))
-            }
-            Some(ast::Type::Object(_)) => {
-                return Err(Error::simple("unexpected function call of object"))
-            }
-        });
+    let mut return_result = function.return_type.as_ref().map(|ty| {
+        function_compiler
+            .memory
+            .allocate_symbol(ast_type_to_type(true, ty))
+    });
     for (arg, param) in args.iter().zip(function.parameters.iter()) {
         // We need to make a copy of the arg, because Ident expressions return symbols of variables.
         // Modifying them in a function would modify the original variable.
@@ -2230,7 +2211,12 @@ fn compile_ast_function_call(
     }
 
     for statement in &function.statements {
-        compile_statement(statement, &mut function_compiler, scope, &mut return_result)?;
+        compile_statement(
+            statement,
+            &mut function_compiler,
+            scope,
+            &return_result.as_mut(),
+        )?;
     }
 
     compiler.instructions.push(encoder::Instruction::Abstract(
@@ -2245,10 +2231,10 @@ fn compile_function_call(
     function: &Function,
     args: &[Symbol],
     this: Option<Symbol>,
-) -> Result<Symbol> {
+) -> Result<Option<Symbol>> {
     match function {
         Function::Ast(a) => compile_ast_function_call(a, compiler, args, this),
-        Function::Builtin(b) => b(compiler, &mut Scope::new(), args),
+        Function::Builtin(b) => b(compiler, &mut Scope::new(), args).map(Some),
     }
 }
 
@@ -2793,7 +2779,8 @@ fn log(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Result<Sy
                 scope.find_function("uint32ToString").unwrap(),
                 &[arg.clone()],
                 None,
-            )?,
+            )?
+            .unwrap(),
             Type::PrimitiveType(PrimitiveType::Boolean) => compile_function_call(
                 compiler,
                 scope.find_function("uint32ToString").unwrap(),
@@ -2802,7 +2789,8 @@ fn log(compiler: &mut Compiler, scope: &mut Scope, args: &[Symbol]) -> Result<Sy
                     ..arg.clone()
                 }],
                 None,
-            )?,
+            )?
+            .unwrap(),
             t => {
                 return Err(Error::unimplemented(format!(
                     "logging of {t:?} is not supported yet"
@@ -2831,7 +2819,8 @@ fn read_advice_contract_reference(compiler: &mut Compiler, contract: String) -> 
             .unwrap(),
         &[],
         None,
-    )?;
+    )?
+    .unwrap();
 
     Ok(Symbol {
         type_: Type::ContractReference { contract },
@@ -3190,7 +3179,8 @@ fn read_advice_nullable(compiler: &mut Compiler, type_: Type) -> Result<Symbol> 
         BUILTINS_SCOPE.find_function("readAdviceBoolean").unwrap(),
         &[],
         None,
-    )?;
+    )?
+    .unwrap();
 
     let (value, read_value_insts) = {
         let mut insts = vec![];
@@ -3321,13 +3311,15 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Result<Symbol> {
             BUILTINS_SCOPE.find_function("hashString").unwrap(),
             &[value],
             None,
-        )?,
+        )?
+        .unwrap(),
         Type::Bytes => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("hashBytes").unwrap(),
             &[value],
             None,
-        )?,
+        )?
+        .unwrap(),
         Type::ContractReference { .. } => compile_function_call(
             compiler,
             BUILTINS_SCOPE
@@ -3335,25 +3327,29 @@ fn hash(compiler: &mut Compiler, value: Symbol) -> Result<Symbol> {
                 .unwrap(),
             &[value],
             None,
-        )?,
+        )?
+        .unwrap(),
         Type::Array(_) => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("hashArray").unwrap(),
             &[value],
             None,
-        )?,
+        )?
+        .unwrap(),
         Type::Map(_, _) => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("hashMap").unwrap(),
             &[value],
             None,
-        )?,
+        )?
+        .unwrap(),
         Type::PublicKey => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("hashPublicKey").unwrap(),
             &[value],
             None,
-        )?,
+        )?
+        .unwrap(),
         Type::Struct(s) => {
             let mut offset = 0;
             let struct_hash = compiler.memory.allocate_symbol(Type::Hash);
@@ -3487,82 +3483,94 @@ fn hash_record_with_salts(
 }
 
 fn read_advice_generic(compiler: &mut Compiler, type_: &Type) -> Result<Symbol> {
-    match type_ {
-        Type::Nullable(_) => read_advice_nullable(compiler, type_.clone()),
+    Ok(match type_ {
+        Type::Nullable(_) => read_advice_nullable(compiler, type_.clone())?,
         Type::PrimitiveType(PrimitiveType::Boolean) => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("readAdviceBoolean").unwrap(),
             &[],
             None,
-        ),
+        )?
+        .unwrap(),
         Type::PrimitiveType(PrimitiveType::UInt32) => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("readAdviceUInt32").unwrap(),
             &[],
             None,
-        ),
+        )?
+        .unwrap(),
         Type::PrimitiveType(PrimitiveType::UInt64) => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("readAdviceUInt64").unwrap(),
             &[],
             None,
-        ),
+        )?
+        .unwrap(),
         Type::PrimitiveType(PrimitiveType::Int32) => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("readAdviceInt32").unwrap(),
             &[],
             None,
-        ),
+        )?
+        .unwrap(),
         Type::PrimitiveType(PrimitiveType::Int64) => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("readAdviceInt64").unwrap(),
             &[],
             None,
-        ),
+        )?
+        .unwrap(),
         Type::PrimitiveType(PrimitiveType::Float32) => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("readAdviceFloat32").unwrap(),
             &[],
             None,
-        ),
+        )?
+        .unwrap(),
         Type::PrimitiveType(PrimitiveType::Float64) => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("readAdviceFloat64").unwrap(),
             &[],
             None,
-        ),
+        )?
+        .unwrap(),
         Type::String => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("readAdviceString").unwrap(),
             &[],
             None,
-        ),
+        )?
+        .unwrap(),
         Type::Bytes => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("readAdviceBytes").unwrap(),
             &[],
             None,
-        ),
+        )?
+        .unwrap(),
         Type::ContractReference { contract } => {
-            read_advice_contract_reference(compiler, contract.clone())
+            read_advice_contract_reference(compiler, contract.clone())?
         }
-        Type::Array(t) => read_advice_array(compiler, t),
+        Type::Array(t) => read_advice_array(compiler, t)?,
         Type::Struct(s) => {
             let symbol = compiler.memory.allocate_symbol(type_.clone());
             read_struct_from_advice_tape(compiler, &symbol, s, None)?;
-            Ok(symbol)
+            symbol
         }
         Type::PublicKey => compile_function_call(
             compiler,
             BUILTINS_SCOPE.find_function("readAdvicePublicKey").unwrap(),
             &[],
             None,
-        ),
-        Type::Map(k, v) => read_advice_map(compiler, k, v),
-        _ => Err(Error::unimplemented(format!(
-            "read_advice_generic {type_:?}"
-        ))),
-    }
+        )?
+        .unwrap(),
+        Type::Map(k, v) => read_advice_map(compiler, k, v)?,
+        _ => {
+            return Err(Error::unimplemented(format!(
+                "read_advice_generic {type_:?}"
+            )))
+        }
+    })
 }
 
 /// `lazy` is an array of boolean `Symbol`s, as many as there as struct fields.
@@ -3772,6 +3780,7 @@ pub fn compile(
     let mut instructions = vec![];
     let mut memory = Memory::new();
     let this_addr;
+    let result;
     // A vector of hashmaps for each field, mapping the address of one of the field elements to the count of times it was used
     let mut used_fields_count: Vec<HashMap<u32, usize>>;
     let mut dependent_fields = Vec::<(String, Type)>::new();
@@ -3991,14 +4000,26 @@ pub fn compile(
             }
         }
 
-        let result = match function {
+        result = match function {
             // read auth
-            None => compile_read_authorization_proof(
-                &mut compiler,
-                &salts_this_symbol.as_ref().unwrap().1,
-                contract.as_ref().unwrap(),
-                &ctx_pk,
-            )?,
+            None => {
+                let ctx_pk = struct_field(&mut compiler, &ctx, "publicKey")?;
+
+                let read_auth = compile_read_authorization_proof(
+                    &mut compiler,
+                    &salts_this_symbol.as_ref().unwrap().1,
+                    contract.as_ref().unwrap(),
+                    &ctx_pk,
+                )?;
+
+                compiler.memory.read(
+                    compiler.instructions,
+                    read_auth.memory_addr,
+                    read_auth.type_.miden_width(),
+                );
+
+                None
+            }
             Some(function) => compile_ast_function_call(
                 function,
                 &mut compiler,
@@ -4007,12 +4028,14 @@ pub fn compile(
             )?,
         };
 
-        comment!(compiler, "Reading result from memory");
-        compiler.memory.read(
-            compiler.instructions,
-            result.memory_addr,
-            result.type_.miden_width(),
-        );
+        if let Some(result) = &result {
+            let result_hash = hash(&mut compiler, result.clone())?;
+            compiler.memory.read(
+                compiler.instructions,
+                result_hash.memory_addr,
+                result_hash.type_.miden_width(),
+            );
+        }
 
         if let Some((salts, this_symbol)) = &salts_this_symbol {
             for (i, (field_name, _)) in contract_struct.as_ref().unwrap().fields.iter().enumerate()
@@ -4043,10 +4066,10 @@ pub fn compile(
                     else_: vec![],
                 });
             }
-
-            comment!(compiler, "Reading selfdestruct flag");
-            compiler.memory.read(compiler.instructions, 6, 1);
         }
+
+        comment!(compiler, "Reading selfdestruct flag");
+        compiler.memory.read(compiler.instructions, 6, 1);
 
         assert_eq!(
             compiler.record_depenencies.len(),
@@ -4153,6 +4176,8 @@ pub fn compile(
         dependent_fields,
         this_addr,
         this_type: contract_struct.map(Type::Struct),
+        result_addr: result.as_ref().map(|r| r.memory_addr),
+        result_type: result.map(|r| r.type_),
         param_types,
         other_contract_types: scope
             .contracts

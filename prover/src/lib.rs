@@ -561,6 +561,44 @@ impl RunOutput {
         )
     }
 
+    pub fn result(&self, abi: &Abi) -> Result<Value> {
+        let Some(result_type) = &abi.result_type else {
+            return Ok(abi::Value::Nullable(None));
+        };
+
+        let Some(result_addr) = abi.result_addr else {
+            return Err(Error::simple("Missing result addr"));
+        };
+
+        result_type.read(
+            &|addr| {
+                Some(
+                    self.memory
+                        .get(&addr)
+                        .map(|x| x.map(|v| mont_red_cst(v as u128)))
+                        .unwrap_or_default(),
+                )
+            },
+            result_addr as u64,
+        )
+    }
+
+    pub fn result_hash(&self, abi: &Abi) -> Option<[u64; 4]> {
+        if abi.result_type.is_none() {
+            return None;
+        }
+
+        let offset = self.abi.dependent_fields.len() * 4 + 1; // + 1 for self_destructed
+        let result_hash = [
+            self.stack[offset],
+            self.stack[offset + 1],
+            self.stack[offset + 2],
+            self.stack[offset + 3],
+        ];
+
+        Some(result_hash)
+    }
+
     pub fn self_destructed(&self) -> Result<bool> {
         let self_destructed = self.stack[0];
         if self_destructed == 0 {

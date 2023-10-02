@@ -303,6 +303,13 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
+    if args.abi.result_type.is_some() {
+        println!(
+            "result_json: {}",
+            TryInto::<serde_json::Value>::try_into(output.result(&args.abi)?)?
+        );
+    }
+
     if let Some(out) = args.proof_output {
         let proof = prove()?;
         let mut file = std::fs::File::create(&out).context(IoSnafu)?;

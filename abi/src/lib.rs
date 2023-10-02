@@ -38,6 +38,8 @@ pub struct Abi {
     pub std_version: Option<StdVersion>,
     pub this_addr: Option<u32>,
     pub this_type: Option<Type>,
+    pub result_addr: Option<u32>,
+    pub result_type: Option<Type>,
     pub param_types: Vec<Type>,
     pub other_records: Vec<RecordHashes>,
     pub other_contract_types: Vec<Type>,
