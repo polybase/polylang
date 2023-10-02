@@ -69,10 +69,12 @@ async fn prove(
             "input": output.input_stack,
             "output": output.stack,
         },
-        "result": {
-            "value": output.run_output.result(&req.abi).map(TryInto::<serde_json::Value>::try_into)??,
-            "hash": output.run_output.result_hash(&req.abi),
-        },
+        "result": if req.abi.result_type.is_some() {
+            serde_json::json!({
+                "value": output.run_output.result(&req.abi).map(TryInto::<serde_json::Value>::try_into)??,
+                "hash": output.run_output.result_hash(&req.abi),
+            })
+        } else { serde_json::Value::Null },
         "programInfo": base64::engine::general_purpose::STANDARD.encode(program_info),
         "proof": base64::engine::general_purpose::STANDARD.encode(output.proof),
         "debug": {
