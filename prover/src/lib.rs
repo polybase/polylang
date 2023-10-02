@@ -41,7 +41,6 @@ pub struct Output {
     pub run_output: RunOutput,
     pub stack: Vec<u64>,
     pub input_stack: Vec<u64>,
-    pub self_destructed: bool,
     pub new_this: Value,
     pub new_hashes: Vec<[u64; 4]>,
     pub proof: Vec<u8>,
@@ -470,7 +469,6 @@ pub fn prove(program: &Program, inputs: &Inputs) -> Result<Output> {
     let proof = prove()?;
 
     Ok(Output {
-        self_destructed: output.self_destructed()?,
         new_this: output.this(&inputs.abi)?,
         new_hashes: output.hashes(),
         proof: proof.to_bytes(),

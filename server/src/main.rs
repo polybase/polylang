@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use actix_web::{middleware, web, App, HttpResponse, HttpServer, Responder};
 use base64::Engine;
@@ -61,13 +61,17 @@ async fn prove(
             "hashes": inputs.this_field_hashes,
         },
         "new": {
-            "selfDestructed": output.self_destructed,
+            "selfDestructed": output.run_output.self_destructed()?,
             "this": new_this,
             "hashes": output.new_hashes,
         },
         "stack": {
             "input": output.input_stack,
             "output": output.stack,
+        },
+        "result": {
+            "value": output.run_output.result(&req.abi).map(TryInto::<serde_json::Value>::try_into)??,
+            "hash": output.run_output.result_hash(&req.abi),
         },
         "programInfo": base64::engine::general_purpose::STANDARD.encode(program_info),
         "proof": base64::engine::general_purpose::STANDARD.encode(output.proof),
