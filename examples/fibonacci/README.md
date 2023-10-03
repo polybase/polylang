@@ -36,7 +36,8 @@ $ cargo run --release
 Output:
 
 ```bash
-this_json: {"fibVal":34}
+this_json: {}
+result_json: 34
 Proof saved to fibonacci.proof
 ```
 

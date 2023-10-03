@@ -45,7 +45,8 @@ $ cargo run --release
 Output:
 
 ```bash
-this_json: {"elements":[3,2,6,7,5,4,3,1]}
+this_json: {"elements":[1,3,4,5,7,6,2,3]}
+result_json: [3,2,6,7,5,4,3,1]
 Proof saved to reverse.proof
 ```
 

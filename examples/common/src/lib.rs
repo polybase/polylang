@@ -134,6 +134,13 @@ pub fn run_contract(miden_code: String, mut args: Args) -> Result<(), Box<dyn st
         );
     }
 
+    if args.abi.result_type.is_some() {
+        println!(
+            "result_json: {}",
+            TryInto::<serde_json::Value>::try_into(output.result(&args.abi)?)?
+        );
+    }
+
     if let Some(out) = args.proof_output {
         let proof = prove()?;
         let mut file = std::fs::File::create(&out)?;

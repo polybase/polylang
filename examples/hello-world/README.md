@@ -30,7 +30,8 @@ $ cargo run --release
 Output:
 
 ```bash
-this_json: {"sum":3}
+this_json: {}
+result_json: 3
 Proof saved to add.proof
 ```
 

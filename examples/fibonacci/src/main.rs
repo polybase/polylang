@@ -7,16 +7,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let contract = r#"
     @public
     contract Fibonacci {
-        fibVal: u32;
-
-        function main(p: u32, a: u32, b: u32) {
+        function main(p: u32, a: u32, b: u32): u32 {
             for (let i: u32 = 0; i < p; i++) {
                 let c = a.wrappingAdd(b);
                 a = b;
                 b = c;
             }
 
-            this.fibVal = a;
+            return a;
         }
     }
     "#;
@@ -33,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args {
         advice_tape_json: Some("[8, 1, 1]".to_string()),
         this_values: HashMap::new(),
-        this_json: Some(json!({"fibVal": 0})),
+        this_json: Some(json!([])),
         other_records: HashMap::new(),
         abi,
         ctx: Ctx::default(),

@@ -7,10 +7,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let contract = r#"
     @public
     contract HelloWorld {
-        sum: i32;
-
         function add(a: i32, b: i32): i32 {
-           this.sum = a + b;
+           return a + b;
         }
     }
     "#;
@@ -27,7 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args {
         advice_tape_json: Some("[1, 2]".into()),
         this_values: HashMap::new(),
-        this_json: Some(json!({"sum": 0})),
+        this_json: Some(json!({})),
         other_records: HashMap::new(),
         abi,
         ctx: Ctx::default(),

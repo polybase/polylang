@@ -13,19 +13,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
               this.elements = elements;
           }
 
-          reverse() {
-            let reversed: u32[] = [];
-            let i: u32 = 0;
-            let one: u32 = 1;
-            let len: u32 = this.elements.length;
+          function reverse(): number[] {
+              let reversed: u32[] = [];
+              let i: u32 = 0;
+              let one: u32 = 1;
+              let len: u32 = this.elements.length;
 
-            while (i < len) {
-                let idx: u32 = len - i - one;
-                reversed.push(this.elements[idx]);
-                i = i + one;
-            }
+              while (i < len) {
+                  let idx: u32 = len - i - one;
+                  reversed.push(this.elements[idx]);
+                  i = i + one;
+              }
 
-            this.elements = reversed;
+              return reversed;
           }
       }
     "#;
