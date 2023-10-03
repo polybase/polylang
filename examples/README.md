@@ -29,4 +29,5 @@ Proof saved to add.proof
 ## Examples
 
   * [Hello, world](hello-world/README.md)
+  * [Fibonacci](fibonacci/README.md)
   * [Reverse an array](reverse-array/README.md)
