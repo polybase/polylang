@@ -5,6 +5,7 @@ members = [
   "hello-world",
   "fibonacci",
   "reverse-array",
+  "binary-search",
   "city-country",
   "account-balances"
   ]

@@ -31,5 +31,6 @@ Proof saved to add.proof
   * [Hello, world](hello-world/README.md)
   * [Fibonacci](fibonacci/README.md)
   * [Reverse an array](reverse-array/README.md)
+  * [Binary Search](binary-search/README.md)
   * [City and country](city-country/README.md)
   * [Accounts](account-balances/README.md)
