@@ -5,7 +5,6 @@ use std::collections::HashMap;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // specify your cpntract here
     let contract = r#"
-    @public
     contract HelloWorld {
         function add(a: i32, b: i32): i32 {
            return a + b;

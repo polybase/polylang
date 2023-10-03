@@ -5,7 +5,6 @@ use std::collections::HashMap;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // specify your cpntract here
     let contract = r#"
-    @public
     contract Fibonacci {
         function main(p: u32, a: u32, b: u32): u32 {
             for (let i: u32 = 0; i < p; i++) {

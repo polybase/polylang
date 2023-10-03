@@ -5,7 +5,6 @@ use std::collections::HashMap;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // specify your cpntract here
     let contract = r#"
-      @public
       contract ReverseArray {
           elements: number[];
 

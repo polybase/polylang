@@ -1,4 +1,10 @@
 [workspace]
 
-members = ["common", "hello-world", "fibonacci", "reverse-array"]
+members = [
+  "common", 
+  "hello-world",
+  "fibonacci",
+  "reverse-array",
+  "city-country"
+  ]
 resolver = "2"

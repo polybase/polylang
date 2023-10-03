@@ -43,4 +43,4 @@ Proof saved to fibonacci.proof
 
 ## LICENSE
 
-This template is licensed under the [MIT License](LICENSE.md).
+This template is licensed under the [MIT License](../LICENSE.md).

@@ -37,4 +37,4 @@ Proof saved to add.proof
 
 ## LICENSE
 
-This template is licensed under the [MIT License](LICENSE.md).
+This template is licensed under the [MIT License](../LICENSE.md).
