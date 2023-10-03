@@ -5,6 +5,7 @@ members = [
   "hello-world",
   "fibonacci",
   "reverse-array",
-  "city-country"
+  "city-country",
+  "account-balances"
   ]
 resolver = "2"

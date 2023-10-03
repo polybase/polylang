@@ -32,3 +32,4 @@ Proof saved to add.proof
   * [Fibonacci](fibonacci/README.md)
   * [Reverse an array](reverse-array/README.md)
   * [City and country](city-country/README.md)
+  * [Accounts](account-balances/README.md)
