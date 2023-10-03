@@ -1,0 +1,98 @@
+---
+title: Lexical Structure
+---
+
+import { Callout } from 'nextra/components'
+
+# Lexical Structure
+
+## Comments
+
+`Polylang` supports both singl-line comments using `//` extending to the end of the line:
+
+```typescript
+@public
+contract Computer {
+    id: string;
+    // the model for this computer
+    model: string;
+
+    // create an instance of the `Computer` contract
+    constructor (id: string, model: string) {
+        this.id = id;
+        this.model = model;
+    }
+ }
+```
+
+as well as multi-line comments using `/* ... */`:
+
+```typescript
+@public
+contract Computer {
+    id: string;
+    // the model for this computer
+    model: string;
+
+    // create an instance of the `Computer` contract
+    constructor (id: string, model: string) {
+        this.id = id;
+        this.model = model;
+    }
+
+    /*
+        Update the model for this particulat computer.
+        Changes the value of the `model` field.
+    */
+    setModel(newModel: string) {
+        this.model = newModel;
+    }
+ }
+```
+
+## Identifiers
+
+An identifier is an unlimited-length sequence of letters and digits, the first of which must be a letter (or underscore). Identifiers are used for naming contracts, fields, and functions.
+Identifiers may not be a [reserved word](#reserved-words).
+
+## Literals
+
+`Polylang` supports the following literal types:
+    * String literals - a sequence of Unicode (`UTF-8`) characters. Eg: `"Hello, мир"`.
+    * Numeric literals:
+       - the `number` type supports both integral and decimal values. Eg: `42`, `-12.3849`. This is like the `number` type in `JavaScript`/`TypeScript`.
+       - the named integral and decimal types support more restricted values. Eg:
+        * i32 - 32-bit signed integers such as `42`, `-2356`.
+        * u32 - 32-bit unsigned integers such as `0`, `21`.
+    * Boolean literals - `true` and `false`.
+
+## Operators
+
+`Polylang` supports the usual arithmetic, relational, assignment, and boolean operators:
+    * `*`, `/`, `%`, `+`, `-`
+    * `-=`, `+=`
+    * `&`, `**`, `&&`, `^`, `|`, `||`, `<=`, `>=`, `=`, `==`, `!=`, 
+
+## Reserved Words
+
+The following are reserved for use as keywords, and cannot be used as identifiers in `Polylang` (contract names, field names, function/method names etc.):
+    * `true`, `false`
+    * `number`, `f32`, `f64`, `u32`, `u64`, `i32`, `i64`
+    * `string`
+    * `boolean`
+    * `map`
+    * `record`
+    * `let`
+    * `break`, `return`, `throw`
+    * `if`, `else`
+    * `while`, `for`
+    * `in`, `of`
+    * `function`
+    * `collection`
+    * `contract`
+    * `PublicKey`
+    * `bytes`
+
+<Callout type="warning" emoji="⚠️">
+  JavaScript reserved words **cannot** be used identifiers. Please refer to [this list](https://tc39.es/ecma262/#sec-keywords-and-reserved-words) for an exhaustive list of forbidden names. 
+</Callout>

@@ -1,0 +1,130 @@
+---
+title: Structure of Programs
+---
+
+# Structure of Programs
+
+import { Callout } from 'nextra/components'
+
+A semi-formal representation of `Polylang` programs is shown below.
+
+<Callout type="info" emoji="💡">
+    For the official grammar for `Polylang`, please refer to this [grammar file](https://github.com/polybase/polylang/blob/main/parser/src/polylang.lalrpop).
+</Callout>
+
+## Grammar Notation
+
+* `{x}` means zero or more occurrences of `x`.
+* `[x]` means zero or one occurrences of `x`, meaning that `x` is optional.
+* `(one of)` followed by space-separated items indicates a choice of one of the items.
+* `x` indicates a literal of value `x`.
+
+## Simplified Grammar for Polylang
+
+A `polylang` program ("schema") consists of one or more [contract](https://polybase.xyz/docs/collections) declarations:
+
+```
+Schema:
+    [ContractDeclaration]
+```
+
+where each contract consists of field declarations, a constructor declaration, and function declarations:
+
+```yaml
+ContractDeclaration:
+    [`@public`]
+    `contract` ContractName ContractBody
+
+ContractName:
+    alphanumeric starting with a letter
+
+ContractBody:
+    {FieldDeclaration}
+    [ConstructorDeclaration]
+    {FunctionDeclaration}
+```
+
+```yaml
+FieldDeclaration:
+    (one of)
+    RequiredFieldDeclaration OptionalFieldDeclaration
+
+RequiredFieldDeclaration:
+    FieldName: FieldType ';'
+
+OptionalFieldDeclaration:
+    FieldName`?` : FieldTyoe ';'
+
+FieldName:
+    alphanumeric starting with a letter
+```
+
+where each field can have the following types:
+
+```yaml
+FieldType:
+    (one of)
+    PrimitiveType `bytes` `PublicKey` ContractType ArrayType MapType ObjectType
+
+PrimitiveType:
+    (one of)
+    `string` `number` `boolean`
+
+ContractType:
+   a reference to a contract 
+
+ArrayType:
+    `string`[] `number`[] `boolean`[] `PublicKey`[] ContractType[]
+
+MapType:
+    `map` `<`MapKeyType : FieldType `>`
+
+MapKeyType:
+    (one of)
+    `string` `number`
+
+ObjectType:
+    '{' [FieldName ':' FieldType] '}'
+```
+
+Field types are defined in more detail [here](fieldtypes).
+
+Constructors and functions are similar in structure. Note that the `constructor` keyword is mandatory for a constructor declaration:
+
+```yaml
+ConstructorDeclaration:
+   `constructor` ConstructorName ConstructorArgs ConstructorBody 
+
+ConstructorName:
+    alphanumeric starting with a letter
+
+ConstructorArgs:
+    '(' [ArgPair] {`,` ArgPair} ')'
+```
+
+```yaml
+ArgPair:
+    ArgName ':' ArgType
+
+ArgName:
+    alphanumeric starting with a letter
+
+ArgType:
+    FieldType
+```
+
+Note that the `function` keyword in a function declaration is optional:
+
+```yaml
+FunctionDeclaration:
+    [`function`] FunctionName FunctionArgs FunctionBody
+
+FunctionName:
+    alphanumeric starting with a letter
+
+FunctionArgs:
+    ConstructorArgs
+
+FunctionBody:
+    ConstructorBody
+```

@@ -1,0 +1,76 @@
+---
+title: Fields
+---
+
+# Fields
+
+Data is stored in `Polybase` in the form of contracts. Each contract in turn defines the shape and structure of the data itself using fields.
+
+Field declarations must appear at the beginning of the contract declaration. In addition, each contract must have a unique field declaration of the form:
+
+```typescript
+id : string;
+```
+
+This field is used as the unique identifier for a record (an instance) of the contract. Currently, the `id` field is only allowed to be of type `string`, but this 
+restriction may be lifted in the future.
+
+## Required fields
+
+By default, all fields in the contract are required. Required fields are usual field declarations. For instance:
+
+```typescript
+@public
+contract Person {
+    name: string;
+    age: number;
+    salary: number;
+    qualified: boolean;
+
+    ...
+}
+```
+
+## Optional fields
+
+In addition, `Polylang` also allows fields to be declared as optional. This is done by adding a `?` to the field name:
+
+```typescript
+@public
+contract Employee {
+    employed?: boolean;
+    balanceDetails?: number;
+
+    ...
+}
+```
+
+## Nested Fields
+
+Field declarations can also be nested. This is useful when the field itself is of composite nature (meaning that the sub-fields within this field are all related in some sense). For example:
+
+```typescript
+@public
+contract Person {
+    id: string;
+    name: string;
+    address: {
+        street: string;
+        city: string;
+        country: Country;
+    }
+
+    ...
+ }
+
+@public
+contract Country {
+    id: string;
+    name: string;
+    countryCode: number;
+
+    ...
+}
+```
+
+In the example above, the `address` field is a composite field consisting of sub-fields, one of which is a contract type itself (`Country`).

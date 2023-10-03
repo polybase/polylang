@@ -4,7 +4,7 @@ pkg.init();
 
 function justMain() {
   let program = pkg.compile(
-    "function main(x: string) { log(x); }",
+    "function main(x: string): string { log(x); return 'x: ' + x; }",
     null,
     "main"
   );
@@ -22,7 +22,7 @@ function withContracts() {
   let program = pkg.compile(
     // If the log was absent, we wouldn't get `id` in the output,
     // because the compiler optimizes it away for performance
-    "@public contract Account { id: string; function main() { log(this.id); } }",
+    "contract Account { id: string; function main() { log(this.id); } }",
     "Account",
     "main"
   );
@@ -41,6 +41,8 @@ function report(output, hasThis) {
     proofLength: output.proof().length,
     cycleCount: output.cycle_count(),
     this: hasThis ? output.this() : null,
+    result: output.result(),
+    resultHash: output.result_hash(),
     logs: output.logs(),
     hashes: output.hashes(),
     // selfDestructed: output.self_destructed(),

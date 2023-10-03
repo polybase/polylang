@@ -1,0 +1,64 @@
+---
+title: Introducing Polylang
+---
+
+# Introducing Polylang
+ 
+ ## What is Polylang?
+
+`Polylang` is a statically (and strongly typed) smart contract programming language, with syntax and features influenced by languages such as `JavaScript` and `TypeScript`, used by [Polybase](https://polybase.xyz/) for writing smart contracts[^1] 
+whereby proofs can be generated that state transitions follow the contract's rules, and which compiles down to [Zero-Knowledge](https://en.wikipedia.org/wiki/Zero-knowledge_proof) programs that are verified using zk-STARKs.
+
+Zero-Knowledge provides two main benefits:
+    * Provable computation - proves that the code ran as designed, and therefore the output can be trusted.
+    * Privacy - the user can prove that they possess certain information without revealing the information itself.
+
+Refer to the page on [Zero-Knowledge](/docs/zk-proofs/what-is-zk) for more details.
+
+## Overview
+
+Using `Polylang`, you can define contract fields, and add methods (functions associated with the contract) that operate on the data (fields).
+
+An example of a typical smart contract in `Polylang` is:
+
+```typescript
+@public
+contract Person {
+    id: string;
+    name: string;
+    age: number;
+
+    // create a new record for this smart contract
+    constructor (id: string, name: string, age: number) {
+        this.id = id;
+        this.name = name;
+        this.age = age;
+    }
+
+    // update the name for this record
+    setName(newName: string) {
+        this.name = newName;
+    }
+
+    // update the age for this record
+    setAge(newAge: number) {
+        this.age = age;
+    }
+}
+```
+
+The code above defines a smart contract called `Person` which defines a set of fields associated with `Person`. In this case, we have three fields: 
+    * the `id` field which uniquely identifies a "record" of this contract
+    * a `name` field for storing the name of the person 
+    * an `age` field for storing the age of the person
+
+Note the `@public` directive - this indicates that this is a [public](/docs/language-features/permissions) contract whose data and functions can be accessed by everyone. Read more in the [permissions](/docs/language-features/permissions) section.
+
+Like other smart contract languages, `Polylang` allows the updating of a contract's state by calling functions/methods on the contract.
+In the contract above, we have defined a couple of functions that can update the `name` and `age` fields of the contract.
+
+## Using Polylang
+
+`Polylang` is open-source and implemented in Rust. It can be used as a CLI or as a library (crate). Head to the next section to get started with `Polylang`.
+
+[^1]: See the section on [contracts](https://polybase.xyz/docs/collections) in the `Polybase` documentation for more details.
