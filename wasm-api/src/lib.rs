@@ -74,14 +74,6 @@ impl Program {
         let proof = maybe_proof.as_ref().map(|(p, _)| p.to_bytes());
         let output_stack = maybe_proof.map(|(_, os)| os);
 
-        // let _ = verify(
-        //     info.clone(),
-        //     inputs.stack(&HashMap::new()).unwrap(),
-        //     output_stack.clone().unwrap(),
-        //     miden::ExecutionProof::from_bytes(&proof.clone().unwrap().to_vec())
-        //         .map_err(|err| JsError::new(&format!("failed to parse proof: {}", err)))?,
-        // );
-
         Ok(Output {
             info,
             abi: self.abi.clone(),
