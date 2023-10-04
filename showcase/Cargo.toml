@@ -1,5 +1,5 @@
 [package]
-name = "common"
+name = "polylang-examples"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,4 +10,3 @@ polylang-prover = { git = "https://github.com/polybase/polylang" , branch = "mai
 abi = { git = "https://github.com/polybase/polylang" , branch = "main"}
 serde_json =  { version = "1.0.107", features = ["arbitrary_precision" ]}
 serde = { version = "1.0.188", features = ["derive"] }
-

@@ -1,9 +1,0 @@
-[package]
-name = "hello-world"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-common = { path = "../common" }
-serde_json =  { version = "1.0.107", features = ["arbitrary_precision" ]}
-

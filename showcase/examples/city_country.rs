@@ -1,4 +1,4 @@
-use common::{compile_contract, run_contract, Args, Ctx};
+use polylang_examples::{compile_contract, run_contract, Args, Ctx};
 use serde_json::json;
 use std::collections::HashMap;
 

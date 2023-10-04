@@ -14,6 +14,7 @@ path = "src/bin/compile/main.rs"
 
 [workspace]
 members = ["parser", "prover", "abi", "miden-run", "error", "tests", "wasm-api", "server", "server-routes"]
+exclude = ["showcase"]
 
 [features]
 default = ["parser", "bindings"]
