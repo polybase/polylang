@@ -1,6 +1,6 @@
 # Polylang
 
-This is the source code for the `Polylang` documentation site at [polylang-site](TBD).
+This is the source code for the `Polylang` documentation site at [polylang-site](https://polylang.dev/).
 
 ## Build and Run
 
@@ -38,7 +38,7 @@ This will spin up the local development server on [localhost:3000](localhost:300
 
 For more information on contribution tips and guidelines, please see the [Contributing](https://github.com/polybase/polylang/blob/main/CONTRIBUTING.md) page.
 
-Note: If you wish to report issues with the `Polylang` documentation (this site), feel free to [open an issue](https://github.com/polybase/polylang-site/issues).
+Note: If you wish to report issues with the `Polylang` documentation (this site), feel free to [open an issue](https://github.com/polybase/polylang/issues).
 
 ## LICENSE
 
