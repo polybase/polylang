@@ -116,7 +116,6 @@ fn run(
 #[test]
 fn call_public_collection() {
     let code = r#"
-        @public
         collection Account {
             id: string;
             name: string;
@@ -166,7 +165,6 @@ fn call_public_collection() {
 #[test]
 fn call_public_contract() {
     let code = r#"
-        @public
         contract Account {
             id: string;
             name: string;
@@ -621,6 +619,7 @@ fn call_auth_public_key_allow_all() {
 #[test]
 fn call_auth_no_directive() {
     let code = r#"
+        @private
         contract Account {
             id: string;
             pk: PublicKey;
@@ -949,6 +948,7 @@ fn call_auth_literal_compressed() {
 #[test]
 fn read_auth_field_correct_ctx() {
     let code = r#"
+        @private
         contract Account {
             id: string;
             @read
@@ -1001,6 +1001,7 @@ fn read_auth_field_correct_ctx() {
 #[test]
 fn read_auth_field_wrong_ctx() {
     let code = r#"
+        @private
         contract Account {
             id: string;
             @read
@@ -1028,6 +1029,7 @@ fn read_auth_field_wrong_ctx() {
 #[test]
 fn read_auth_field_no_ctx() {
     let code = r#"
+        @private
         contract Account {
             id: string;
             @read
@@ -1184,7 +1186,6 @@ fn read_auth_contract_without_pk() {
 #[test]
 fn field_hashes() {
     let code = r#"
-        @public
         contract Account {
             id: string;
             balance: u32;
@@ -1248,7 +1249,6 @@ fn field_hashes() {
 #[test]
 fn field_dependencies() {
     let code = r#"
-        @public
         contract Account {
             id: string;
             name: string;
@@ -1320,8 +1320,7 @@ fn index_of() {
         item: serde_json::Value,
     ) -> Result<abi::Value, error::Error> {
         let code = r#"
-            @public
-            contract Account {
+                contract Account {
                 id: string;
                 result: i32;
 

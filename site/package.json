@@ -1,0 +1,45 @@
+{
+  "name": "polylang-site",
+  "version": "0.0.1",
+  "description": "Polylang site & docs",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/polybase/polylang"
+  },
+  "author": "Polybase Labs <https://polybaselabs.com/>",
+  "bugs": {
+    "url": "https://github.com/polybase/polylang-site/issues"
+  },
+  "homepage": "https://github.com/polybase/polylang-site",
+  "dependencies": {
+    "@chakra-ui/next-js": "^2.1.5",
+    "@chakra-ui/react": "^2.8.0",
+    "@codemirror/lang-json": "^6.0.1",
+    "@codemirror/view": "^6.21.0",
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
+    "@polybase/codemirror-lang-javascript": "^6.1.2",
+    "@uiw/codemirror-theme-github": "^4.21.18",
+    "@uiw/codemirror-theme-vscode": "^4.21.18",
+    "@uiw/react-codemirror": "^4.21.18",
+    "framer-motion": "^10.16.4",
+    "next": "^13.0.6",
+    "nextra": "latest",
+    "nextra-theme-docs": "latest",
+    "posthog-js": "^1.81.2",
+    "react": "^18.2.0",
+    "react-async-hook": "^4.0.0",
+    "react-dom": "^18.2.0",
+    "react-icons": "^4.11.0",
+    "tweetnacl-util": "^0.15.1"
+  },
+  "devDependencies": {
+    "@types/node": "18.11.10",
+    "typescript": "^4.9.3"
+  }
+}

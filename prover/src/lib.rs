@@ -562,7 +562,7 @@ impl RunOutput {
 
     pub fn result(&self, abi: &Abi) -> Result<Value> {
         let Some(result_type) = &abi.result_type else {
-            return Err(Error::simple("Missing result type"));
+            return Ok(abi::Value::Nullable(None));
         };
 
         let Some(result_addr) = abi.result_addr else {

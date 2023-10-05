@@ -16,9 +16,9 @@ You can use the `compile` binary to compile Polylang functions to Miden. Compile
 ### Example of compiling and running a contract function
 
 ```bash
- $ cargo run --bin compile -- contract:Account function:setName <<<'@public contract Account { id: string; name: string; function setName(newName: string) { this.name = newName; } }'
+ $ cargo run --bin compile -- contract:Account function:setName <<<'contract Account { id: string; name: string; function setName(newName: string) { this.name = newName; } }'
 
- $ cargo run --bin compile -- contract:Account function:setName <<<'@public contract Account { id: string; name: string; function setName(newName: string) { this.name = newName; } }' \
+ $ cargo run --bin compile -- contract:Account function:setName <<<'contract Account { id: string; name: string; function setName(newName: string) { this.name = newName; } }' \
   | cargo run -p miden-run -- \
     --this-json '{ "id": "id1", "name": "John" }' \
     --advice-tape-json '["Tom"]'

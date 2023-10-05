@@ -1,0 +1,173 @@
+---
+title: Control Flow
+---
+
+# Control Flow
+
+`Polylang` provides the typical control flow constructs found in most programming languages. 
+
+## Conditional branching
+
+Conditional branching is provided by the `if-else` construct. The `else` part is optional.
+
+A simple example:
+
+```typescript
+@public
+contract Person {
+    id: string;
+    name: string;
+    age: number;
+    canVote: boolean;
+
+    constructor (id: string, name: string, age: number) {
+        this.id = id;
+        this.name = name;
+        this.age = age;
+    }
+
+    checkVotingCapability() {
+        if (this.age >= 18) {
+            this.canVote = true;
+        } else {
+            error('you have a long wait ahead of you!');
+        }
+    }
+}
+```
+
+Note that we cannot chain `if-else`. For instance, the following code is **not** valid:
+
+```typescript
+@public
+contract Person {
+    id: string;
+    name: string;
+    age: number;
+    canVote: boolean;
+
+    constructor (id: string, name: string, age: number) {
+        this.id = id;
+        this.name = name;
+        this.age = age;
+        this.canVote = false;
+    }
+
+    checkVotingCapability() {
+        if (this.age >= 18) {
+            this.canVote = true;
+        } else if (this.age >= 12) { // this is not allowed
+            throw error('wait a few more years!');
+        } else {
+           throw error('you have a long wait ahead of you!');
+        }
+    }
+} 
+```
+
+Instead, what you can do is to nest them like so:
+
+
+```typescript
+@public
+contract Person {
+    id: string;
+    name: string;
+    age: number;
+    canVote: boolean;
+
+    constructor (id: string, name: string, age: number) {
+        this.id = id;
+        this.name = name;
+        this.age = age;
+        this.canVote = false;
+    }
+
+    checkVotingCapability() {
+        if (this.age >= 18) {
+            this.canVote = true;
+        } else {
+            // this is allowed
+            if (this.age >= 12) { 
+                throw error('wait a few more years!');
+            } else {
+                throw error('you have a long wait ahead of you!');
+             }
+        }
+    }
+} 
+```
+
+
+## Loops
+
+`Polylang` has two looping constructs - `for` and `while`. These are similar to their analogs in C-like language.
+
+### for
+
+We also have `TypeScript` like `for` loops. See the `incrementAgeMagically` function below:
+
+```typescript
+@public
+contract Person {
+    id: string;
+    name: string;
+    age: number;
+
+    constructor (id: string, name: string, age: number) {
+        this.id = id;
+        this.name = name;
+        this.age = age;
+    }
+
+    // increment the age the given number of times
+    incrementAgeMagically(times: number) {
+        for (let i = 0; i < times; i += 1) {
+            this.age += 1;
+        }
+    }
+} 
+```
+
+## while
+
+The `while` loop again functions like the `while` loop in C-like languages:
+
+```typescript
+@public
+contract Person {
+    id: string;
+    name: string;
+    age: number;
+    canVote: boolean;
+
+    constructor (id: string, name: string, age: number) {
+        this.id = id;
+        this.name = name;
+        this.age = age;
+        this.canVote = false;
+    }
+
+    checkVotingCapability() {
+        if (this.age >= 18) {
+            this.canVote = true;
+        } else {
+            // this is allowed
+            if (this.age >= 12) { 
+                throw error('wait a few more years!');
+            } else {
+                throw error('you have a long wait ahead of you!');
+             }
+        }
+    }
+
+    // increment the age by the given value
+    incrementAgeMagically(inc: number) {
+      let oldAge = this.age;
+       while (this.age < oldAge + inc) {
+         this.age += 1;
+       }  
+    }
+}
+```
+Note the local binding produced:`let oldAge = this.age;` inside the `incrementAgeMagically` function.

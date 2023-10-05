@@ -101,6 +101,19 @@ impl Output {
         Ok(serde_wasm_bindgen::to_value(&json_value)?)
     }
 
+    pub fn result(&self) -> Result<JsValue, JsError> {
+        let json_value: serde_json::Value = self.output.result(&self.abi)?.try_into()?;
+        Ok(serde_wasm_bindgen::to_value(&json_value)?)
+    }
+
+    pub fn result_hash(&self) -> Result<JsValue, JsError> {
+        let hash = self
+            .output
+            .result_hash(&self.abi)
+            .map(|h| h.into_iter().map(|x| x.to_string()).collect::<Vec<_>>());
+        Ok(serde_wasm_bindgen::to_value(&hash)?)
+    }
+
     pub fn hashes(&self) -> Result<JsValue, JsError> {
         let hashes = self
             .output

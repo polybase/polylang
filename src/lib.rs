@@ -934,8 +934,8 @@ function x() {
     #[test]
     fn test_decorators() {
         let code = "
-            @public
-            contract Account {
+                @public
+                contract Account {
                 @read
                 owner: PublicKey;
 
