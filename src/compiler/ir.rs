@@ -510,7 +510,9 @@ mod tests {
 
         let a = builder.number(1);
         let b = builder.number(2);
-        let [result] = builder.call("u32wrapping_add", &[a, b]).unwrap()[..] else { unreachable!() };
+        let [result] = builder.call("u32wrapping_add", &[a, b]).unwrap()[..] else {
+            unreachable!()
+        };
 
         let compiler = Compiler {
             expressions: builder.build(),
@@ -553,8 +555,12 @@ mod tests {
         let mut builder = Builder::new(&functions);
 
         let a = builder.number(1);
-        let [a2, a] = builder.call("dup", &[a]).unwrap()[..] else { unreachable!() };
-        let [result] = builder.call("u32wrapping_add", &[a2, a]).unwrap()[..] else { unreachable!() };
+        let [a2, a] = builder.call("dup", &[a]).unwrap()[..] else {
+            unreachable!()
+        };
+        let [result] = builder.call("u32wrapping_add", &[a2, a]).unwrap()[..] else {
+            unreachable!()
+        };
 
         let compiler = Compiler {
             expressions: builder.build(),
@@ -597,8 +603,12 @@ mod tests {
         let mut builder = Builder::new(&functions);
 
         let a = builder.number(1);
-        let [a2, a] = builder.call("dup", &[a]).unwrap()[..] else { unreachable!() };
-        let [result] = builder.call("u32wrapping_add", &[a, a2]).unwrap()[..] else { unreachable!() };
+        let [a2, a] = builder.call("dup", &[a]).unwrap()[..] else {
+            unreachable!()
+        };
+        let [result] = builder.call("u32wrapping_add", &[a, a2]).unwrap()[..] else {
+            unreachable!()
+        };
 
         let compiler = Compiler {
             expressions: builder.build(),
@@ -672,7 +682,9 @@ mod tests {
 
         let true_ = builder.boolean(true);
         let n123 = builder.number(123);
-        let [n123] = builder.call("assert_guard", &[true_, n123]).unwrap()[..] else { unreachable!() };
+        let [n123] = builder.call("assert_guard", &[true_, n123]).unwrap()[..] else {
+            unreachable!()
+        };
 
         let compiler = Compiler {
             expressions: builder.build(),
