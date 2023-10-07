@@ -2,7 +2,9 @@ import * as pkg from './pkg'
 export * from './pkg'
 
 export interface Inputs {
+  init_params: any,
   params: any[],
+  contract_name: string | null,
   fn: string,
 }
 
@@ -12,11 +14,11 @@ export function run(code: string, inputs: Inputs) {
   console.log(code, inputs)
   let program = pkg.compile(
     code,
-    null,
+    inputs.contract_name === "" ? null : inputs.contract_name,
     inputs.fn
   );
   let output = program.run(
-    JSON.stringify(null),
+    JSON.stringify(inputs.init_params),
     JSON.stringify(inputs.params),
     // true == generate a proof
     true

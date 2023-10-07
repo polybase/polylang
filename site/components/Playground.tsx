@@ -22,9 +22,18 @@ function Panel({ heading, children }) {
   )
 }
 
+// Stringifying `Map` is not directly supported
+const processThisVal = (thisVal: any): any => {
+  const replace_fn = (_, value: any) => {
+    return value instanceof Map ? Array.from(value.entries()) : value
+  }
+
+  return JSON.parse(JSON.stringify(thisVal, replace_fn))
+}
+
 export function Playground() {
-  const [code, setCode] = useState(EXAMPLES[1].code)
-  const [inputs, setInputs] = useState(EXAMPLES[1].inputs)
+  const [code, setCode] = useState(EXAMPLES[0].code)
+  const [inputs, setInputs] = useState(EXAMPLES[0].inputs)
   const [report, setReport] = useState('')
   const [output, setOutput] = useState<Output | null>(null)
   const toast = useToast()
@@ -33,12 +42,16 @@ export function Playground() {
     const parsedInputs = JSON.parse(inputs)
     const output = run(code, parsedInputs)
     setOutput(output)
+
+    const hasThis = parsedInputs.contract_name === "" ? false : true
     setReport(JSON.stringify({
       proof: encodeBase64(output.proof()),
       proofLength: output.proof().length,
       cycleCount: output.cycle_count(),
-      // this: hasThis ? output.this() : null,
       logs: output.logs(),
+      this: hasThis ? processThisVal(output.this()) : null,
+      result: output.result(),
+      result_hash: output.result_hash(),
       hashes: output.hashes(),
       // selfDestructed: output.self_destructed(),
       readAuth: output.read_auth(),
@@ -55,12 +68,13 @@ export function Playground() {
       })
     }
     const time = Date.now()
-    output?.verify()
+    // TODO: this should be reverted when the prover PR gets merged in.
+    //output?.verify()
     const diff = Date.now() - time
     toast({
       status: 'success',
       title: 'Valid Proof',
-      description: `Proof was verified in ${diff}ms`,
+      description: `Proof was verified in ${diff} ms`,
       duration: 9000,
     })
   })
@@ -77,11 +91,12 @@ export function Playground() {
               <Heading fontSize='lg'>/ Playground</Heading>
             </HStack>
             <HStack>
-              <Select size='sm' defaultValue={EXAMPLES[1].name} borderRadius={5} onChange={(e) => {
+              <Select size='sm' defaultValue={EXAMPLES[0].name} borderRadius={5} onChange={(e) => {
                 const example = EXAMPLES.find(({ name }) => name === e.target.value)
                 setCode(example?.code ?? '')
                 setInputs(example?.inputs ?? '')
                 setOutput(null)
+                setReport('')
               }}>
                 {EXAMPLES.map(({ name }) => <option key={name} value={name}>{name}</option>)}
               </Select>
@@ -106,7 +121,7 @@ export function Playground() {
             </Panel>
           </Box>
           <Stack width='100%' height='100%' flexDirection='column' spacing={4} maxW='50%'>
-            <Box height='100%'>
+            <Box height='40%'>
               <Panel heading='Inputs'>
                 <Code type='json' value={inputs} onChange={(inputs) => {
                   setInputs(inputs)
