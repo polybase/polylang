@@ -25,7 +25,6 @@ import { Callout } from 'nextra/components'
 Example:
 
 ```typescript
-@public 
 contract Person {
     id: string;
     name: string;
@@ -46,7 +45,6 @@ This key is used in contracts to enforce a means of [Access Control](https://en.
 Example:
 
 ```typescript
-@public
 contract User {
     id: string;
     name: string;
@@ -71,15 +69,13 @@ For the `ctx.publicKey` part, please refer to the page on [Context](context).
 Later, in the `setName` function (also note the use of the optional `function` keyword), we can check the public key of the user invoking the function against the public key which was used 
 at record creation time, and allow the operation only if they match. 
 
-Note all that this check overrides the loose controls afforded by the `@public` directive by providing fine-grained checks over data updates. See the section on [permissions](permissions) for more
-details on both permissions and the various available directives.
+This check provides fine-grained checks over data updates. See the section on [permissions](permissions) for more details on permissions.
 
 ## Contract Types
 
 A contract type is simply a reference to a `Polybase` contract. Consider the following example:
 
 ```typescript
-@public
 contract Employee {
     id: string;
     name: string;
@@ -98,7 +94,6 @@ contract Employee {
 The `company` field if of type `Company`, which is a contract declared as follows:
 
 ```typescript
-@public
 contract Company {
     id: string;
     name: string;
@@ -124,7 +119,6 @@ in array declarations. Only the following `Polylang` types are permitted:
 Example:
 
 ```typescript
-@public
 contract Bank {
     id: string;
     accId: string;
@@ -133,7 +127,6 @@ contract Bank {
     ...
   }
 
-@public
 contract Account {
     id: string;
     name: string;
@@ -152,7 +145,6 @@ valid `Polylang` type.
 Example:
 
 ```typescript
-@public
 contract Bank {
     id: string;
     accId: string;
@@ -161,7 +153,6 @@ contract Bank {
     ...
   }
 
-@public
 contract Account {
     id: string;
     name: string;

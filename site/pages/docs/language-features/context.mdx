@@ -9,7 +9,6 @@ The context object (accessed via the `ctx` object) is a special value that holds
 Suppose we have this contract:
 
 ```typescript
-@public
 contract User {
     id: string;
     name: string;
@@ -42,8 +41,7 @@ For example:
 
 ```bash
 $ cargo run --bin compile -- contract:Account function:setName <<< \
-'@public
- contract User {
+'contract User {
      id: string;
      name: string;
      publicKey: PublicKey;

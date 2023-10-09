@@ -16,7 +16,6 @@ interacting with other contracts and records et al.
 Field values of records can only be updated via functions. Consider the following contract, for instance:
 
 ```typescript
-@public
 contract Person {
     id: string;
     name: string;
@@ -45,7 +44,6 @@ The `setName` and `setAge` functions can be used to update the values for the `n
 You can have custom validation logic inside functions. In the following example, we check that account we're transferring money from has sufficient funds to carry out that operation:
 
 ```typescript
-@public
 contract Account {
     id; string;
     balance: number;
@@ -72,7 +70,6 @@ contract Account {
 We can also provide tighter checks on *who* can modify the record. Taking the same `Account` contract as above, we modify like so:
 
 ```typescript
-@public
 contract Account {
     id; string;
     balance: number;
@@ -113,7 +110,6 @@ can be named anything, but by convention, such a deletion function is called `de
 For example (building on the same contract):
 
 ```typescript
-@public
 contract Account {
     id; string;
     balance: number;
