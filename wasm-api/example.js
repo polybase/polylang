@@ -104,8 +104,6 @@ function withCountryCity() {
     true
   );
 
-  console.log(`this = ` + output.this())
-
   return output;
 }
 
@@ -127,8 +125,16 @@ function report(output, hasThis) {
 const mainOutput = justMain();
 console.log(report(mainOutput, false));
 console.log("Proof is valid?", mainOutput.verify());
+
 const contractOutput = withContracts();
 console.log(report(contractOutput, true));
 console.log("Proof is valid?", contractOutput.verify());
-console.log(report(withArrays(), true));
-console.log(report(withCountryCity(), true));
+
+const arraysOutput = withArrays();
+console.log(report(arraysOutput, true));
+console.log("Proof is valid?", arraysOutput.verify());
+
+const countryCityOutput = withCountryCity();
+console.log(report(countryCityOutput, true));
+console.log("Proof is valid?", countryCityOutput.verify());
+

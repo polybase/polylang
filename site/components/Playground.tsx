@@ -68,8 +68,7 @@ export function Playground() {
       })
     }
     const time = Date.now()
-    // TODO: this should be reverted when the prover PR gets merged in.
-    //output?.verify()
+    output?.verify()
     const diff = Date.now() - time
     toast({
       status: 'success',

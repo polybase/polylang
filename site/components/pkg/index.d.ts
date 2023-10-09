@@ -40,6 +40,10 @@ export class Output {
 */
   proof(): Uint8Array | undefined;
 /**
+* @returns {boolean}
+*/
+  verify(): boolean;
+/**
 * @returns {any}
 */
   this(): any;
