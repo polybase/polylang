@@ -488,6 +488,7 @@ pub struct RunOutput {
     pub cycle_count: u32,
     pub stack: Vec<u64>,
     pub input_stack: Vec<u64>,
+    pub stack_inputs: StackInputs,
 }
 
 impl RunOutput {
@@ -716,6 +717,7 @@ pub fn run<'a>(
             stack: output_stack,
             cycle_count: last_ok_state.clk,
             input_stack: input_stack_values,
+            stack_inputs: input_stack.clone(),
             memory,
         },
         move || {

@@ -108,8 +108,7 @@ impl Output {
     pub fn verify(&self) -> Result<bool, JsError> {
         verify(
             self.info.clone(),
-            StackInputs::try_from_values(self.output.input_stack.clone().into_iter())
-                .map_err(|e| JsError::new(&e.to_string()))?,
+            self.output.stack_inputs.clone(),
             self.output_stack.clone().unwrap(),
             miden::ExecutionProof::from_bytes(&self.proof.clone().unwrap().to_vec())
                 .map_err(|err| JsError::new(&format!("failed to parse proof: {}", err)))?,
