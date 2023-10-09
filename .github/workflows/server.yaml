@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - eng-1198-prover-server
 
 jobs:
   build:
