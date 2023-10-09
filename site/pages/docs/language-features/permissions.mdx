@@ -7,11 +7,10 @@ title: Declarative Permissions
 import { Callout } from 'nextra/components'
 
 <Callout type="info" emoji="⚠️️">
-  By default, all contracts are **fully private** - no one (including the creator of the contract) can read from or write to the contract. In this sense, the permissions modes specified here
-  represent varying forms of relaxation of this restriction.
+  By default, all contracts are **fully public** . This is semantically equivalent to using the `@public` directive.
 </Callout>
 
-`Polylang` controls access (read/write) to data in contracts through its permissions model.  This is achieved via the following directives - `@public`, `@read`, `@call`, and `@delegate`, 
+`Polylang` controls access (read/write) to data in contracts through its permissions model.  This is achieved via the following directives - `@public` (default), `@private`, `@read`, `@call`, and `@delegate`, 
 as well as secondary methods such as checking authorization (using a public key, for instance).
 
 `Polylang` Access Control is best understood in terms of what the user is allowed to do (or not do). This leads to the following permission modes:
@@ -28,16 +27,36 @@ Each of these modes is described in detail in the following sections.
 ## Allow all
 
 This is the least constrained mode of access to contracts data. This mode allows anyone to read from and write to (i.e., call `Polylang` functions which modify the record data) contracts in varying levels of granularity 
-using directives.
+using directives. 
+
+This is the default mode of operation. 
+
+The following are equivalent:
+
+```typescript
+contract MyContract {
+    ...
+}
+```
+
+and 
+
+```typescript
+@public
+contract MyContact {
+    ...
+}
+```
 
 ### @read 
 
-This directive allows anyone to read contract data, but not to write data (invoke functions). Unlike `@public`, this directive can be applied to both contracts as well as to a specific field (which must be of type `PublicKey`).
+This directive allows anyone to read contract data, but not to write data (invoke functions). This directive can be applied to both contracts as well as to a specific field (which must be of type `PublicKey`).
 
 To signify read permission on the overall contract:
 
 ```typescript
 @read
+@private
 contract Person {
     id: string;
     name: string;
@@ -63,11 +82,12 @@ contract Person {
 }
 ```
 
-In this case, anyone can read `Person` data, but no one (including the user who created the `Person` contract) can invoke the `setName`, `setAge`, and `del` functions.
+In this case, anyone can read `Person` data, but no one (including the user who created the `Person` contract) can invoke the `setName`, `setAge`, and `del` functions (since the contract is marked `@private`).
 
-If we wish to enforce a stronger constraint that **only** the creator of `Person` contract be allowed to read the contract, we can modify the contract like so:
+If we wish to enforce a stronger constraint that **only** the creator of the `Person` contract be allowed to read the contract, we can modify the contract like so:
 
 ```typescript
+@private
 contract Person {
     id: string;
     name: string;
@@ -97,11 +117,11 @@ contract Person {
 }
 ```
 
-Since the contract above is *not* marked as `@public`, no one other than the creator of the contract, i.e., the user whose public key matches the public key stored in the `creator` field can read the contract data.
+Since the contract above is marked as `@private`, no one other than the creator of the contract, i.e., the user whose public key matches the public key stored in the `creator` field can read the contract data.
 
 ### @call 
 
-This directive allows anyone to invoke functions on the contract record, but not read data from the contract. This directive may be applied on contracts or on individual functions.
+This directive allows anyone to invoke functions on the contract record (if the contract is marked `@private`), but not read data from the contract. This directive may be applied on contracts or on individual functions.
 
 We will consider both cases using the same example. 
 
@@ -109,6 +129,7 @@ Consider the following contract:
 
 ```typescript
 @call
+@private
 contract Person {
     id: string;
     name: string;
@@ -143,14 +164,14 @@ contract Person {
 
 In the example above, no one can read `Person` data, but anyone can invoke the functions `setName` and `setAge`, but **not** the `del` function (since it has a `@call` directive on it, which overrides the directive on the contract).
 
-### @public 
+### @private 
 
-This directive is the most permissive of all, and allows anyone to read and write the contract data. This directive can only be applied on contracts. In essence, `@public` is like a combination of both `@read` and `@call`.
+This directive is the most restrictive of all, allowing no one (including the creator of the `contract`) to read from or write to the `contract` post creation. This directive can only be applied on contracts.
 
 For example:
 
 ```typescript
-@public
+@private
 contract Person {
     id: string;
     name: string;
@@ -176,8 +197,7 @@ contract Person {
 }
 ```
 
-Since the contract has been decorated with the `@public` directive, anyone can not only read `Person` record data, but also invoke the `setName`, `setAge`, and `del` functions to modify the state of a record.
-
+Once the `Person` contract record has been created, no one can read its data (or update it).
 
 ## Delegation
 
@@ -226,7 +246,7 @@ contract User {
 }
 ```
 <Callout type="warning" emoji="⚠️">
-  Since the chain of delegates must end up on a field of type `PublicKey`, the delegation model requires the usage of public keys (unlike using, say, the `@public` directive). This means that the
+  Since the chain of delegates must end up on a field of type `PublicKey`, the delegation model requires the usage of public keys. This means that the
   user must be authenticated before attempting the operation. This is outside the purview of `Polylang`.
 </Callout>
 
@@ -240,16 +260,15 @@ contract User {
 While delegation provides an elegant way of controlling permissions in `Polylang`, for more complicated scenarios, checking permissions using custom code is often the most flexible approach. This can also turn out to 
 be the easiest to understand in many cases. 
 
-The usual way is to mark the contract `@public`, and then provide tighter constraints via custom checks. For example:
+The usual way is provide tighter constraints via custom checks. For example:
 
 ```typescript
-@public
 contract Team {
     id: string
     members: string[]
     publicKey: PublicKey;
 
-    // Anyone can call this function because of @public on the contract
+    // Anyone can call this function because the contract is public by default
     addMember (id: string) {
       // But you must be signing using the correct key
       if (this.publicKey == ctx.publicKey) {
@@ -267,7 +286,7 @@ contract Team {
 }
 ```
 
-In the example above, we have marked the contract as `@public` so that anyone can read the data. However, for the `addMember` function which modifies data, we wish to have tighter constrainsts. As such, we have two checks in 
+In the example above, anyone can read the data since the `contract` is public by default. However, for the `addMember` function which modifies data, we wish to have tighter constrainsts. As such, we have two checks in 
 place - the first check ensures that the public key of the user invoking the function matches the public key stored in the contract during the creation of the record. 
 
 Secondly, we have a custom check that allows the operation to proceed only if we have enough members in the team. This second form of checks cannot be done using directives and/or delegates, and is domain-specific in nature.
@@ -281,11 +300,11 @@ combined to obtain varying granularities of permissions.
 
 | Directive          | Entity     | Read                                             | Write                                             | 
 |:-------------------|:----------:|:------------------------------------------------:|--------------------------------------------------:|
-| None               | Contract | No one                                           | No one                                            |
-| @public            | Contract | Anyone                                           | Anyone                                            |
-| @read              | Contract | Anyone                                           | No one                                            |
+| None / @public     | Contract   | Anyone                                           |Anyone                                             |
+| @private           | Contract   | No one                                           | No one                                            |
+| @read              | Contract   | Anyone                                           | No one                                            |
 | @read              | field      | Only user with matching public key               | No one                                            |
-| @call              | Contract | No one                                           | Anyone                                            |
+| @call              | Contract   | No one                                           | Anyone                                            |
 | @call              | function   | No one                                           | Only user with matching public key                |
 | @delegate + @read  | function   | Only user with a transitively matching public key| No one                                            |
 | @delegate + @call  | function   | No one                                           | Only user with a transitively matching public key |

@@ -37,6 +37,7 @@ function withContracts() {
 
 function report(output, hasThis) {
   return {
+    proof: output.proof(),
     proofLength: output.proof().length,
     cycleCount: output.cycle_count(),
     this: hasThis ? output.this() : null,
@@ -44,10 +45,12 @@ function report(output, hasThis) {
     resultHash: output.result_hash(),
     logs: output.logs(),
     hashes: output.hashes(),
-    selfDestructed: output.self_destructed(),
+    // selfDestructed: output.self_destructed(),
     readAuth: output.read_auth(),
   };
 }
 
-console.log(report(justMain(), false));
-console.log(report(withContract(), true));
+const mainOutput = justMain();
+console.log(report(mainOutput, false));
+console.log("Proof is valid?", mainOutput.verify());
+console.log(report(withContracts(), true));

@@ -22,7 +22,6 @@ Using `Polylang`, you can define contract fields, and add methods (functions ass
 An example of a typical smart contract in `Polylang` is:
 
 ```typescript
-@public
 contract Person {
     id: string;
     name: string;
@@ -51,8 +50,6 @@ The code above defines a smart contract called `Person` which defines a set of f
     * the `id` field which uniquely identifies a "record" of this contract
     * a `name` field for storing the name of the person 
     * an `age` field for storing the age of the person
-
-Note the `@public` directive - this indicates that this is a [public](/docs/language-features/permissions) contract whose data and functions can be accessed by everyone. Read more in the [permissions](/docs/language-features/permissions) section.
 
 Like other smart contract languages, `Polylang` allows the updating of a contract's state by calling functions/methods on the contract.
 In the contract above, we have defined a couple of functions that can update the `name` and `age` fields of the contract.

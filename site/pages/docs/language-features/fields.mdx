@@ -20,7 +20,6 @@ restriction may be lifted in the future.
 By default, all fields in the contract are required. Required fields are usual field declarations. For instance:
 
 ```typescript
-@public
 contract Person {
     name: string;
     age: number;
@@ -36,7 +35,6 @@ contract Person {
 In addition, `Polylang` also allows fields to be declared as optional. This is done by adding a `?` to the field name:
 
 ```typescript
-@public
 contract Employee {
     employed?: boolean;
     balanceDetails?: number;
@@ -50,7 +48,6 @@ contract Employee {
 Field declarations can also be nested. This is useful when the field itself is of composite nature (meaning that the sub-fields within this field are all related in some sense). For example:
 
 ```typescript
-@public
 contract Person {
     id: string;
     name: string;
@@ -63,7 +60,6 @@ contract Person {
     ...
  }
 
-@public
 contract Country {
     id: string;
     name: string;

@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use abi::{publickey, Abi, Parser, Type, TypeReader, Value};
 use error::prelude::*;
 use miden::{ExecutionProof, ProofOptions};
-use miden_processor::{math::Felt, utils::Serializable, Program, ProgramInfo, StackInputs};
+use miden_processor::{
+    math::Felt, utils::Serializable, Program, ProgramInfo, StackInputs, StackOutputs,
+};
 use polylang::compiler;
 
 #[derive(Debug)]
@@ -248,7 +250,7 @@ impl Inputs {
         .collect::<Vec<_>>()
     }
 
-    fn stack(
+    pub fn stack(
         &self,
         other_records: &HashMap<String, Vec<(Type, Value, Value, Vec<u32>)>>,
     ) -> Result<StackInputs> {
@@ -471,7 +473,7 @@ pub fn prove(program: &Program, inputs: &Inputs) -> Result<Output> {
     Ok(Output {
         new_this: output.this(&inputs.abi)?,
         new_hashes: output.hashes(),
-        proof: proof.to_bytes(),
+        proof: proof.0.to_bytes(),
         stack: output.stack.clone(),
         input_stack: output.input_stack.clone(),
         run_output: output,
@@ -483,8 +485,8 @@ pub struct RunOutput {
     abi: Abi,
     memory: HashMap<u64, [u64; 4]>,
     pub cycle_count: u32,
-    stack: Vec<u64>,
-    input_stack: Vec<u64>,
+    pub stack: Vec<u64>,
+    pub input_stack: Vec<u64>,
 }
 
 impl RunOutput {
@@ -621,7 +623,10 @@ impl RunOutput {
 pub fn run<'a>(
     program: &'a Program,
     inputs: &Inputs,
-) -> Result<(RunOutput, impl FnOnce() -> Result<ExecutionProof> + 'a)> {
+) -> Result<(
+    RunOutput,
+    impl FnOnce() -> Result<(ExecutionProof, StackOutputs)> + 'a,
+)> {
     let other_records = inputs.other_records()?;
     let input_stack = inputs.stack(&other_records)?;
     let advice_tape = inputs.advice_provider(&other_records)?;
@@ -713,12 +718,12 @@ pub fn run<'a>(
             memory,
         },
         move || {
-            let (_stack_outputs, proof) =
+            let (stack_outputs, proof) =
                 miden_prover::prove(program, input_stack, advice_tape, ProofOptions::default())
                     .map_err(MidenError::Execution)
                     .wrap_err()?;
 
-            Ok(proof)
+            Ok((proof, stack_outputs))
         },
     ))
 }
