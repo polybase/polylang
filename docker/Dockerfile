@@ -7,6 +7,7 @@ COPY server-routes ./server-routes/
 COPY prover ./prover/
 COPY abi ./abi
 COPY error ./error/
+COPY miden-run ./miden-run/
 COPY src ./src/
 COPY parser ./parser/
 
