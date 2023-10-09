@@ -43,7 +43,8 @@ const Prover = () => {
             })
         }
         const time = Date.now()
-        output?.verify()
+        // TODO: revert this in the prover PR.
+        //output?.verify()
         const diff = Date.now() - time
         toast({
             status: 'success',

@@ -9,6 +9,8 @@ export function output_cycle_count(a: number): number;
 export function output_proof(a: number, b: number): void;
 export function output_verify(a: number, b: number): void;
 export function output_this(a: number, b: number): void;
+export function output_result(a: number, b: number): void;
+export function output_result_hash(a: number, b: number): void;
 export function output_hashes(a: number, b: number): void;
 export function output_logs(a: number, b: number): void;
 export function output_self_destructed(a: number, b: number): void;

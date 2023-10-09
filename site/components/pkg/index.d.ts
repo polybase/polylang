@@ -50,6 +50,14 @@ export class Output {
 /**
 * @returns {any}
 */
+  result(): any;
+/**
+* @returns {any}
+*/
+  result_hash(): any;
+/**
+* @returns {any}
+*/
   hashes(): any;
 /**
 * @returns {any}
