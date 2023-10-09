@@ -8,7 +8,8 @@ async fn prove(
 
 #[tokio::main]
 async fn main() {
-    let listen_addr = std::env::var("PORT").unwrap_or("0.0.0.0:8090".to_string());
+    let port = std::env::var("PORT").unwrap_or("8080".to_string());
+    let listen_addr = std::env::var("PROVER_LADDR").unwrap_or(format!("0.0.0.0:{port}"));
 
     let app = || App::new().service(web::resource("/prove").route(web::post().to(prove)));
 
