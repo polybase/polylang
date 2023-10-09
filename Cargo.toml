@@ -13,7 +13,7 @@ name = "compile"
 path = "src/bin/compile/main.rs"
 
 [workspace]
-members = ["parser", "prover", "abi", "miden-run", "error", "tests", "wasm-api"]
+members = ["parser", "prover", "abi", "miden-run", "error", "tests", "wasm-api", "server", "server-routes"]
 
 [features]
 default = ["parser", "bindings"]
