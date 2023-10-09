@@ -1,5 +1,7 @@
 FROM rust:1-bookworm AS builder
 
+WORKDIR /build
+
 COPY Cargo.lock ./
 COPY Cargo.toml ./
 COPY server ./server/
@@ -8,6 +10,8 @@ COPY prover ./prover/
 COPY abi ./abi
 COPY error ./error/
 COPY miden-run ./miden-run/
+COPY tests ./tests/
+COPY wasm-api ./wasm-api/
 COPY src ./src/
 COPY parser ./parser/
 
