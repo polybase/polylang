@@ -43,7 +43,7 @@ export function Playground() {
     const output = run(code, parsedInputs)
     setOutput(output)
 
-    const hasThis = parsedInputs.contract_name === "" ? false : true
+    const hasThis = parsedInputs.contract_name === '' ? false : true
     setReport(JSON.stringify({
       proof: encodeBase64(output.proof()),
       proofLength: output.proof().length,

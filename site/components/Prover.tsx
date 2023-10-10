@@ -33,26 +33,6 @@ const Prover = () => {
     }, null, 2))
   })
 
-<<<<<<< HEAD
-    const verify = useAsyncCallback(() => {
-        if (!output) {
-            return toast({
-                status: 'error',
-                title: 'No proof',
-                description: 'There is no proof to verify',
-                duration: 9000,
-            })
-        }
-        const time = Date.now()
-        output?.verify()
-        const diff = Date.now() - time
-        toast({
-            status: 'success',
-            title: 'Valid Proof',
-            description: `Proof was verified in ${diff}ms`,
-            duration: 9000,
-        })
-=======
   const verify = useAsyncCallback(() => {
     if (!output) {
       return toast({
@@ -70,7 +50,6 @@ const Prover = () => {
       title: 'Valid Proof',
       description: `Proof was verified in ${diff}ms`,
       duration: 9000,
->>>>>>> 05ae6ff (Changes:)
     })
   })
 
