@@ -15,7 +15,7 @@ if (typeof window !== 'undefined') {
     loaded: (posthog) => {
       if (process.env.NODE_ENV === 'development') posthog.debug()
     },
-    capture_pageview: false // Disable automatic pageview capture, as we capture manually
+    capture_pageview: false, // Disable automatic pageview capture, as we capture manually
   })
 }
 
@@ -41,4 +41,4 @@ function MyApp({ Component, pageProps }) {
   )
 }
 
-export default MyApp;
+export default MyApp

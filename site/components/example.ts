@@ -8,7 +8,7 @@ export const EXAMPLES = [{
   "params": [],
   "contract_name": "",
   "fn": "hello"
-}`
+}`,
 }, {
   name: 'Addition',
   code: `function main(a: u32, b: u32): u32 {
@@ -19,7 +19,7 @@ export const EXAMPLES = [{
   "params": [10, 20],
   "contract_name": "",
   "fn": "main"
-}`
+}`,
 }, {
   name: 'Fibonacci',
   code: `function main(p: u32, a: u32, b: u32) {
@@ -34,7 +34,7 @@ export const EXAMPLES = [{
   "params": [8, 1, 1],
   "contract_name": "",
   "fn": "main"
-}`
+}`,
 }, {
   name: 'Hello, Contracts!',
   code: `contract HelloContracts {
@@ -47,7 +47,7 @@ export const EXAMPLES = [{
   "params": [],
   "contract_name": "HelloContracts",
   "fn": "hello"
-}`
+}`,
 }, {
   name: 'Reverse Array',
   code: `contract ReverseArray {
@@ -78,7 +78,7 @@ export const EXAMPLES = [{
   "params": [],
   "contract_name": "ReverseArray",
   "fn": "reverse"
-}`
+}`,
 }, {
   name: 'Binary Search',
   code: `contract BinarySearch {
@@ -120,7 +120,7 @@ export const EXAMPLES = [{
   "params": [5],
   "contract_name": "BinarySearch",
   "fn": "search"
-}`
+}`,
 }, {
   name: 'City and Country',
   code: `contract City {
@@ -149,5 +149,5 @@ contract Country {
   "params": ["boston", "BOSTON", { "id": "usa", "name": "USA"}],
   "contract_name": "City",
   "fn": "constructor"
-}`
+}`,
 }]

@@ -4,7 +4,7 @@ import { Logo } from './Logo'
 import { useState } from 'react'
 import { EXAMPLES } from './example'
 import Link from 'next/link'
-import { useAsyncCallback } from "./useAsyncCallback"
+import { useAsyncCallback } from './useAsyncCallback'
 import { run, Output } from './polylang'
 import { encodeBase64 } from 'tweetnacl-util'
 
@@ -43,7 +43,7 @@ export function Playground() {
     const output = run(code, parsedInputs)
     setOutput(output)
 
-    const hasThis = parsedInputs.contract_name === "" ? false : true
+    const hasThis = parsedInputs.contract_name === '' ? false : true
     setReport(JSON.stringify({
       proof: encodeBase64(output.proof()),
       proofLength: output.proof().length,

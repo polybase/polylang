@@ -7,19 +7,19 @@ This is the source code for the `Polylang` documentation site at [polylang-site]
 Install the dependencies:
 
 ```bash
-  $ pnpm i
+  $ yarn install
 ```
 
 Build the project (optimized build):
 
 ```bash
-  $ pnpm build
+  $ yarn build
 ```
 
 Then start the server:
 
 ```bash
-  $ pnpm start
+  $ yarn start
 ```
 
 ### Development
@@ -27,7 +27,7 @@ Then start the server:
 To run the project in `dev` mode to get live updates on changes:
 
 ```bash
-  $ pnpm dev
+  $ yarn dev
 ```
 
 This will spin up the local development server on [localhost:3000](localhost:3000).

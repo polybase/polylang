@@ -8,21 +8,22 @@ export interface Inputs {
   fn: string,
 }
 
-pkg.init();
+pkg.init()
 
 export function run(code: string, inputs: Inputs) {
   console.log(code, inputs)
-  let program = pkg.compile(
+  const program = pkg.compile(
     code,
-    inputs.contract_name === "" ? null : inputs.contract_name,
+    inputs.contract_name === '' ? null : inputs.contract_name,
     inputs.fn
-  );
+  )
+
   let output = program.run(
     JSON.stringify(inputs.init_params),
     JSON.stringify(inputs.params),
     // true == generate a proof
     true
-  );
+  )
 
-  return output;
+  return output
 }
