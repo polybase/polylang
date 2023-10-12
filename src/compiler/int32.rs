@@ -24,11 +24,9 @@ pub(crate) fn new(compiler: &mut Compiler, value: i32) -> Symbol {
 pub(crate) fn decompose(compiler: &mut Compiler, n: &Symbol) {
     assert_eq!(n.type_, Type::PrimitiveType(PrimitiveType::Int32));
 
-    compiler.memory.read(
-        compiler.instructions,
-        n.memory_addr,
-        n.type_.miden_width(),
-    );
+    compiler
+        .memory
+        .read(compiler.instructions, n.memory_addr, n.type_.miden_width());
     // [n]
     compiler.instructions.push(encoder::Instruction::Dup(None));
     // [n, n]
@@ -218,41 +216,39 @@ pub(crate) fn sub(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
     prepare_stack_for_arithmetic(compiler, a, b);
     // current stack: [b, a, b_sign, a_sign]
-    compiler.instructions.extend(
-        [
-            encoder::Instruction::U32WrappingSub,
-            // [result, b_sign, a_sign]
-            encoder::Instruction::Dup(None),
-            // [result, result, b_sign, a_sign]
-            encoder::Instruction::U32CheckedSHR(Some(31)),
-            // [result_sign, result, b_sign, a_sign]
-            encoder::Instruction::Dup(Some(3)),
-            // [b_sign, result_sign, result, b_sign, a_sign]
-            encoder::Instruction::MovUp(4),
-            // [a_sign, b_sign, b_sign, result_sign, result, b_sign]
-            encoder::Instruction::MovUp(4),
-            // [b_sign, a_sign, b_sign, result_sign, result]
-            encoder::Instruction::If {
-                condition: vec![
-                    encoder::Instruction::U32CheckedEq,
-                    encoder::Instruction::Not,
-                ],
+    compiler.instructions.extend([
+        encoder::Instruction::U32WrappingSub,
+        // [result, b_sign, a_sign]
+        encoder::Instruction::Dup(None),
+        // [result, result, b_sign, a_sign]
+        encoder::Instruction::U32CheckedSHR(Some(31)),
+        // [result_sign, result, b_sign, a_sign]
+        encoder::Instruction::Dup(Some(3)),
+        // [b_sign, result_sign, result, b_sign, a_sign]
+        encoder::Instruction::MovUp(4),
+        // [a_sign, b_sign, b_sign, result_sign, result, b_sign]
+        encoder::Instruction::MovUp(4),
+        // [b_sign, a_sign, b_sign, result_sign, result]
+        encoder::Instruction::If {
+            condition: vec![
+                encoder::Instruction::U32CheckedEq,
+                encoder::Instruction::Not,
+            ],
+            // [b_sign, result_sign, result]
+            then: vec![
+                encoder::Instruction::U32CheckedEq,
+                // [b_sign == result_sign, result]
+                encoder::Instruction::Assert,
+            ],
+            else_: vec![
                 // [b_sign, result_sign, result]
-                then: vec![
-                    encoder::Instruction::U32CheckedEq,
-                    // [b_sign == result_sign, result]
-                    encoder::Instruction::Assert,
-                ],
-                else_: vec![
-                    // [b_sign, result_sign, result]
-                    encoder::Instruction::Drop,
-                    // [result_sign, result]
-                    encoder::Instruction::Drop,
-                    // [result]
-                ],
-            },
-        ],
-    );
+                encoder::Instruction::Drop,
+                // [result_sign, result]
+                encoder::Instruction::Drop,
+                // [result]
+            ],
+        },
+    ]);
 
     compiler.memory.write(
         compiler.instructions,
@@ -339,31 +335,29 @@ pub(crate) fn mul(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
         instructions
     };
 
-    compiler.instructions.extend(
-        [
-            encoder::Instruction::Dup(Some(1)),
-            // [a, b, a, b_sign, a_sign]
-            encoder::Instruction::Push(0),
-            // [0, a, b, a, b_sign, a_sign]
-            encoder::Instruction::U32CheckedEq,
-            // [a == 0, b, a, b_sign, a_sign]
-            encoder::Instruction::Dup(Some(1)),
-            // [b, a == 0, b, a, b_sign, a_sign]
-            encoder::Instruction::Push(0),
-            // [0, b, a == 0, b, a, b_sign, a_sign]
-            encoder::Instruction::U32CheckedEq,
-            // [b == 0, a == 0, b, a, b_sign, a_sign]
-            encoder::Instruction::If {
-                condition: vec![
-                    encoder::Instruction::Or,
-                    // [a == 0 || b == 0, b, a, b_sign, a_sign]
-                ],
-                //  [b, a, b_sign, a_sign]
-                then: if_zero,
-                else_: if_not_zero,
-            },
-        ],
-    );
+    compiler.instructions.extend([
+        encoder::Instruction::Dup(Some(1)),
+        // [a, b, a, b_sign, a_sign]
+        encoder::Instruction::Push(0),
+        // [0, a, b, a, b_sign, a_sign]
+        encoder::Instruction::U32CheckedEq,
+        // [a == 0, b, a, b_sign, a_sign]
+        encoder::Instruction::Dup(Some(1)),
+        // [b, a == 0, b, a, b_sign, a_sign]
+        encoder::Instruction::Push(0),
+        // [0, b, a == 0, b, a, b_sign, a_sign]
+        encoder::Instruction::U32CheckedEq,
+        // [b == 0, a == 0, b, a, b_sign, a_sign]
+        encoder::Instruction::If {
+            condition: vec![
+                encoder::Instruction::Or,
+                // [a == 0 || b == 0, b, a, b_sign, a_sign]
+            ],
+            //  [b, a, b_sign, a_sign]
+            then: if_zero,
+            else_: if_not_zero,
+        },
+    ]);
 
     compiler.memory.write(
         compiler.instructions,

@@ -120,7 +120,8 @@ impl Args {
                     .lines()
                     .find(|l| l.starts_with("# ABI: "))
                     .ok_or_else(|| {
-                        "missing ABI. Please specify it with `--abi` or add a `# ABI: ...` comment".to_string()
+                        "missing ABI. Please specify it with `--abi` or add a `# ABI: ...` comment"
+                            .to_string()
                     })?;
 
                 let abi_json = abi_comment["# ABI: ".len()..].trim();
@@ -249,12 +250,8 @@ impl Args {
             this_salts: sv.iter().map(|_| 0).collect(),
             this: this.try_into()?,
             this_field_hashes,
-            args: serde_json::from_str(
-                self
-                    .advice_tape_json.as_deref()
-                    .unwrap_or("[]"),
-            )
-            .wrap_err()?,
+            args: serde_json::from_str(self.advice_tape_json.as_deref().unwrap_or("[]"))
+                .wrap_err()?,
             other_records: self.other_records.clone(),
         })
     }
