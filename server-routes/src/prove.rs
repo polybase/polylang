@@ -5,6 +5,8 @@ use error::prelude::*;
 use polylang_prover::{compile_program, Inputs, ProgramExt};
 use serde::Deserialize;
 
+type OtherRecordsType = HashMap<String, Vec<(serde_json::Value, Vec<u32>)>>;
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProveRequest {
@@ -14,7 +16,7 @@ pub struct ProveRequest {
     pub this: Option<serde_json::Value>,
     pub this_salts: Option<Vec<u32>>,
     pub args: Vec<serde_json::Value>,
-    pub other_records: Option<HashMap<String, Vec<(serde_json::Value, Vec<u32>)>>>,
+    pub other_records: Option<OtherRecordsType>,
 }
 
 pub async fn prove(mut req: ProveRequest) -> Result<serde_json::Value, Box<dyn std::error::Error>> {

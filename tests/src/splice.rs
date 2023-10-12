@@ -81,7 +81,7 @@ fn test_splice(
         arr,
         abi::Value::Array(
             expected_new_array
-                .into_iter()
+                .iter()
                 .map(|n| abi::Value::Float32(*n))
                 .collect::<Vec<_>>()
         )
@@ -90,7 +90,7 @@ fn test_splice(
         ret,
         abi::Value::Array(
             expected_returned
-                .into_iter()
+                .iter()
                 .map(|n| abi::Value::Float32(*n))
                 .collect::<Vec<_>>()
         )

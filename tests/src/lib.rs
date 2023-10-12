@@ -98,7 +98,7 @@ fn run(
                         .map(|record| {
                             (
                                 record.clone(),
-                                col.fields.iter().map(|_| 0).collect::<Vec<_>>().into(),
+                                col.fields.iter().map(|_| 0).collect::<Vec<_>>(),
                             )
                         })
                         .collect(),
@@ -970,7 +970,7 @@ fn read_auth_field_correct_ctx() {
     )
     .unwrap();
 
-    assert_eq!(output.read_auth(), true);
+    assert!(output.read_auth());
 
     consistency_checks!(
         output,
@@ -1023,7 +1023,7 @@ fn read_auth_field_wrong_ctx() {
     )
     .unwrap();
 
-    assert_eq!(output.read_auth(), false);
+    assert!(!output.read_auth());
 }
 
 #[test]
@@ -1051,7 +1051,7 @@ fn read_auth_field_no_ctx() {
     )
     .unwrap();
 
-    assert_eq!(output.read_auth(), false);
+    assert!(!output.read_auth());
 
     consistency_checks!(
         output,
@@ -1103,7 +1103,7 @@ fn read_auth_contract_with_pk() {
     )
     .unwrap();
 
-    assert_eq!(output.read_auth(), true);
+    assert!(output.read_auth());
 
     consistency_checks!(
         output,
@@ -1155,7 +1155,7 @@ fn read_auth_contract_without_pk() {
     )
     .unwrap();
 
-    assert_eq!(output.read_auth(), true);
+    assert!(output.read_auth());
 
     consistency_checks!(
         output,

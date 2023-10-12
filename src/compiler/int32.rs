@@ -11,7 +11,7 @@ pub(crate) fn new(compiler: &mut Compiler, value: i32) -> Symbol {
     // memory is zero-initialized, so we don't need to write for 0
     if value != 0 {
         compiler.memory.write(
-            &mut compiler.instructions,
+            compiler.instructions,
             symbol.memory_addr,
             &[ValueSource::Immediate(value as u32)],
         );
@@ -25,7 +25,7 @@ pub(crate) fn decompose(compiler: &mut Compiler, n: &Symbol) {
     assert_eq!(n.type_, Type::PrimitiveType(PrimitiveType::Int32));
 
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         n.memory_addr,
         n.type_.miden_width(),
     );
@@ -251,8 +251,7 @@ pub(crate) fn sub(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
                     // [result]
                 ],
             },
-        ]
-        .into_iter(),
+        ],
     );
 
     compiler.memory.write(
@@ -363,8 +362,7 @@ pub(crate) fn mul(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
                 then: if_zero,
                 else_: if_not_zero,
             },
-        ]
-        .into_iter(),
+        ],
     );
 
     compiler.memory.write(

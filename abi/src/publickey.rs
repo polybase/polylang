@@ -229,7 +229,7 @@ impl Key {
     }
 
     pub fn to_64_byte_hex(&self) -> String {
-        format!("0x{}{}", hex::encode(&self.x), hex::encode(&self.y))
+        format!("0x{}{}", hex::encode(self.x), hex::encode(self.y))
     }
 
     pub fn to_compressed_33_byte_hex(&self) -> String {

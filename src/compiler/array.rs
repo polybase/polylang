@@ -425,7 +425,7 @@ pub(crate) fn get(compiler: &mut Compiler, arr: &Symbol, index: &Symbol) -> Symb
         .allocate_symbol(element_type(&arr.type_).clone());
 
     compiler.instructions.extend([
-        Instruction::MemLoad(Some(data_ptr(&arr).memory_addr)),
+        Instruction::MemLoad(Some(data_ptr(arr).memory_addr)),
         // [data_ptr]
         Instruction::MemLoad(Some(index.memory_addr)),
         // [index, data_ptr]
@@ -1040,8 +1040,8 @@ pub(crate) fn splice(
 
         compiler.memory.read(
             compiler.instructions,
-            length(&arr).memory_addr,
-            length(&arr).type_.miden_width(),
+            length(arr).memory_addr,
+            length(arr).type_.miden_width(),
         );
         // [length]
         compiler.memory.read(
@@ -1074,7 +1074,7 @@ pub(crate) fn splice(
     compiler.memory.write(
         compiler.instructions,
         length(&new_arr).memory_addr,
-        &vec![ValueSource::Memory(new_arr_len.memory_addr)],
+        &[ValueSource::Memory(new_arr_len.memory_addr)],
     );
 
     compiler.memory.read(
@@ -1088,7 +1088,7 @@ pub(crate) fn splice(
         &vec![ValueSource::Stack; arr.type_.miden_width() as usize],
     );
 
-    return Ok(array_of_deletions);
+    Ok(array_of_deletions)
 }
 
 pub(crate) fn slice(
@@ -1318,7 +1318,7 @@ pub(crate) fn unshift(
     compiler.memory.write(
         compiler.instructions,
         length(&new_arr).memory_addr,
-        &vec![ValueSource::Memory(new_len.memory_addr)],
+        &[ValueSource::Memory(new_len.memory_addr)],
     );
 
     compiler.memory.read(

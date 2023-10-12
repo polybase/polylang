@@ -103,7 +103,7 @@ fn test_slice(arr: serde_json::Value, start: Option<u32>, end: Option<u32>, expe
         sliced,
         abi::Value::Array(
             expected
-                .into_iter()
+                .iter()
                 .map(|n| abi::Value::Float32(*n))
                 .collect::<Vec<_>>()
         )

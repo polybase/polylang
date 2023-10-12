@@ -15,7 +15,7 @@ async fn main() {
 
     eprintln!("Listening on {}", listen_addr);
 
-    HttpServer::new(move || app())
+    HttpServer::new(app)
         .bind(listen_addr)
         .unwrap()
         .run()
