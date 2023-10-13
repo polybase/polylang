@@ -3,6 +3,7 @@
 export const memory: WebAssembly.Memory;
 export function __wbg_program_free(a: number): void;
 export function compile(a: number, b: number, c: number, d: number, e: number, f: number, g: number): void;
+export function program_miden_code(a: number, b: number): void;
 export function program_run(a: number, b: number, c: number, d: number, e: number, f: number, g: number): void;
 export function __wbg_output_free(a: number): void;
 export function output_cycle_count(a: number): number;

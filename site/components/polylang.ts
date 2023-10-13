@@ -27,3 +27,24 @@ export function run(code: string, inputs: Inputs) {
 
   return output
 }
+
+export function compile(code: string, inputs: Inputs) {
+  let program = pkg.compile(
+    code,
+    inputs.contract_name === '' ? null : inputs.contract_name,
+    inputs.fn
+  )
+
+  const midenCode = program.miden_code()
+
+  const abiStringMatch = midenCode.match(/# ABI: (.+?)\n/)
+
+  if (!abiStringMatch) {
+    console.log('Could not extract abi from miden code')
+    return null
+  }
+
+  const abiString = abiStringMatch[1]
+  const abi = JSON.parse(abiString)
+  return { midenCode: midenCode, abi: abi }
+}

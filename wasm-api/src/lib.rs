@@ -34,6 +34,10 @@ pub fn compile(
 
 #[wasm_bindgen]
 impl Program {
+    pub fn miden_code(&self) -> String {
+        self.miden_code.clone()
+    }
+
     pub fn run(
         &self,
         this_json: String,

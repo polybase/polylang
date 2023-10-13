@@ -77,6 +77,10 @@ export class Output {
 export class Program {
   free(): void;
 /**
+* @returns {string}
+*/
+  miden_code(): string;
+/**
 * @param {string} this_json
 * @param {string} args_json
 * @param {boolean} generate_proof

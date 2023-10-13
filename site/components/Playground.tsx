@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { EXAMPLES } from './example'
 import Link from 'next/link'
 import { useAsyncCallback } from './useAsyncCallback'
-import { run, Output } from './polylang'
+import { compile, run, Output } from './polylang'
 import { encodeBase64 } from 'tweetnacl-util'
 
 
@@ -38,7 +38,47 @@ export function Playground() {
   const [output, setOutput] = useState<Output | null>(null)
   const toast = useToast()
 
-  const prove = useAsyncCallback(async () => {
+  const prove_server = useAsyncCallback(() => {
+    const proverUrl = 'http://localhost:8080/prove'
+    const parsedInputs = JSON.parse(inputs)
+
+    const { midenCode, abi } = compile(code, parsedInputs)
+
+    const payload = {
+      midenCode: midenCode,
+      abi: abi,
+      this: parsedInputs.init_params,
+      args: parsedInputs.params,
+    }
+
+    fetch(proverUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    }).then(resp => resp.json())
+      .then(output => {
+        setOutput(output)
+
+        const hasThis = parsedInputs.contract_name === '' ? false : true
+        setReport(JSON.stringify({
+          proof: output.proof,
+          proofLength: output.proofLength,
+          cycleCount: output.cycleCount,
+          logs: output.logs,
+          this: hasThis ? processThisVal(output.new.this) : null,
+          result: output.result?.value,
+          result_hash: output.result?.hash,
+          hashes: output.new.hashes,
+          selfDestructed: output.new.selfDestructed,
+          readAuth: output.readAuth,
+        }, null, 2))
+      })
+      .catch(err => console.log(err))
+  })
+
+  const prove_browser = useAsyncCallback(async () => {
     const parsedInputs = JSON.parse(inputs)
     const output = run(code, parsedInputs)
     setOutput(output)
@@ -53,7 +93,7 @@ export function Playground() {
       result: output.result(),
       result_hash: output.result_hash(),
       hashes: output.hashes(),
-      // selfDestructed: output.self_destructed(),
+      selfDestructed: output.self_destructed(),
       readAuth: output.read_auth(),
     }, null, 2))
   })
@@ -104,7 +144,8 @@ export function Playground() {
           <Spacer />
           <HStack spacing={2}>
             <Link href='/docs'>Docs</Link>
-            <Button size='sm' onClick={prove.execute}>Prove</Button>
+            <Button size='sm' onClick={prove_browser.execute}>Prove (Browser)</Button>
+            <Button size='sm' onClick={prove_server.execute}>Prove (Server)</Button>
             <Button size='sm' onClick={verify.execute}>Verify</Button>
           </HStack>
         </Flex>
