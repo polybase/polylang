@@ -38,8 +38,9 @@ export function Playground() {
   const [output, setOutput] = useState<Output | null>(null)
   const toast = useToast()
 
+  // Uses the /prove endpoint
   const prove_server = useAsyncCallback(() => {
-    const proverUrl = 'http://localhost:8080/prove'
+    const proverUrl = 'http://127.0.0.1:8080/prove'
     const parsedInputs = JSON.parse(inputs)
 
     const { midenCode, abi } = compile(code, parsedInputs)
@@ -61,6 +62,8 @@ export function Playground() {
       .then(output => {
         setOutput(output)
 
+        console.log('server output = ', output)
+
         const hasThis = parsedInputs.contract_name === '' ? false : true
         setReport(JSON.stringify({
           proof: output.proof,
@@ -78,6 +81,50 @@ export function Playground() {
       .catch(err => console.log(err))
   })
 
+  // Uses the /verify endpoint
+  const verify_server = useAsyncCallback(() => {
+    if (!output) {
+      return toast({
+        status: 'error',
+        title: 'No proof',
+        description: 'There is no proof to verify',
+        duration: 9000,
+      })
+    }
+
+    const time = Date.now()
+    const verifierUrl = 'http://127.0.0.1:8080/verify'
+
+    const verifyPayload = {
+      proof: output.proof,
+      programInfo: output.programInfo,
+      stackInputs: output.stack.input,
+      outputStack: output.stack.output,
+      overflowAddrs: output.stack.overflowAddrs,
+    }
+
+    fetch(verifierUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(verifyPayload),
+    }).then(resp => {
+      console.log(resp)
+      const diff = Date.now() - time
+
+      toast({
+        status: 'success',
+        title: 'Valid Proof',
+        description: `Proof was verified in ${diff} ms`,
+        duration: 9000,
+      })
+    }).catch(err => {
+      console.log(err)
+    })
+  })
+
+  // Uses the WASM API
   const prove_browser = useAsyncCallback(async () => {
     const parsedInputs = JSON.parse(inputs)
     const output = run(code, parsedInputs)
@@ -98,7 +145,8 @@ export function Playground() {
     }, null, 2))
   })
 
-  const verify = useAsyncCallback(() => {
+  // Uses the WASM API
+  const verify_browser = useAsyncCallback(() => {
     if (!output) {
       return toast({
         status: 'error',
@@ -145,8 +193,9 @@ export function Playground() {
           <HStack spacing={2}>
             <Link href='/docs'>Docs</Link>
             <Button size='sm' onClick={prove_browser.execute}>Prove (Browser)</Button>
+            <Button size='sm' onClick={verify_browser.execute}>Verify (Browser)</Button>
             <Button size='sm' onClick={prove_server.execute}>Prove (Server)</Button>
-            <Button size='sm' onClick={verify.execute}>Verify</Button>
+            <Button size='sm' onClick={verify_server.execute}>Verify (Server)</Button>
           </HStack>
         </Flex>
         <HStack height='100%' spacing={4}>
