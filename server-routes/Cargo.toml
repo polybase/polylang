@@ -13,3 +13,4 @@ serde_json = "1"
 error = { path = "../error" }
 base64 = "0.21.4"
 tokio = { version = "1" }
+miden-vm = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.6.1", default-features = false }

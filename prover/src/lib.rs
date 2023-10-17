@@ -46,6 +46,7 @@ pub struct Output {
     pub new_this: Value,
     pub new_hashes: Vec<[u64; 4]>,
     pub proof: Vec<u8>,
+    pub overflow_addrs: Vec<u64>,
 }
 
 fn json_to_this_value(this_json: &serde_json::Value, this_type: &Type) -> Result<Value> {
@@ -456,6 +457,7 @@ pub fn prove(program: &Program, inputs: &Inputs) -> Result<Output> {
         new_this: output.this(&inputs.abi)?,
         new_hashes: output.hashes(),
         proof: proof.0.to_bytes(),
+        overflow_addrs: proof.1.overflow_addrs().to_vec(),
         stack: output.stack.clone(),
         input_stack: output.input_stack.clone(),
         run_output: output,
