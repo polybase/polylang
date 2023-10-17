@@ -28,6 +28,38 @@ export function run(code: string, inputs: Inputs) {
   return output
 }
 
+// Server prover/verifier
+
+export interface ServerOutput {
+  old: {
+    this: any,
+    hashes: string[],
+  },
+  new: {
+    selfDestructed: boolean,
+    this: any,
+    hashes: string[],
+  },
+  stack: {
+    input: string[],
+    output: string[],
+    overflowAddrs: string[],
+  },
+  result?: {
+    value: any,
+    hash: string,
+  },
+  programInfo: string,
+  proof: string,
+  debug: {
+    logs: string[],
+  },
+  cycleCount: number,
+  proofLength: number,
+  logs: any[],
+  readAuth: boolean,
+}
+
 export function compile(code: string, inputs: Inputs) {
   let program = pkg.compile(
     code,

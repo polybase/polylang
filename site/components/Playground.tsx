@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { EXAMPLES } from './example'
 import Link from 'next/link'
 import { useAsyncCallback } from './useAsyncCallback'
-import { compile, run, Output } from './polylang'
+import { compile, run, Output, ServerOutput } from './polylang'
 import { encodeBase64 } from 'tweetnacl-util'
 
 
@@ -35,7 +35,8 @@ export function Playground() {
   const [code, setCode] = useState(EXAMPLES[0].code)
   const [inputs, setInputs] = useState(EXAMPLES[0].inputs)
   const [report, setReport] = useState('')
-  const [output, setOutput] = useState<Output | null>(null)
+  const [browserOutput, setBrowserOutput] = useState<Output>(null)
+  const [serverOutput, setServerOutput] = useState<ServerOutput>(null)
   const toast = useToast()
 
   // Uses the /prove endpoint
@@ -60,9 +61,7 @@ export function Playground() {
       body: JSON.stringify(payload),
     }).then(resp => resp.json())
       .then(output => {
-        setOutput(output)
-
-        console.log('server output = ', output)
+        setServerOutput(output)
 
         const hasThis = parsedInputs.contract_name === '' ? false : true
         setReport(JSON.stringify({
@@ -83,7 +82,7 @@ export function Playground() {
 
   // Uses the /verify endpoint
   const verify_server = useAsyncCallback(() => {
-    if (!output) {
+    if (!serverOutput) {
       return toast({
         status: 'error',
         title: 'No proof',
@@ -96,11 +95,11 @@ export function Playground() {
     const verifierUrl = 'http://127.0.0.1:8080/verify'
 
     const verifyPayload = {
-      proof: output.proof,
-      programInfo: output.programInfo,
-      stackInputs: output.stack.input,
-      outputStack: output.stack.output,
-      overflowAddrs: output.stack.overflowAddrs,
+      proof: serverOutput.proof,
+      programInfo: serverOutput.programInfo,
+      stackInputs: serverOutput.stack.input,
+      outputStack: serverOutput.stack.output,
+      overflowAddrs: serverOutput.stack.overflowAddrs,
     }
 
     fetch(verifierUrl, {
@@ -128,7 +127,7 @@ export function Playground() {
   const prove_browser = useAsyncCallback(async () => {
     const parsedInputs = JSON.parse(inputs)
     const output = run(code, parsedInputs)
-    setOutput(output)
+    setBrowserOutput(output)
 
     const hasThis = parsedInputs.contract_name === '' ? false : true
     setReport(JSON.stringify({
@@ -147,7 +146,7 @@ export function Playground() {
 
   // Uses the WASM API
   const verify_browser = useAsyncCallback(() => {
-    if (!output) {
+    if (!browserOutput) {
       return toast({
         status: 'error',
         title: 'No proof',
@@ -156,7 +155,7 @@ export function Playground() {
       })
     }
     const time = Date.now()
-    output?.verify()
+    browserOutput?.verify()
     const diff = Date.now() - time
     toast({
       status: 'success',
@@ -182,7 +181,8 @@ export function Playground() {
                 const example = EXAMPLES.find(({ name }) => name === e.target.value)
                 setCode(example?.code ?? '')
                 setInputs(example?.inputs ?? '')
-                setOutput(null)
+                setBrowserOutput(null)
+                setServerOutput(null)
                 setReport('')
               }}>
                 {EXAMPLES.map(({ name }) => <option key={name} value={name}>{name}</option>)}
@@ -203,7 +203,8 @@ export function Playground() {
             <Panel heading='Code'>
               <Code type='polylang' value={code} onChange={(code) => {
                 setCode(code)
-                setOutput(null)
+                setBrowserOutput(null)
+                setServerOutput(null)
                 setReport('')
               }} />
 
@@ -214,7 +215,8 @@ export function Playground() {
               <Panel heading='Inputs'>
                 <Code type='json' value={inputs} onChange={(inputs) => {
                   setInputs(inputs)
-                  setOutput(null)
+                  setBrowserOutput(null)
+                  setServerOutput(null)
                   setReport('')
                 }} />
               </Panel>
