@@ -7,12 +7,6 @@ async fn prove(
     Ok(HttpResponse::Ok().json(server_routes::prove::prove(req.into_inner()).await?))
 }
 
-async fn verify(
-    req: web::Json<server_routes::verify::VerifyRequest>,
-) -> Result<impl Responder, Box<dyn std::error::Error>> {
-    Ok(HttpResponse::Ok().json(server_routes::verify::verify(req.into_inner()).await?))
-}
-
 #[tokio::main]
 async fn main() {
     let port = std::env::var("PORT").unwrap_or("8080".to_string());
@@ -23,7 +17,6 @@ async fn main() {
         App::new()
             .wrap(cors)
             .service(web::resource("/prove").route(web::post().to(prove)))
-            .service(web::resource("/verify").route(web::post().to(verify)))
     };
 
     eprintln!("Listening on {}", listen_addr);
