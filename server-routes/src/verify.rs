@@ -3,7 +3,6 @@ use miden::{
     utils::Deserializable, verify as miden_verify, ProgramInfo, StackInputs, StackOutputs,
 };
 use serde::Deserialize;
-use serde_json::json;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,17 +14,13 @@ pub struct VerifyRequest {
     overflow_addrs: Vec<String>,
 }
 
-pub async fn verify(mut req: VerifyRequest) -> Result<bool, Box<dyn std::error::Error>> {
-    let proof = base64::engine::general_purpose::STANDARD
-        .decode(&req.proof)
-        .unwrap();
+pub async fn verify(req: VerifyRequest) -> Result<bool, Box<dyn std::error::Error>> {
+    let proof = base64::engine::general_purpose::STANDARD.decode(&req.proof)?;
 
     let program_info = ProgramInfo::read_from_bytes(
-        &base64::engine::general_purpose::STANDARD
-            .decode(&req.program_info)
-            .unwrap(),
+        &base64::engine::general_purpose::STANDARD.decode(&req.program_info)?,
     )
-    .unwrap();
+    .map_err(|e| e.to_string())?;
 
     let mut stack_inputs = req
         .stack_inputs
@@ -34,7 +29,7 @@ pub async fn verify(mut req: VerifyRequest) -> Result<bool, Box<dyn std::error::
         .collect::<Vec<_>>();
 
     stack_inputs.reverse();
-    let mut stack_inputs = StackInputs::try_from_values(stack_inputs).unwrap();
+    let stack_inputs = StackInputs::try_from_values(stack_inputs).map_err(|e| e.to_string())?;
 
     let overflow_addrs = req
         .overflow_addrs
@@ -49,15 +44,15 @@ pub async fn verify(mut req: VerifyRequest) -> Result<bool, Box<dyn std::error::
         .collect::<Vec<_>>();
     let output_stack = StackOutputs::new(output_stack, overflow_addrs);
 
-    miden_verify(
+    Ok(miden_verify(
         program_info,
         stack_inputs,
         output_stack,
-        miden::ExecutionProof::from_bytes(&proof).unwrap(),
+        miden::ExecutionProof::from_bytes(&proof).map_err(|e| e.to_string())?,
     )
-    .unwrap();
-
-    println!("Proof verified... no issues");
-
-    Ok(true)
+    .map_err(|e| e.to_string())
+    .map(|_| {
+        println!("Proof verified");
+        true
+    })?)
 }
