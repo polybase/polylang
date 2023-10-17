@@ -5,9 +5,8 @@ import { useState } from 'react'
 import { EXAMPLES } from './example'
 import Link from 'next/link'
 import { useAsyncCallback } from './useAsyncCallback'
-import { compile, run, Output, ServerOutput } from './polylang'
+import { compile, run, verify, Output, ServerOutput } from './polylang'
 import { encodeBase64 } from 'tweetnacl-util'
-
 
 function Panel({ heading, children }) {
   return (
@@ -80,7 +79,6 @@ export function Playground() {
       .catch(err => console.log(err))
   })
 
-  // Uses the /verify endpoint
   const verify_server = useAsyncCallback(() => {
     if (!serverOutput) {
       return toast({
@@ -91,35 +89,24 @@ export function Playground() {
       })
     }
 
+    const proof = serverOutput.proof
+    const programInfo = serverOutput.programInfo
+    const stackInputs = serverOutput.stack.input
+    const outputStack = serverOutput.stack.output
+    const overflowAddrs = serverOutput.stack.overflowAddrs
+
     const time = Date.now()
-    const verifierUrl = 'http://127.0.0.1:8080/verify'
 
-    const verifyPayload = {
-      proof: serverOutput.proof,
-      programInfo: serverOutput.programInfo,
-      stackInputs: serverOutput.stack.input,
-      outputStack: serverOutput.stack.output,
-      overflowAddrs: serverOutput.stack.overflowAddrs,
-    }
+    const proofBytes = new Uint8Array(atob(proof).split('').map(c => c.charCodeAt(0)))
+    verify(proofBytes, programInfo, stackInputs, outputStack, overflowAddrs)
 
-    fetch(verifierUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(verifyPayload),
-    }).then(resp => {
-      console.log(resp)
-      const diff = Date.now() - time
+    const diff = Date.now() - time
 
-      toast({
-        status: 'success',
-        title: 'Valid Proof',
-        description: `Proof was verified in ${diff} ms`,
-        duration: 9000,
-      })
-    }).catch(err => {
-      console.log(err)
+    toast({
+      status: 'success',
+      title: 'Valid Proof',
+      description: `Proof was verified in ${diff} ms`,
+      duration: 9000,
     })
   })
 
@@ -154,8 +141,16 @@ export function Playground() {
         duration: 9000,
       })
     }
+
+    const proof = browserOutput.proof()
+    const programInfo = browserOutput.program_info()
+    const stackInputs = browserOutput.stack_inputs()
+    const outputStack = browserOutput.output_stack()
+    const overflowAddrs = browserOutput.overflow_addrs()
+
+    verify(proof, programInfo, stackInputs, outputStack, overflowAddrs)
+
     const time = Date.now()
-    browserOutput?.verify()
     const diff = Date.now() - time
     toast({
       status: 'success',

@@ -3,7 +3,7 @@ import { Box, Button, Stack, Heading, SimpleGrid, useToast } from '@chakra-ui/re
 import { encodeBase64 } from 'tweetnacl-util'
 import { Code } from './Code'
 import { EXAMPLES } from './example'
-import { run, Output } from './polylang'
+import { run, Output, verify as verifyProof } from './polylang'
 import { useAsyncCallback } from './useAsyncCallback'
 
 interface UserOutput {
@@ -42,9 +42,17 @@ const Prover = () => {
         duration: 9000,
       })
     }
+
+    const proof = output.proof()
+    const programInfo = output.program_info()
+    const stackInputs = output.stack_inputs()
+    const outputStack = output.output_stack()
+    const overflowAddrs = output.overflow_addrs()
+
     const time = Date.now()
-    output?.verify()
+    verifyProof(proof, programInfo, stackInputs, outputStack, overflowAddrs)
     const diff = Date.now() - time
+
     toast({
       status: 'success',
       title: 'Valid Proof',

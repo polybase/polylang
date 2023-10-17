@@ -8,6 +8,15 @@
 */
 export function compile(code: string, contract_name: string | undefined, fn_name: string): Program;
 /**
+* @param {Uint8Array | undefined} proof
+* @param {any} program_info
+* @param {any[]} stack_inputs
+* @param {any[]} output_stack
+* @param {any[]} overflow_addrs
+* @returns {boolean}
+*/
+export function verify(proof: Uint8Array | undefined, program_info: any, stack_inputs: any[], output_stack: any[], overflow_addrs: any[]): boolean;
+/**
 */
 export function init(): void;
 /**
@@ -40,9 +49,21 @@ export class Output {
 */
   proof(): Uint8Array | undefined;
 /**
-* @returns {boolean}
+* @returns {any}
 */
-  verify(): boolean;
+  program_info(): any;
+/**
+* @returns {any[]}
+*/
+  stack_inputs(): any[];
+/**
+* @returns {any[]}
+*/
+  output_stack(): any[];
+/**
+* @returns {any[]}
+*/
+  overflow_addrs(): any[];
 /**
 * @returns {any}
 */
