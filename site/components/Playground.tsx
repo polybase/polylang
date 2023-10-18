@@ -68,7 +68,7 @@ export function Playground() {
   })
 
   // Uses the /prove endpoint
-  const prove_server = useAsyncCallback(() => {
+  const prove_server = useAsyncCallback(async () => {
     clearOutput.execute()
 
     const proverUrl = 'http://127.0.0.1:8080/prove'
@@ -112,7 +112,7 @@ export function Playground() {
 
   // common verify function that dispatches to either the
   // browser verifier or the server verifier
-  const verify = useAsyncCallback(() => {
+  const verify = useAsyncCallback(async () => {
     if (!browserOutput && !serverOutput) {
       return toast({
         status: 'error',
@@ -127,7 +127,7 @@ export function Playground() {
     }
   })
 
-  const verify_browser = useAsyncCallback(() => {
+  const verify_browser = useAsyncCallback(async () => {
     const proof = browserOutput.proof()
     const programInfo = browserOutput.program_info()
     const stackInputs = browserOutput.stack_inputs()
@@ -146,7 +146,7 @@ export function Playground() {
     })
   })
 
-  const verify_server = useAsyncCallback(() => {
+  const verify_server = useAsyncCallback(async () => {
     const proof = serverOutput.proof
     const programInfo = serverOutput.programInfo
     const stackInputs = serverOutput.stack.input
