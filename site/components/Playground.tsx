@@ -1,4 +1,4 @@
-import { Box, Stack, HStack, Flex, Heading, Spacer, Button, Select, useToast, StylesProvider } from '@chakra-ui/react'
+import { Box, Stack, HStack, Flex, Heading, Spacer, Button, Select, useToast, Alert, AlertIcon, Text } from '@chakra-ui/react'
 import { Code } from './Code'
 import { Logo } from './Logo'
 import { useState } from 'react'
@@ -196,6 +196,10 @@ export function Playground() {
             <Button size='sm' onClick={verify.execute}>Verify</Button>
           </HStack>
         </Flex>
+        <Alert status='info'>
+          <AlertIcon />
+          <Text fontSize='xs'>Maximum RAM for the browser prover is 2GB. For larger proofs, consider using the server prover.</Text>
+        </Alert>
         <HStack height='100%' spacing={4}>
           <Box width='100%' height='100%' maxW='60%'>
             <Panel heading='Code'>
@@ -203,7 +207,6 @@ export function Playground() {
                 setCode(code)
                 clearOutput.execute()
               }} />
-
             </Panel>
           </Box>
           <Stack width='100%' height='100%' flexDirection='column' spacing={4} maxW='50%'>
