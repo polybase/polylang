@@ -1,11 +1,11 @@
-import { Box, Stack, HStack, Flex, Heading, Spacer, Button, Select, useToast } from '@chakra-ui/react'
+import { Box, Stack, HStack, Flex, Heading, Spacer, Button, Select, useToast, StylesProvider } from '@chakra-ui/react'
 import { Code } from './Code'
 import { Logo } from './Logo'
 import { useState } from 'react'
 import { EXAMPLES } from './example'
 import Link from 'next/link'
 import { useAsyncCallback } from './useAsyncCallback'
-import { compile, run, verify, Output, ServerOutput } from './polylang'
+import { compile, run, verify as verifyProof, Output, ServerOutput } from './polylang'
 import { encodeBase64 } from 'tweetnacl-util'
 
 function Panel({ heading, children }) {
@@ -38,8 +38,39 @@ export function Playground() {
   const [serverOutput, setServerOutput] = useState<ServerOutput>(null)
   const toast = useToast()
 
+  const clearOutput = useAsyncCallback(() => {
+    setBrowserOutput(null)
+    setServerOutput(null)
+    setReport('')
+  })
+
+  // Uses the WASM API
+  const prove_browser = useAsyncCallback(async () => {
+    clearOutput.execute()
+
+    const parsedInputs = JSON.parse(inputs)
+    const output = run(code, parsedInputs)
+    setBrowserOutput(output)
+
+    const hasThis = parsedInputs.contract_name === '' ? false : true
+    setReport(JSON.stringify({
+      proof: encodeBase64(output.proof()),
+      proofLength: output.proof().length,
+      cycleCount: output.cycle_count(),
+      logs: output.logs(),
+      this: hasThis ? processThisVal(output.this()) : null,
+      result: output.result(),
+      result_hash: output.result_hash(),
+      hashes: output.hashes(),
+      selfDestructed: output.self_destructed(),
+      readAuth: output.read_auth(),
+    }, null, 2))
+  })
+
   // Uses the /prove endpoint
   const prove_server = useAsyncCallback(() => {
+    clearOutput.execute()
+
     const proverUrl = 'http://127.0.0.1:8080/prove'
     const parsedInputs = JSON.parse(inputs)
 
@@ -79,27 +110,32 @@ export function Playground() {
       .catch(err => console.log(err))
   })
 
-  const verify_server = useAsyncCallback(() => {
-    if (!serverOutput) {
+  // common verify function that dispatches to either the
+  // browser verifier or the server verifier
+  const verify = useAsyncCallback(() => {
+    if (!browserOutput && !serverOutput) {
       return toast({
         status: 'error',
         title: 'No proof',
         description: 'There is no proof to verify',
         duration: 9000,
       })
+    } else if (browserOutput) {
+      verify_browser.execute()
+    } else {
+      verify_server.execute()
     }
+  })
 
-    const proof = serverOutput.proof
-    const programInfo = serverOutput.programInfo
-    const stackInputs = serverOutput.stack.input
-    const outputStack = serverOutput.stack.output
-    const overflowAddrs = serverOutput.stack.overflowAddrs
+  const verify_browser = useAsyncCallback(() => {
+    const proof = browserOutput.proof()
+    const programInfo = browserOutput.program_info()
+    const stackInputs = browserOutput.stack_inputs()
+    const outputStack = browserOutput.output_stack()
+    const overflowAddrs = browserOutput.overflow_addrs()
 
     const time = Date.now()
-
-    const proofBytes = new Uint8Array(atob(proof).split('').map(c => c.charCodeAt(0)))
-    verify(proofBytes, programInfo, stackInputs, outputStack, overflowAddrs)
-
+    verifyProof(proof, programInfo, stackInputs, outputStack, overflowAddrs)
     const diff = Date.now() - time
 
     toast({
@@ -110,48 +146,18 @@ export function Playground() {
     })
   })
 
-  // Uses the WASM API
-  const prove_browser = useAsyncCallback(async () => {
-    const parsedInputs = JSON.parse(inputs)
-    const output = run(code, parsedInputs)
-    setBrowserOutput(output)
-
-    const hasThis = parsedInputs.contract_name === '' ? false : true
-    setReport(JSON.stringify({
-      proof: encodeBase64(output.proof()),
-      proofLength: output.proof().length,
-      cycleCount: output.cycle_count(),
-      logs: output.logs(),
-      this: hasThis ? processThisVal(output.this()) : null,
-      result: output.result(),
-      result_hash: output.result_hash(),
-      hashes: output.hashes(),
-      selfDestructed: output.self_destructed(),
-      readAuth: output.read_auth(),
-    }, null, 2))
-  })
-
-  // Uses the WASM API
-  const verify_browser = useAsyncCallback(() => {
-    if (!browserOutput) {
-      return toast({
-        status: 'error',
-        title: 'No proof',
-        description: 'There is no proof to verify',
-        duration: 9000,
-      })
-    }
-
-    const proof = browserOutput.proof()
-    const programInfo = browserOutput.program_info()
-    const stackInputs = browserOutput.stack_inputs()
-    const outputStack = browserOutput.output_stack()
-    const overflowAddrs = browserOutput.overflow_addrs()
-
-    verify(proof, programInfo, stackInputs, outputStack, overflowAddrs)
+  const verify_server = useAsyncCallback(() => {
+    const proof = serverOutput.proof
+    const programInfo = serverOutput.programInfo
+    const stackInputs = serverOutput.stack.input
+    const outputStack = serverOutput.stack.output
+    const overflowAddrs = serverOutput.stack.overflowAddrs
 
     const time = Date.now()
+    const proofBytes = new Uint8Array(atob(proof).split('').map(c => c.charCodeAt(0)))
+    verifyProof(proofBytes, programInfo, stackInputs, outputStack, overflowAddrs)
     const diff = Date.now() - time
+
     toast({
       status: 'success',
       title: 'Valid Proof',
@@ -176,9 +182,7 @@ export function Playground() {
                 const example = EXAMPLES.find(({ name }) => name === e.target.value)
                 setCode(example?.code ?? '')
                 setInputs(example?.inputs ?? '')
-                setBrowserOutput(null)
-                setServerOutput(null)
-                setReport('')
+                clearOutput.execute()
               }}>
                 {EXAMPLES.map(({ name }) => <option key={name} value={name}>{name}</option>)}
               </Select>
@@ -188,9 +192,8 @@ export function Playground() {
           <HStack spacing={2}>
             <Link href='/docs'>Docs</Link>
             <Button size='sm' onClick={prove_browser.execute}>Prove (Browser)</Button>
-            <Button size='sm' onClick={verify_browser.execute}>Verify (Browser)</Button>
             <Button size='sm' onClick={prove_server.execute}>Prove (Server)</Button>
-            <Button size='sm' onClick={verify_server.execute}>Verify (Server)</Button>
+            <Button size='sm' onClick={verify.execute}>Verify</Button>
           </HStack>
         </Flex>
         <HStack height='100%' spacing={4}>
@@ -198,9 +201,7 @@ export function Playground() {
             <Panel heading='Code'>
               <Code type='polylang' value={code} onChange={(code) => {
                 setCode(code)
-                setBrowserOutput(null)
-                setServerOutput(null)
-                setReport('')
+                clearOutput.execute()
               }} />
 
             </Panel>
@@ -210,9 +211,7 @@ export function Playground() {
               <Panel heading='Inputs'>
                 <Code type='json' value={inputs} onChange={(inputs) => {
                   setInputs(inputs)
-                  setBrowserOutput(null)
-                  setServerOutput(null)
-                  setReport('')
+                  clearOutput.execute()
                 }} />
               </Panel>
             </Box>

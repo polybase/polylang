@@ -122,6 +122,16 @@ function report(output, hasThis) {
   };
 }
 
+function verifyProof(output) {
+  const proof = output.proof();
+  const program_info = output.program_info();
+  const stack_inputs = output.stack_inputs();
+  const output_stack = output.output_stack();
+  const overflow_addrs = output.overflow_addrs();
+
+  console.log("Proof is valid?", pkg.verify(proof, program_info, stack_inputs, output_stack, overflow_addrs));
+}
+
 const mainOutput = justMain();
 console.log(report(mainOutput, false));
 verifyProof(mainOutput);
@@ -137,13 +147,3 @@ verifyProof(arraysOutput);
 const countryCityOutput = withCountryCity();
 console.log(report(countryCityOutput, true));
 verifyProof(countryCityOutput);
-
-function verifyProof(output) {
-  const proof = output.proof();
-  const program_info = output.program_info();
-  const stack_inputs = output.stack_inputs();
-  const output_stack = output.output_stack();
-  const overflow_addrs = output.overflow_addrs();
-
-  console.log("Proof is valid?", pkg.verify(proof, program_info, stack_inputs, output_stack, overflow_addrs));
-}
