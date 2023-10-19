@@ -42,16 +42,17 @@ pub async fn prove(mut req: ProveRequest) -> Result<serde_json::Value, Box<dyn s
         req.abi.this_addr = Some(0);
     }
 
-    let this_salts = req
-        .abi
-        .this_type
-        .as_ref()
-        .map(|ty| match ty {
-            abi::Type::Struct(st) => Ok(st.fields.iter().map(|_| 0).collect()),
-            _ => Err(Error::simple("this type must be a struct")),
-        })
-        .transpose()?
-        .unwrap_or(vec![]);
+    let this_salts = req.this_salts.unwrap_or(
+        req.abi
+            .this_type
+            .as_ref()
+            .map(|ty| match ty {
+                abi::Type::Struct(st) => Ok(st.fields.iter().map(|_| 0).collect()),
+                _ => Err(Error::simple("this type must be a struct")),
+            })
+            .transpose()?
+            .unwrap_or(vec![]),
+    );
 
     let inputs = Inputs::new(
         req.abi.clone(),
