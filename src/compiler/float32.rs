@@ -1591,7 +1591,7 @@ pub(crate) fn from_uint32(compiler: &mut Compiler, num: &Symbol) -> Symbol {
         .allocate_symbol(Type::PrimitiveType(PrimitiveType::Float32));
 
     compiler.memory.read(
-        &mut compiler.instructions,
+        compiler.instructions,
         num.memory_addr,
         num.type_.miden_width(),
     );
@@ -2115,7 +2115,7 @@ mod tests {
         let result = from_uint32(&mut compiler, &a);
         compiler
             .memory
-            .read(&mut compiler.instructions, result.memory_addr, 1);
+            .read(compiler.instructions, result.memory_addr, 1);
 
         let mut program = "begin\n".to_string();
         for instruction in &instructions {

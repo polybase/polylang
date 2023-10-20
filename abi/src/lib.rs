@@ -183,10 +183,8 @@ impl Value {
     pub fn visit<E>(&self, visitor: &mut impl FnMut(&Value) -> Result<(), E>) -> Result<(), E> {
         visitor(self)?;
         match self {
-            Value::Nullable(opt) => {
-                if let Some(v) = opt {
-                    v.visit(visitor)?;
-                }
+            Value::Nullable(Some(v)) => {
+                v.visit(visitor)?;
             }
             Value::Array(a) => {
                 for value in a {
@@ -1004,7 +1002,7 @@ impl Value {
         match self {
             Value::Nullable(opt) => match opt {
                 None => vec![0],
-                Some(v) => [1].into_iter().chain(v.serialize().into_iter()).collect(),
+                Some(v) => [1].into_iter().chain(v.serialize()).collect(),
             },
             Value::Boolean(b) => vec![*b as u64],
             Value::UInt32(x) => vec![u64::from(*x)],

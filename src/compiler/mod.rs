@@ -2474,12 +2474,12 @@ fn compile_eq(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Result<Symbol>
 
             let mut eq_instructions = vec![];
             std::mem::swap(compiler.instructions, &mut eq_instructions);
-            let eq_result = compile_eq(compiler, &nullable::value(a.clone()), &b);
+            let eq_result = compile_eq(compiler, &nullable::value(a.clone()), b);
             std::mem::swap(compiler.instructions, &mut eq_instructions);
 
             compiler.instructions.push(encoder::Instruction::If {
                 condition: vec![encoder::Instruction::MemLoad(Some(
-                    nullable::is_not_null(&a).memory_addr,
+                    nullable::is_not_null(a).memory_addr,
                 ))],
                 then: eq_instructions,
                 else_: vec![],
@@ -3627,13 +3627,15 @@ fn read_struct_from_advice_tape(
     Ok(())
 }
 
+type ContractInputsReadOutputType = (Option<(Vec<Symbol>, Symbol)>, Vec<Symbol>);
+
 /// Returns (Option<(salts, this)>, args)
 fn read_contract_inputs(
     compiler: &mut Compiler,
     this_struct: Option<Struct>,
     args: &[Type],
     lazy: Option<&[Symbol]>,
-) -> Result<(Option<(Vec<Symbol>, Symbol)>, Vec<Symbol>)> {
+) -> Result<ContractInputsReadOutputType> {
     let this = this_struct.map(|ts| compiler.memory.allocate_symbol(Type::Struct(ts)));
     let mut salts = vec![];
 
@@ -3683,7 +3685,7 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                             || d.name == "read"
                             || d.name == "private"
                     }) {
-                        Some(d) if d.arguments.len() > 0 => {
+                        Some(d) if !d.arguments.is_empty() => {
                             panic!(
                                 "Invalid {name} directive, {name}() takes no arguments",
                                 name = &d.name
@@ -3699,7 +3701,7 @@ fn prepare_scope(program: &ast::Program) -> Scope {
                         .iter()
                         .find(|d| d.name == "read" || d.name == "public" || d.name == "private")
                     {
-                        Some(d) if d.arguments.len() > 0 => {
+                        Some(d) if !d.arguments.is_empty() => {
                             panic!(
                                 "Invalid {name} directive, {name}() takes no arguments",
                                 name = &d.name
@@ -3820,11 +3822,9 @@ pub fn compile(
             .iter()
             .flat_map(|s| &s.fields)
             .map(|_| {
-                let enabled = compiler
+                compiler
                     .memory
-                    .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean));
-
-                enabled
+                    .allocate_symbol(Type::PrimitiveType(PrimitiveType::Boolean))
             })
             .collect::<Vec<_>>();
 
@@ -4044,12 +4044,12 @@ pub fn compile(
                     let mut insts = vec![];
                     std::mem::swap(compiler.instructions, &mut insts);
 
-                    let field_symbol = struct_field(&mut compiler, &this_symbol, &field_name)?;
+                    let field_symbol = struct_field(&mut compiler, this_symbol, field_name)?;
                     let field_hash = hash(&mut compiler, field_symbol.clone())?;
                     let field_hash = add_salt_to_hash(&mut compiler, &field_hash, &salts[i])?;
                     comment!(compiler, "Reading output field `{}` hash", field_name);
                     compiler.memory.read(
-                        &mut compiler.instructions,
+                        compiler.instructions,
                         field_hash.memory_addr,
                         field_hash.type_.miden_width(),
                     );
@@ -4086,7 +4086,7 @@ pub fn compile(
                         let symbol = struct_field(
                             &mut compiler,
                             &salts_this_symbol.as_ref().unwrap().1,
-                            &field_name,
+                            field_name,
                         )?;
 
                         let start = symbol.memory_addr;
@@ -4103,22 +4103,19 @@ pub fn compile(
             start..end
         });
         if let Some(struct_addr_range) = struct_addr_range.as_ref() {
-            encoder::walk(&compiler.instructions, &mut |inst| {
-                match inst {
-                    encoder::Instruction::MemLoad(Some(addr)) => {
-                        // First, check if the address is in the struct
-                        if !struct_addr_range.contains(addr) {
+            encoder::walk(compiler.instructions, &mut |inst| {
+                if let encoder::Instruction::MemLoad(Some(addr)) = inst {
+                    // First, check if the address is in the struct
+                    if !struct_addr_range.contains(addr) {
+                        return;
+                    }
+
+                    for (i, field_addr_range) in field_addr_ranges.iter().enumerate() {
+                        if field_addr_range.contains(addr) {
+                            *used_fields_count[i].entry(*addr).or_default() += 1;
                             return;
                         }
-
-                        for (i, field_addr_range) in field_addr_ranges.iter().enumerate() {
-                            if field_addr_range.contains(addr) {
-                                *used_fields_count[i].entry(*addr).or_default() += 1;
-                                return;
-                            }
-                        }
                     }
-                    _ => {}
                 }
             });
         }
@@ -4153,7 +4150,7 @@ pub fn compile(
             }
 
             std::mem::swap(compiler.instructions, &mut insts);
-            insts.extend(compiler.instructions.drain(..));
+            insts.append(compiler.instructions);
             std::mem::swap(compiler.instructions, &mut insts);
         }
 
@@ -4246,9 +4243,9 @@ fn compile_read_authorization_proof(
     }
 
     for field in contract.fields.iter().filter(|f| f.read) {
-        let field_symbol = struct_field(compiler, &struct_symbol, &field.name)?;
+        let field_symbol = struct_field(compiler, struct_symbol, &field.name)?;
         compiler.memory.read(
-            &mut compiler.instructions,
+            compiler.instructions,
             field_symbol.memory_addr,
             field_symbol.type_.miden_width(),
         );
@@ -4346,7 +4343,8 @@ fn compile_call_authorization_proof(
         let arg_value = match call_arg {
             ast::DecoratorArgument::Identifier(id) => {
                 let mut current_field = contract_symbol.clone();
-                for field in &[id] {
+                {
+                    let field = &id;
                     current_field = struct_field(compiler, &current_field, field)?;
                 }
 
@@ -4354,7 +4352,7 @@ fn compile_call_authorization_proof(
             }
             ast::DecoratorArgument::Literal(l) => match l {
                 ast::Literal::Eth(pk) => {
-                    let key = abi::publickey::Key::from_secp256k1_bytes(&pk).wrap_err()?;
+                    let key = abi::publickey::Key::from_secp256k1_bytes(pk).wrap_err()?;
                     publickey::new(compiler, key)
                 }
             },
@@ -4387,7 +4385,7 @@ fn compile_check_eq_or_ownership(
         Type::PublicKey => compile_eq(compiler, &field, auth_pk)?,
         Type::Nullable(t) if **t == Type::PublicKey => compile_eq(compiler, &field, auth_pk)?,
         Type::ContractReference { contract } => {
-            let contract_type = compiler.root_scope.find_contract(&contract).unwrap();
+            let contract_type = compiler.root_scope.find_contract(contract).unwrap();
             let contract_record_hashes = compiler.get_record_dependency(contract_type).unwrap();
             let id = struct_field(compiler, &field, "id").unwrap();
 

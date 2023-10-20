@@ -8,7 +8,10 @@ pub mod polylang {
     #![allow(unused)]
 
     use lalrpop_util::lalrpop_mod;
-    lalrpop_mod!(polylang);
+    lalrpop_mod!(
+        #[allow(dead_code, clippy::all)]
+        polylang
+    );
     pub use polylang::*;
 }
 

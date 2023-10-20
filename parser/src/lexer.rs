@@ -413,7 +413,7 @@ impl<'input> Lexer<'input> {
             (Tok::FalconLiteralStart, "falcon#"),
         ]
         .iter()
-        .find(|(_, k)| k == &&literal_start)
+        .find(|(_, k)| k == &literal_start)
         .map(|(tok, _)| Ok::<_, LexicalError>((start, tok.clone(), end + c.len_utf8())))
     }
 

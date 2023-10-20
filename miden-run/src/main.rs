@@ -120,9 +120,8 @@ impl Args {
                     .lines()
                     .find(|l| l.starts_with("# ABI: "))
                     .ok_or_else(|| {
-                        format!(
-                            "missing ABI. Please specify it with `--abi` or add a `# ABI: ...` comment"
-                        )
+                        "missing ABI. Please specify it with `--abi` or add a `# ABI: ...` comment"
+                            .to_string()
                     })?;
 
                 let abi_json = abi_comment["# ABI: ".len()..].trim();
@@ -242,7 +241,7 @@ impl Args {
         let this_field_hashes = sv
             .iter()
             .enumerate()
-            .map(|(i, (_, v))| hasher(this_fields[i].1.clone(), &v, Some(&[0])))
+            .map(|(i, (_, v))| hasher(this_fields[i].1.clone(), v, Some(&[0])))
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(polylang_prover::Inputs {
@@ -251,14 +250,8 @@ impl Args {
             this_salts: sv.iter().map(|_| 0).collect(),
             this: this.try_into()?,
             this_field_hashes,
-            args: serde_json::from_str(
-                &self
-                    .advice_tape_json
-                    .as_ref()
-                    .map(|x| x.as_str())
-                    .unwrap_or("[]"),
-            )
-            .wrap_err()?,
+            args: serde_json::from_str(self.advice_tape_json.as_deref().unwrap_or("[]"))
+                .wrap_err()?,
             other_records: self.other_records.clone(),
         })
     }
@@ -283,7 +276,7 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
         true
     };
 
-    let inputs = args.inputs(|t, v, s| polylang_prover::hash_this(t, v, s))?;
+    let inputs = args.inputs(polylang_prover::hash_this)?;
 
     let program = polylang_prover::compile_program(&args.abi, &masm_code)
         .map_err(|e| e.add_source(masm_code))?;

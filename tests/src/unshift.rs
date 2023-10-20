@@ -84,7 +84,7 @@ fn test_unshift(
         arr,
         abi::Value::Array(
             expected_arr
-                .into_iter()
+                .iter()
                 .map(|n| abi::Value::Float32(*n))
                 .collect::<Vec<_>>()
         )

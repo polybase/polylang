@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use abi::Abi;
 use error::prelude::*;
-use miden::{verify, ProgramInfo, StackInputs, StackOutputs};
+use miden::{verify, ProgramInfo, StackOutputs};
 use polylang_prover::{Inputs, RunOutput};
 use wasm_bindgen::prelude::*;
 

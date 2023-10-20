@@ -125,6 +125,8 @@ pub fn compile_program(abi: &Abi, miden_code: &str) -> Result<Program> {
         .wrap_err()
 }
 
+type OtherRecordsType = HashMap<String, Vec<(Type, Value, Value, Vec<u32>)>>;
+
 #[derive(Clone)]
 pub struct Inputs {
     pub abi: Abi,
@@ -188,10 +190,7 @@ impl Inputs {
         })
     }
 
-    pub fn stack_values(
-        &self,
-        other_records: &HashMap<String, Vec<(Type, Value, Value, Vec<u32>)>>,
-    ) -> Vec<u64> {
+    pub fn stack_values(&self, other_records: &OtherRecordsType) -> Vec<u64> {
         let mut other_record_hashes = vec![];
         for or in &self.abi.other_records {
             let records = other_records.get(&or.contract).unwrap();
@@ -219,13 +218,7 @@ impl Inputs {
             this_struct
                 .fields
                 .iter()
-                .map(|(k, _)| {
-                    self.abi
-                        .dependent_fields
-                        .iter()
-                        .find(|(k2, _)| k == k2)
-                        .is_some()
-                })
+                .map(|(k, _)| self.abi.dependent_fields.iter().any(|(k2, _)| k == k2))
                 .collect::<Vec<_>>()
         } else {
             vec![]
@@ -240,8 +233,7 @@ impl Inputs {
                 .collect::<Vec<_>>(),
             other_record_hashes
                 .into_iter()
-                .map(|x| x.serialize())
-                .flatten()
+                .flat_map(|x| x.serialize())
                 .collect::<Vec<_>>(),
         ]
         .into_iter()
@@ -250,10 +242,7 @@ impl Inputs {
         .collect::<Vec<_>>()
     }
 
-    pub fn stack(
-        &self,
-        other_records: &HashMap<String, Vec<(Type, Value, Value, Vec<u32>)>>,
-    ) -> Result<StackInputs> {
+    pub fn stack(&self, other_records: &OtherRecordsType) -> Result<StackInputs> {
         StackInputs::try_from_values(self.stack_values(other_records))
             .map_err(MidenError::Input)
             .wrap_err()
@@ -268,7 +257,7 @@ impl Inputs {
     }
 
     /// Returns a map from contract name to a vector of record id type, record id and record value.
-    fn other_records(&self) -> Result<HashMap<String, Vec<(Type, Value, Value, Vec<u32>)>>> {
+    fn other_records(&self) -> Result<OtherRecordsType> {
         let mut result = HashMap::new();
 
         for x in &self.abi.other_records {
@@ -284,7 +273,7 @@ impl Inputs {
                 .unwrap();
 
             let mut contract_records = Vec::new();
-            for (record, salts) in records.iter().map(|r| r.iter()).flatten() {
+            for (record, salts) in records.iter().flat_map(|r| r.iter()) {
                 let record = json_to_this_value(record, &Type::Struct(struct_.clone()))?;
 
                 contract_records.push((
@@ -312,17 +301,13 @@ impl Inputs {
         Ok(result)
     }
 
-    fn all_known_records(
-        &self,
-        other_records: &HashMap<String, Vec<(Type, Value, Value, Vec<u32>)>>,
-    ) -> Result<Vec<(Type, Value)>> {
+    fn all_known_records(&self, other_records: &OtherRecordsType) -> Result<Vec<(Type, Value)>> {
         let mut result = vec![];
 
         let this_value = self.this_value()?;
         let known_records = other_records
             .iter()
-            .map(|(_, r)| r.iter())
-            .flatten()
+            .flat_map(|(_, r)| r.iter())
             .map(|(_, _, r, _)| r)
             .chain([&this_value]);
 
@@ -343,7 +328,7 @@ impl Inputs {
 
     fn advice_provider(
         &self,
-        other_records: &HashMap<String, Vec<(Type, Value, Value, Vec<u32>)>>,
+        other_records: &OtherRecordsType,
     ) -> Result<miden::MemAdviceProvider> {
         let mut advice_tape = vec![];
         advice_tape.extend(
@@ -382,8 +367,7 @@ impl Inputs {
 
             advice_map.push((
                 key.iter()
-                    .map(|f| f.to_bytes())
-                    .flatten()
+                    .flat_map(|f| f.to_bytes())
                     .collect::<Vec<u8>>()
                     .try_into()
                     .unwrap(),
@@ -395,7 +379,7 @@ impl Inputs {
             ));
         }
 
-        for (_contract, records) in other_records {
+        for records in other_records.values() {
             for (position, (id_type, id, record, salts)) in records.iter().enumerate() {
                 let id_hash = hash_this(id_type.clone(), id, None)?;
 
@@ -407,8 +391,7 @@ impl Inputs {
                                 .into_iter()
                                 .rev()
                                 .map(Felt::new)
-                                .map(|f| f.to_bytes())
-                                .flatten()
+                                .flat_map(|f| f.to_bytes())
                                 .collect::<Vec<u8>>(),
                         );
                         arr
@@ -419,7 +402,7 @@ impl Inputs {
                         .chain(
                             salts
                                 .iter()
-                                .flat_map(|s| Value::UInt32(*s as u32).serialize().into_iter()),
+                                .flat_map(|s| Value::UInt32(*s).serialize().into_iter()),
                         )
                         .chain(record.serialize().into_iter())
                         .map(Felt::from)
@@ -437,14 +420,13 @@ impl Inputs {
                         .into_iter()
                         .rev()
                         .map(Felt::new)
-                        .map(|f| f.to_bytes())
-                        .flatten()
+                        .flat_map(|f| f.to_bytes())
                         .collect::<Vec<u8>>(),
                 );
                 arr
             };
 
-            if advice_map.iter().find(|(k, _)| *k == id_hash).is_none() {
+            if !advice_map.iter().any(|(k, _)| *k == id_hash) {
                 advice_map.push((
                     id_hash,
                     Value::Nullable(None)
@@ -586,9 +568,7 @@ impl RunOutput {
     }
 
     pub fn result_hash(&self, abi: &Abi) -> Option<[u64; 4]> {
-        if abi.result_type.is_none() {
-            return None;
-        }
+        abi.result_type.as_ref()?;
 
         let offset = self.abi.dependent_fields.len() * 4 + 1; // + 1 for self_destructed
         let result_hash = [
@@ -654,7 +634,7 @@ pub fn run<'a>(
             return Err(e);
         }
         (Some(state), Some(e)) => {
-            if state.memory.iter().find(|(a, _)| *a == 1).is_none() {
+            if !state.memory.iter().any(|(a, _)| *a == 1) {
                 return Err(e);
             }
 

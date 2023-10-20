@@ -272,7 +272,7 @@ pub(crate) fn validate_value<'a>(
             if let Value::Map(map) = value {
                 for (key, value) in map {
                     path.0.push(PathPart::Field(key));
-                    match kt.deref() {
+                    match kt {
                         stableast::Type::Primitive(p) => match p.value {
                             stableast::PrimitiveType::String => return Ok(()),
                             stableast::PrimitiveType::Number => {
