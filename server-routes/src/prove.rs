@@ -15,13 +15,8 @@ pub struct ProveRequest {
     pub ctx_public_key: Option<abi::publickey::Key>,
     pub this: Option<serde_json::Value>, // this_json
     pub this_salts: Option<Vec<u32>>,
-<<<<<<< HEAD
     pub args: Vec<serde_json::Value>,
     pub other_records: Option<OtherRecordsType>,
-=======
-    pub args: Vec<serde_json::Value>, // args_json
-    pub other_records: Option<HashMap<String, Vec<(serde_json::Value, Vec<u32>)>>>,
->>>>>>> 1f3e90b (Changes:)
 }
 
 pub async fn prove(mut req: ProveRequest) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
