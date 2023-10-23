@@ -71,7 +71,7 @@ export function Playground() {
   const prove_server = useAsyncCallback(async () => {
     clearOutput.execute()
 
-    const proverUrl = 'https://polylang-server-5jmjuexfzq-uc.a.run.app/prove'
+    const proverUrl = process.env.NEXT_PUBLIC_PROVER_URL
     const parsedInputs = JSON.parse(inputs)
 
     const { midenCode, abi } = compile(code, parsedInputs)
