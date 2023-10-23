@@ -1839,7 +1839,6 @@ dependencies = [
  "abi",
  "base64 0.21.4",
  "error",
- "miden-vm",
  "polylang-prover",
  "serde",
  "serde_json",

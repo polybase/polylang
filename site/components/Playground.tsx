@@ -1,7 +1,7 @@
 import { Box, Stack, HStack, Flex, Heading, Spacer, Button, Select, useToast, Alert, AlertIcon, Text } from '@chakra-ui/react'
 import { Code } from './Code'
 import { Logo } from './Logo'
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { EXAMPLES } from './example'
 import Link from 'next/link'
 import { useAsyncCallback } from './useAsyncCallback'
@@ -71,7 +71,7 @@ export function Playground() {
   const prove_server = useAsyncCallback(async () => {
     clearOutput.execute()
 
-    const proverUrl = 'http://127.0.0.1:8080/prove'
+    const proverUrl = 'https://polylang-server-5jmjuexfzq-uc.a.run.app/prove'
     const parsedInputs = JSON.parse(inputs)
 
     const { midenCode, abi } = compile(code, parsedInputs)
@@ -83,31 +83,30 @@ export function Playground() {
       args: parsedInputs.params,
     }
 
-    fetch(proverUrl, {
+    const resp = await fetch(proverUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
-    }).then(resp => resp.json())
-      .then(output => {
-        setServerOutput(output)
+    })
 
-        const hasThis = parsedInputs.contract_name === '' ? false : true
-        setReport(JSON.stringify({
-          proof: output.proof,
-          proofLength: output.proofLength,
-          cycleCount: output.cycleCount,
-          logs: output.logs,
-          this: hasThis ? processThisVal(output.new.this) : null,
-          result: output.result?.value,
-          result_hash: output.result?.hash,
-          hashes: output.new.hashes,
-          selfDestructed: output.new.selfDestructed,
-          readAuth: output.readAuth,
-        }, null, 2))
-      })
-      .catch(err => console.log(err))
+    const output = await resp.json()
+    setServerOutput(output)
+
+    const hasThis = parsedInputs.contract_name === '' ? false : true
+    setReport(JSON.stringify({
+      proof: output.proof,
+      proofLength: output.proofLength,
+      cycleCount: output.cycleCount,
+      logs: output.logs,
+      this: hasThis ? processThisVal(output.new.this) : null,
+      result: output.result?.value,
+      result_hash: output.result?.hash,
+      hashes: output.new.hashes,
+      selfDestructed: output.new.selfDestructed,
+      readAuth: output.readAuth,
+    }, null, 2))
   })
 
   // common verify function that dispatches to either the
@@ -121,13 +120,13 @@ export function Playground() {
         duration: 9000,
       })
     } else if (browserOutput) {
-      verify_browser.execute()
+      verify_browser()
     } else {
-      verify_server.execute()
+      verify_server()
     }
   })
 
-  const verify_browser = useAsyncCallback(async () => {
+  const verify_browser = useCallback(() => {
     const proof = browserOutput.proof()
     const programInfo = browserOutput.program_info()
     const stackInputs = browserOutput.stack_inputs()
@@ -144,17 +143,17 @@ export function Playground() {
       description: `Proof was verified in ${diff} ms`,
       duration: 9000,
     })
-  })
+  }, [browserOutput, toast])
 
-  const verify_server = useAsyncCallback(async () => {
+  const verify_server = useCallback(() => {
     const proof = serverOutput.proof
     const programInfo = serverOutput.programInfo
     const stackInputs = serverOutput.stack.input
     const outputStack = serverOutput.stack.output
     const overflowAddrs = serverOutput.stack.overflowAddrs
 
-    const time = Date.now()
     const proofBytes = new Uint8Array(atob(proof).split('').map(c => c.charCodeAt(0)))
+    const time = Date.now()
     verifyProof(proofBytes, programInfo, stackInputs, outputStack, overflowAddrs)
     const diff = Date.now() - time
 
@@ -164,7 +163,7 @@ export function Playground() {
       description: `Proof was verified in ${diff} ms`,
       duration: 9000,
     })
-  })
+  }, [serverOutput, toast])
 
   return (
     <HStack height='100vh' spacing={4} py={4} mb='-8em'>
