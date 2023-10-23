@@ -9,3 +9,4 @@ edition = "2021"
 actix-web = "4.4.0"
 tokio = { version = "1.32.0", features = ["macros", "rt", "rt-multi-thread"] }
 server-routes = { path = "../server-routes" }
+actix-cors = "0.6.4"
