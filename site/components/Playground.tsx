@@ -1,7 +1,7 @@
 import { Box, Stack, HStack, Flex, Heading, Spacer, Button, Select, useToast, Alert, AlertIcon, Text } from '@chakra-ui/react'
 import { Code } from './Code'
 import { Logo } from './Logo'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { EXAMPLES } from './example'
 import Link from 'next/link'
 import { useAsyncCallback } from './useAsyncCallback'
