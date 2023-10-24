@@ -4,19 +4,29 @@ This is the source code for the `Polylang` documentation site at [polylang-site]
 
 ## Starting local Prover
 
-For proof verification, the playground needs to communicate with a `prover` server.
+For proof verification, the playground needs to communicate with the `prover` server.
 
-First, run the `prover` as a local instance )the `server` package):
+First, run the `prover` as a local instance (the `server` package) from the project root (`polylang`):
 
 ```bash
 $ cargo run -p server
 ```
-Then create (if not already present) the `.env.local` file in the site project root (`polylang/site/.env.local`):
+
+Navigate to the site root (`polylang/site`):
 
 ```bash
-$ touch .env.local
+$ cd site
 ```
-with the contents as shown:
+
+All subsequent commands wil be executed inside this directory.
+
+Copy the `.env.local.example` file to `.env.local` (this is a one-time operation).
+
+```bash
+$ cp .env.local.example .env.local
+```
+
+Confirm the contents:
 
 ```bash
 $ more .env.local
