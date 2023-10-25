@@ -122,19 +122,28 @@ function report(output, hasThis) {
   };
 }
 
+function verifyProof(output) {
+  const proof = output.proof();
+  const program_info = output.program_info();
+  const stack_inputs = output.stack_inputs();
+  const output_stack = output.output_stack();
+  const overflow_addrs = output.overflow_addrs();
+
+  console.log("Proof is valid?", pkg.verify(proof, program_info, stack_inputs, output_stack, overflow_addrs));
+}
+
 const mainOutput = justMain();
 console.log(report(mainOutput, false));
-console.log("Proof is valid?", mainOutput.verify());
+verifyProof(mainOutput);
 
 const contractOutput = withContracts();
 console.log(report(contractOutput, true));
-console.log("Proof is valid?", contractOutput.verify());
+verifyProof(contractOutput);
 
 const arraysOutput = withArrays();
 console.log(report(arraysOutput, true));
-console.log("Proof is valid?", arraysOutput.verify());
+verifyProof(arraysOutput);
 
 const countryCityOutput = withCountryCity();
 console.log(report(countryCityOutput, true));
-console.log("Proof is valid?", countryCityOutput.verify());
-
+verifyProof(countryCityOutput);

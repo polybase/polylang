@@ -1,8 +1,12 @@
 use std::collections::HashMap;
 
 use abi::Abi;
+use base64::Engine;
 use error::prelude::*;
-use miden::{verify, ProgramInfo, StackOutputs};
+use miden::utils::Serializable;
+use miden::{
+    utils::Deserializable, verify as miden_verify, ProgramInfo, StackInputs, StackOutputs,
+};
 use polylang_prover::{Inputs, RunOutput};
 use wasm_bindgen::prelude::*;
 
@@ -34,6 +38,10 @@ pub fn compile(
 
 #[wasm_bindgen]
 impl Program {
+    pub fn miden_code(&self) -> String {
+        self.miden_code.clone()
+    }
+
     pub fn run(
         &self,
         this_json: String,
@@ -105,16 +113,37 @@ impl Output {
         self.proof.clone()
     }
 
-    pub fn verify(&self) -> Result<bool, JsError> {
-        verify(
-            self.info.clone(),
-            self.output.stack_inputs.clone(),
-            self.output_stack.clone().unwrap(),
-            miden::ExecutionProof::from_bytes(&self.proof.clone().unwrap().to_vec())
-                .map_err(|err| JsError::new(&format!("failed to parse proof: {}", err)))?,
-        )
-        .map_err(|e| JsError::new(&e.to_string()))
-        .map(|_| true)
+    pub fn program_info(&self) -> JsValue {
+        let program_info = self.info.clone().to_bytes();
+        JsValue::from_str(&base64::engine::general_purpose::STANDARD.encode(program_info))
+    }
+
+    pub fn stack_inputs(&self) -> Vec<JsValue> {
+        self.output
+            .stack_inputs
+            .clone()
+            .into_iter()
+            .map(|h| JsValue::from_str(&h.to_string()))
+            .collect::<Vec<_>>()
+    }
+
+    pub fn output_stack(&self) -> Vec<JsValue> {
+        self.output
+            .stack
+            .clone()
+            .into_iter()
+            .map(|h| JsValue::from_str(&h.to_string()))
+            .collect::<Vec<_>>()
+    }
+
+    pub fn overflow_addrs(&self) -> Vec<JsValue> {
+        self.output_stack
+            .clone()
+            .unwrap()
+            .overflow_addrs()
+            .into_iter()
+            .map(|h| JsValue::from_str(&h.to_string()))
+            .collect::<Vec<_>>()
     }
 
     pub fn this(&self) -> Result<JsValue, JsError> {
@@ -166,4 +195,48 @@ impl Output {
     pub fn read_auth(&self) -> bool {
         self.output.read_auth()
     }
+}
+
+#[wasm_bindgen]
+pub fn verify(
+    proof: Option<Vec<u8>>,
+    program_info: JsValue,
+    stack_inputs: Vec<JsValue>,
+    output_stack: Vec<JsValue>,
+    overflow_addrs: Vec<JsValue>,
+) -> Result<bool, JsError> {
+    let program_info = ProgramInfo::read_from_bytes(
+        &base64::engine::general_purpose::STANDARD.decode(&program_info.as_string().unwrap())?,
+    )
+    .map_err(|e| JsError::new(&e.to_string()))?;
+
+    let mut stack_inputs = stack_inputs
+        .into_iter()
+        .map(|s| s.as_string().unwrap().parse::<u64>().unwrap())
+        .collect::<Vec<_>>();
+
+    stack_inputs.reverse();
+    let stack_inputs =
+        StackInputs::try_from_values(stack_inputs).map_err(|e| JsError::new(&e.to_string()))?;
+
+    let overflow_addrs = overflow_addrs
+        .into_iter()
+        .map(|s| s.as_string().unwrap().parse::<u64>().unwrap())
+        .collect::<Vec<_>>();
+
+    let output_stack = output_stack
+        .into_iter()
+        .map(|s| s.as_string().unwrap().parse::<u64>().unwrap())
+        .collect::<Vec<_>>();
+    let output_stack = StackOutputs::new(output_stack, overflow_addrs);
+
+    miden_verify(
+        program_info,
+        stack_inputs,
+        output_stack,
+        miden::ExecutionProof::from_bytes(&proof.unwrap())
+            .map_err(|err| JsError::new(&format!("failed to parse proof: {}", err)))?,
+    )
+    .map_err(|e| JsError::new(&e.to_string()))
+    .map(|_| true)
 }

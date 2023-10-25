@@ -2,6 +2,39 @@
 
 This is the source code for the `Polylang` documentation site at [polylang-site](https://polylang.dev/).
 
+## Starting local Prover
+
+For proof verification, the playground needs to communicate with the `prover` server.
+
+First, run the `prover` as a local instance (the `server` package) from the project root (`polylang`):
+
+```bash
+$ cargo run -p server
+```
+
+Navigate to the site root (`polylang/site`):
+
+```bash
+$ cd site
+```
+
+All subsequent commands wil be executed inside this directory.
+
+Copy the `.env.local.example` file to `.env.local` (this is a one-time operation).
+
+```bash
+$ cp .env.local.example .env.local
+```
+
+Confirm the contents:
+
+```bash
+$ more .env.local
+NEXT_PUBLIC_PROVER_URL=http://localhost:8080/prove
+```
+
+The `NEXT_PUBLIC_PROVER_URL` is the URL of the `prover` instance. If you're hosting it on a different machine (or port), adjust values accordingly.
+
 ## Build and Run
 
 Install the dependencies:
@@ -16,15 +49,13 @@ Build the project (optimized build):
   $ yarn build
 ```
 
-Then start the server:
+Start the server:
 
 ```bash
   $ yarn start
 ```
 
 ### Development
-
-To run the project in `dev` mode to get live updates on changes:
 
 ```bash
   $ yarn dev
