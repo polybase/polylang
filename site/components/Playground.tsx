@@ -190,9 +190,9 @@ export function Playground() {
           <Spacer />
           <HStack spacing={2}>
             <Link href='/docs'>Docs</Link>
-            <Button size='sm' onClick={prove_browser.execute}>Prove (Browser)</Button>
-            <Button size='sm' onClick={prove_server.execute}>Prove (Server)</Button>
-            <Button size='sm' onClick={verify.execute}>Verify</Button>
+            <Button size='sm' isLoading={prove_browser.loading} onClick={prove_browser.execute}>Prove (Browser)</Button>
+            <Button size='sm' isLoading={prove_server.loading} onClick={prove_server.execute}>Prove (Server)</Button>
+            <Button size='sm' isLoading={verify.loading} onClick={verify.execute}>Verify</Button>
           </HStack>
         </Flex>
         <Alert status='info'>
