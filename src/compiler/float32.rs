@@ -1794,6 +1794,7 @@ mod tests {
     }
 
     use itertools::Itertools;
+    use miden::ProvingOptions;
     use quickcheck_macros::quickcheck;
     use test_case::test_case;
 
@@ -1855,10 +1856,13 @@ mod tests {
         }
         program.push_str("\nend\n");
 
+        let host = miden::DefaultHost::new(miden::MemAdviceProvider::default());
+
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
             miden::StackInputs::default(),
-            miden::MemAdviceProvider::default(),
+            host,
+            ProvingOptions::default().exec_options,
         )?;
 
         let stack = outputs.stack_outputs().stack();
@@ -2125,10 +2129,12 @@ mod tests {
         }
         program.push_str("\nend\n");
 
+        let host = miden::DefaultHost::new(miden::MemAdviceProvider::default());
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
             miden::StackInputs::default(),
-            miden::MemAdviceProvider::default(),
+            host,
+            ProvingOptions::default().exec_options,
         )
         .unwrap();
 

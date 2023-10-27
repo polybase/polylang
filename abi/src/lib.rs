@@ -25,6 +25,8 @@ pub enum StdVersion {
     V0_5_0,
     #[serde(rename = "0.6.1")]
     V0_6_1,
+    #[serde(rename = "0.7.0")]
+    V0_7_0,
 }
 
 /// An array of record hashes.

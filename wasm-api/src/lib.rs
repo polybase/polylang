@@ -233,7 +233,7 @@ pub fn verify(
     miden_verify(
         program_info,
         stack_inputs,
-        output_stack,
+        output_stack.map_err(|e| JsError::new(&e.to_string()))?,
         miden::ExecutionProof::from_bytes(&proof.unwrap())
             .map_err(|err| JsError::new(&format!("failed to parse proof: {}", err)))?,
     )

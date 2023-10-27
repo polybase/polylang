@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use abi::{publickey, Abi, Parser, Type, TypeReader, Value};
 use error::prelude::*;
-use miden::{ExecutionProof, ProofOptions};
+use miden::{ExecutionProof, ProvingOptions};
 use miden_processor::{
     math::Felt, utils::Serializable, Program, ProgramInfo, StackInputs, StackOutputs,
 };
@@ -89,15 +89,18 @@ pub fn hash_this(type_: Type, this: &Value, salts: Option<&[u32]>) -> Result<[u6
         .map_err(MidenError::Assembly)
         .wrap_err()?;
 
+    let mem_advice_provider = miden::MemAdviceProvider::from(
+        miden::AdviceInputs::default()
+            .with_stack_values(this.serialize().into_iter())
+            .map_err(MidenError::Input)
+            .wrap_err()?,
+    );
+
     let execution_result = miden::execute(
         &program,
         miden::StackInputs::default(),
-        miden::MemAdviceProvider::from(
-            miden::AdviceInputs::default()
-                .with_stack_values(this.serialize().into_iter())
-                .map_err(MidenError::Input)
-                .wrap_err()?,
-        ),
+        miden::DefaultHost::new(mem_advice_provider),
+        ProvingOptions::default().exec_options,
     )
     .map_err(MidenError::Execution)
     .wrap_err()?;
@@ -112,7 +115,8 @@ pub fn compile_program(abi: &Abi, miden_code: &str) -> Result<Program> {
         None => miden_stdlib::StdLibrary::default(),
         Some(version) => match version {
             abi::StdVersion::V0_5_0 => unimplemented!("Unsupported std version: 0.5.0"),
-            abi::StdVersion::V0_6_1 => miden_stdlib::StdLibrary::default(),
+            abi::StdVersion::V0_6_1 => unimplemented!("Unsupported std version: 0.6.1"),
+            abi::StdVersion::V0_7_0 => miden_stdlib::StdLibrary::default(),
         },
     };
     let assembler = miden::Assembler::default()
@@ -617,7 +621,9 @@ pub fn run<'a>(
     let mut last_ok_state = None;
     let mut err = None;
 
-    for state in miden_processor::execute_iter(program, input_stack.clone(), advice_tape.clone()) {
+    let host = miden::DefaultHost::new(advice_tape.clone());
+
+    for state in miden_processor::execute_iter(program, input_stack.clone(), host) {
         match state {
             Ok(state) => {
                 last_ok_state = Some(state);
@@ -702,8 +708,10 @@ pub fn run<'a>(
             memory,
         },
         move || {
+            let host = miden::DefaultHost::new(advice_tape);
+
             let (stack_outputs, proof) =
-                miden_prover::prove(program, input_stack, advice_tape, ProofOptions::default())
+                miden_prover::prove(program, input_stack, host, ProvingOptions::default())
                     .map_err(MidenError::Execution)
                     .wrap_err()?;
 

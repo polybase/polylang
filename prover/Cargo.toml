@@ -15,9 +15,9 @@ abi = { path = "../abi" }
 error = { path = "../error" }
 polylang = { path = "../", default-features = false }
 
-miden-vm = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.6.1", default-features = false }
-miden-processor = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.6.1", default-features = false }
-miden-stdlib = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.6.1", default-features = false }
-miden-prover = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.6.1", default-features = false }
+miden-vm = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.7.0", default-features = false }
+miden-processor = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.7.0", default-features = false }
+miden-stdlib = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.7.0", default-features = false }
+miden-prover = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.7.0", default-features = false }
 
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }

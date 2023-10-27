@@ -849,6 +849,8 @@ pub(crate) fn lt(compiler: &mut Compiler, a: &Symbol, b: &Symbol) -> Symbol {
 
 #[cfg(test)]
 mod test {
+    use miden::{DefaultHost, MemAdviceProvider, ProvingOptions};
+
     use super::*;
 
     fn new(compiler: &mut Compiler, value: i32) -> Symbol {
@@ -887,10 +889,12 @@ mod test {
         }
         program.push_str("\nend\n");
 
+        let host = DefaultHost::new(MemAdviceProvider::default());
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
             miden::StackInputs::default(),
-            miden::MemAdviceProvider::default(),
+            host,
+            ProvingOptions::default().exec_options,
         )
         .unwrap();
 
@@ -921,10 +925,12 @@ mod test {
         }
         program.push_str("\nend\n");
 
+        let host = DefaultHost::new(MemAdviceProvider::default());
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
             miden::StackInputs::default(),
-            miden::MemAdviceProvider::default(),
+            host,
+            ProvingOptions::default().exec_options,
         )?;
 
         let stack = outputs.stack_outputs().stack();
@@ -956,8 +962,16 @@ mod test {
         test!(-1, 1, Ok(0));
         test!(-1, -1, Ok(-2));
 
-        test!(i32::MAX, 1, Err(miden::ExecutionError::FailedAssertion(_)));
-        test!(i32::MIN, -1, Err(miden::ExecutionError::FailedAssertion(_)));
+        test!(
+            i32::MAX,
+            1,
+            Err(miden::ExecutionError::FailedAssertion(_, _))
+        );
+        test!(
+            i32::MIN,
+            -1,
+            Err(miden::ExecutionError::FailedAssertion(_, _))
+        );
     }
 
     fn abs(a: i32) -> Result<i32, miden::ExecutionError> {
@@ -980,10 +994,12 @@ mod test {
         }
         program.push_str("\nend\n");
 
+        let host = DefaultHost::new(MemAdviceProvider::default());
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
             miden::StackInputs::default(),
-            miden::MemAdviceProvider::default(),
+            host,
+            ProvingOptions::default().exec_options,
         )?;
 
         let stack = outputs.stack_outputs().stack();
@@ -1013,7 +1029,7 @@ mod test {
         test!(i32::MIN + 1, Ok(i32::MAX));
         test!(2147483584, Ok(2147483584));
 
-        test!(i32::MIN, Err(miden::ExecutionError::FailedAssertion(_)));
+        test!(i32::MIN, Err(miden::ExecutionError::FailedAssertion(_, _)));
     }
 
     fn negate(a: i32) -> Result<i32, miden::ExecutionError> {
@@ -1036,10 +1052,12 @@ mod test {
         }
         program.push_str("\nend\n");
 
+        let host = DefaultHost::new(MemAdviceProvider::default());
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
             miden::StackInputs::default(),
-            miden::MemAdviceProvider::default(),
+            host,
+            ProvingOptions::default().exec_options,
         )?;
 
         let stack = outputs.stack_outputs().stack();
@@ -1069,7 +1087,7 @@ mod test {
         test!(i32::MAX, Ok(_min_add_1));
         test!(i32::MIN + 1, Ok(i32::MAX));
 
-        test!(i32::MIN, Err(miden::ExecutionError::FailedAssertion(_)));
+        test!(i32::MIN, Err(miden::ExecutionError::FailedAssertion(_, _)));
     }
 
     fn sub(a: i32, b: i32) -> Result<i32, miden::ExecutionError> {
@@ -1095,10 +1113,12 @@ mod test {
         }
         program.push_str("\nend\n");
 
+        let host = DefaultHost::new(MemAdviceProvider::default());
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
             miden::StackInputs::default(),
-            miden::MemAdviceProvider::default(),
+            host,
+            ProvingOptions::default().exec_options,
         )?;
 
         let stack = outputs.stack_outputs().stack();
@@ -1135,8 +1155,16 @@ mod test {
         test!(i32::MIN, -1, Ok(_min_add_1));
         test!(i32::MIN, i32::MIN, Ok(0));
 
-        test!(i32::MIN, 1, Err(miden::ExecutionError::FailedAssertion(_)));
-        test!(i32::MAX, -1, Err(miden::ExecutionError::FailedAssertion(_)));
+        test!(
+            i32::MIN,
+            1,
+            Err(miden::ExecutionError::FailedAssertion(_, _))
+        );
+        test!(
+            i32::MAX,
+            -1,
+            Err(miden::ExecutionError::FailedAssertion(_, _))
+        );
     }
 
     fn mul(a: i32, b: i32) -> Result<i32, miden::ExecutionError> {
@@ -1162,10 +1190,12 @@ mod test {
         }
         program.push_str("\nend\n");
 
+        let host = DefaultHost::new(MemAdviceProvider::default());
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
             miden::StackInputs::default(),
-            miden::MemAdviceProvider::default(),
+            host,
+            ProvingOptions::default().exec_options,
         )?;
 
         let stack = outputs.stack_outputs().stack();
@@ -1205,30 +1235,42 @@ mod test {
         // TODO: fix this case
         // test!(i32::MIN, 1, Ok(i32::MIN));
 
-        test!(i32::MAX, 2, Err(miden::ExecutionError::FailedAssertion(_)));
-        test!(i32::MIN, 2, Err(miden::ExecutionError::FailedAssertion(_)));
+        test!(
+            i32::MAX,
+            2,
+            Err(miden::ExecutionError::FailedAssertion(_, _))
+        );
+        test!(
+            i32::MIN,
+            2,
+            Err(miden::ExecutionError::FailedAssertion(_, _))
+        );
         test!(
             i32::MAX,
             i32::MIN,
-            Err(miden::ExecutionError::FailedAssertion(_))
+            Err(miden::ExecutionError::FailedAssertion(_, _))
         );
         test!(
             i32::MIN,
             i32::MAX,
-            Err(miden::ExecutionError::FailedAssertion(_))
+            Err(miden::ExecutionError::FailedAssertion(_, _))
         );
         test!(
             i32::MIN,
             i32::MIN,
-            Err(miden::ExecutionError::FailedAssertion(_))
+            Err(miden::ExecutionError::FailedAssertion(_, _))
         );
         test!(
             i32::MAX,
             i32::MAX,
-            Err(miden::ExecutionError::FailedAssertion(_))
+            Err(miden::ExecutionError::FailedAssertion(_, _))
         );
         // negating i32::MIN overflows, that would be i32::MAX+1
-        test!(i32::MIN, -1, Err(miden::ExecutionError::FailedAssertion(_)));
+        test!(
+            i32::MIN,
+            -1,
+            Err(miden::ExecutionError::FailedAssertion(_, _))
+        );
     }
 
     fn div(a: i32, b: i32) -> Result<i32, miden::ExecutionError> {
@@ -1254,10 +1296,12 @@ mod test {
         }
         program.push_str("\nend\n");
 
+        let host = DefaultHost::new(MemAdviceProvider::default());
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
             miden::StackInputs::default(),
-            miden::MemAdviceProvider::default(),
+            host,
+            ProvingOptions::default().exec_options,
         )?;
 
         let stack = outputs.stack_outputs().stack();
@@ -1281,9 +1325,13 @@ mod test {
             };
         }
 
-        test!(0, 0, Err(miden::ExecutionError::FailedAssertion(_)));
-        test!(1, 0, Err(miden::ExecutionError::FailedAssertion(_)));
-        test!(i32::MIN, -1, Err(miden::ExecutionError::FailedAssertion(_)));
+        test!(0, 0, Err(miden::ExecutionError::FailedAssertion(_, _)));
+        test!(1, 0, Err(miden::ExecutionError::FailedAssertion(_, _)));
+        test!(
+            i32::MIN,
+            -1,
+            Err(miden::ExecutionError::FailedAssertion(_, _))
+        );
 
         test!(0, 1, Ok(0));
         test!(1, 1, Ok(1));
@@ -1327,10 +1375,12 @@ mod test {
         }
         program.push_str("\nend\n");
 
+        let host = DefaultHost::new(MemAdviceProvider::default());
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
             miden::StackInputs::default(),
-            miden::MemAdviceProvider::default(),
+            host,
+            ProvingOptions::default().exec_options,
         )?;
 
         let stack = outputs.stack_outputs().stack();
@@ -1354,9 +1404,13 @@ mod test {
             };
         }
 
-        test!(0, 0, Err(miden::ExecutionError::FailedAssertion(_)));
-        test!(1, 0, Err(miden::ExecutionError::FailedAssertion(_)));
-        test!(i32::MIN, -1, Err(miden::ExecutionError::FailedAssertion(_)));
+        test!(0, 0, Err(miden::ExecutionError::FailedAssertion(_, _)));
+        test!(1, 0, Err(miden::ExecutionError::FailedAssertion(_, _)));
+        test!(
+            i32::MIN,
+            -1,
+            Err(miden::ExecutionError::FailedAssertion(_, _))
+        );
 
         test!(0, 1, Ok(0));
         test!(1, 1, Ok(0));
@@ -1393,10 +1447,12 @@ mod test {
         }
         program.push_str("\nend\n");
 
+        let host = DefaultHost::new(MemAdviceProvider::default());
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
             miden::StackInputs::default(),
-            miden::MemAdviceProvider::default(),
+            host,
+            ProvingOptions::default().exec_options,
         )?;
 
         let stack = outputs.stack_outputs().stack();
@@ -1425,7 +1481,7 @@ mod test {
         test!(i32::MAX, 0, Ok(i32::MAX));
         test!(-1, 0, Ok(-1));
         test!(-2, 1, Ok(-1));
-        test!(-2, -1, Err(miden::ExecutionError::FailedAssertion(_)));
+        test!(-2, -1, Err(miden::ExecutionError::FailedAssertion(_, _)));
 
         // TODO: fix this case
         // test!(i32::MIN, 0, Ok(i32::MIN));
@@ -1454,10 +1510,12 @@ mod test {
         }
         program.push_str("\nend\n");
 
+        let host = DefaultHost::new(MemAdviceProvider::default());
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
             miden::StackInputs::default(),
-            miden::MemAdviceProvider::default(),
+            host,
+            ProvingOptions::default().exec_options,
         )?;
 
         let stack = outputs.stack_outputs().stack();
@@ -1486,7 +1544,7 @@ mod test {
         test!(i32::MAX, 0, Ok(i32::MAX));
         test!(-1, 0, Ok(-1));
         test!(-2, 1, Ok(-4));
-        test!(-2, -1, Err(miden::ExecutionError::FailedAssertion(_)));
+        test!(-2, -1, Err(miden::ExecutionError::FailedAssertion(_, _)));
     }
 
     fn gt(a: i32, b: i32) -> Result<bool, miden::ExecutionError> {
@@ -1512,10 +1570,12 @@ mod test {
         }
         program.push_str("\nend\n");
 
+        let host = DefaultHost::new(MemAdviceProvider::default());
         let outputs = miden::execute(
             &miden::Assembler::default().compile(&program).unwrap(),
             miden::StackInputs::default(),
-            miden::MemAdviceProvider::default(),
+            host,
+            ProvingOptions::default().exec_options,
         )?;
 
         let stack = outputs.stack_outputs().stack();

@@ -4185,7 +4185,7 @@ pub fn compile(
             .into_iter()
             .map(|x| x.0)
             .collect(),
-        std_version: Some(StdVersion::V0_6_1),
+        std_version: Some(StdVersion::V0_7_0),
     };
 
     let mut uses_sha256 = false;
