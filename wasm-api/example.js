@@ -107,6 +107,28 @@ function withCountryCity() {
   return output;
 }
 
+function fibonacci() {
+  let program = pkg.compile(`
+  function main(p: u32, a: u32, b: u32) {
+    for (let i: u32 = 0; i < p; i++) {
+      let c = a.wrappingAdd(b);
+      a = b;
+      b = c;
+    }
+  }`,
+    null,
+    "main"
+  )
+
+  let output = program.run(
+    JSON.stringify(null),
+    JSON.stringify([30, 1, 1]),
+    true
+  );
+
+  return output;
+}
+
 function report(output, hasThis) {
   return {
     proof: output.proof(),
@@ -147,3 +169,7 @@ verifyProof(arraysOutput);
 const countryCityOutput = withCountryCity();
 console.log(report(countryCityOutput, true));
 verifyProof(countryCityOutput);
+
+const fibonacciOutput = fibonacci();
+console.log(report(fibonacciOutput, false));
+verifyProof(fibonacciOutput);

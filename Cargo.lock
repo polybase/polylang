@@ -827,6 +827,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6fb8d784f27acf97159b40fc4db5ecd8aa23b9ad5ef69cdd136d3bc80665f0c0"
 
 [[package]]
+name = "glob"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
+
+[[package]]
 name = "h2"
 version = "0.3.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1155,8 +1161,8 @@ dependencies = [
 
 [[package]]
 name = "miden-air"
-version = "0.6.0"
-source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.6.1#3022d257eec9cdeca2273b0b66b633bcb3552274"
+version = "0.7.0"
+source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.7.0#c097af7ca53da2026cec10d9245a006b42186643"
 dependencies = [
  "miden-core",
  "winter-air",
@@ -1164,8 +1170,8 @@ dependencies = [
 
 [[package]]
 name = "miden-assembly"
-version = "0.6.1"
-source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.6.1#3022d257eec9cdeca2273b0b66b633bcb3552274"
+version = "0.7.0"
+source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.7.0#c097af7ca53da2026cec10d9245a006b42186643"
 dependencies = [
  "miden-core",
  "num_enum",
@@ -1173,8 +1179,8 @@ dependencies = [
 
 [[package]]
 name = "miden-core"
-version = "0.6.1"
-source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.6.1#3022d257eec9cdeca2273b0b66b633bcb3552274"
+version = "0.7.0"
+source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.7.0#c097af7ca53da2026cec10d9245a006b42186643"
 dependencies = [
  "miden-crypto",
  "winter-crypto",
@@ -1184,11 +1190,14 @@ dependencies = [
 
 [[package]]
 name = "miden-crypto"
-version = "0.6.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cf95db953ee5fc8ef5a1df2d2e6e55e41587861c793fa26b45a214d3cc0f798"
+checksum = "32dd571edafdd5e8947e4006a905a1c5373f2f8b08b270fea3c998db5be131cf"
 dependencies = [
  "blake3",
+ "cc",
+ "glob",
+ "libc",
  "winter-crypto",
  "winter-math",
  "winter-utils",
@@ -1196,8 +1205,8 @@ dependencies = [
 
 [[package]]
 name = "miden-processor"
-version = "0.6.1"
-source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.6.1#3022d257eec9cdeca2273b0b66b633bcb3552274"
+version = "0.7.0"
+source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.7.0#c097af7ca53da2026cec10d9245a006b42186643"
 dependencies = [
  "log",
  "miden-air",
@@ -1207,8 +1216,8 @@ dependencies = [
 
 [[package]]
 name = "miden-prover"
-version = "0.6.0"
-source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.6.1#3022d257eec9cdeca2273b0b66b633bcb3552274"
+version = "0.7.0"
+source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.7.0#c097af7ca53da2026cec10d9245a006b42186643"
 dependencies = [
  "elsa",
  "log",
@@ -1232,16 +1241,16 @@ dependencies = [
 
 [[package]]
 name = "miden-stdlib"
-version = "0.5.0"
-source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.6.1#3022d257eec9cdeca2273b0b66b633bcb3552274"
+version = "0.6.0"
+source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.7.0#c097af7ca53da2026cec10d9245a006b42186643"
 dependencies = [
  "miden-assembly",
 ]
 
 [[package]]
 name = "miden-verifier"
-version = "0.6.0"
-source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.6.1#3022d257eec9cdeca2273b0b66b633bcb3552274"
+version = "0.7.0"
+source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.7.0#c097af7ca53da2026cec10d9245a006b42186643"
 dependencies = [
  "miden-air",
  "miden-core",
@@ -1250,10 +1259,9 @@ dependencies = [
 
 [[package]]
 name = "miden-vm"
-version = "0.6.0"
-source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.6.1#3022d257eec9cdeca2273b0b66b633bcb3552274"
+version = "0.7.0"
+source = "git+https://github.com/0xPolygonMiden/miden-vm?tag=v0.7.0#c097af7ca53da2026cec10d9245a006b42186643"
 dependencies = [
- "log",
  "miden-assembly",
  "miden-processor",
  "miden-prover",
@@ -1318,18 +1326,18 @@ dependencies = [
 
 [[package]]
 name = "num_enum"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a015b430d3c108a207fd776d2e2196aaf8b1cf8cf93253e3a097ff3085076a1"
+checksum = "70bf6736f74634d299d00086f02986875b3c2d924781a6a2cb6c201e73da0ceb"
 dependencies = [
  "num_enum_derive",
 ]
 
 [[package]]
 name = "num_enum_derive"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96667db765a921f7b295ffee8b60472b686a51d4f21c2ee4ffdb94c7013b65a6"
+checksum = "56ea360eafe1022f7cc56cd7b869ed57330fb2453d0c7831d99b74c65d2f5597"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",

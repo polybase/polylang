@@ -13,7 +13,17 @@ name = "compile"
 path = "src/bin/compile/main.rs"
 
 [workspace]
-members = ["parser", "prover", "abi", "miden-run", "error", "tests", "wasm-api", "server", "server-routes"]
+members = [
+    "parser",
+    "prover",
+    "abi",
+    "miden-run",
+    "error",
+    "tests",
+    "wasm-api",
+    "server",
+    "server-routes",
+]
 exclude = ["showcase"]
 
 [features]
@@ -30,13 +40,17 @@ console_error_panic_hook = "0.1.7"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
 polylang_parser = { path = "./parser" }
-miden-vm = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.6.1", default-features = false }
-miden-processor = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.6.1", default-features = false }
-miden-stdlib = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.6.1", default-features = false }
+miden-vm = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.7.0", default-features = false }
+miden-processor = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.7.0", default-features = false }
+miden-stdlib = { git = "https://github.com/0xPolygonMiden/miden-vm", tag = "v0.7.0", default-features = false }
 winter-math = "*"
 lazy_static = "1.4.0"
 base64 = "0.21.0"
-derive_more = { version = "0.99.17", features = ["deref", "from", "deref_mut"], default-features = false }
+derive_more = { version = "0.99.17", features = [
+    "deref",
+    "from",
+    "deref_mut",
+], default-features = false }
 parking_lot = "0.12.1"
 
 [dev-dependencies]
