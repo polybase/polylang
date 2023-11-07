@@ -6,12 +6,12 @@ const config: DocsThemeConfig = {
   logo: <Logo fontSize='xl' size={40} />,
   primaryHue: 314,
   project: {
-    link: 'https://github.com/polybase/polylang-site',
+    link: 'https://github.com/polybase/polylang/',
   },
   chat: {
     link: 'https://discord.com/invite/DrXkRpCFDX',
   },
-  docsRepositoryBase: 'https://github.com/polybase/polylang-site/',
+  docsRepositoryBase: 'https://github.com/polybase/polylang/tree/main/site/',
   banner: {
     key: '2.0-release',
     text: (
